@@ -1,0 +1,134 @@
+2025-11-23 16:03:11 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:03:11 - TextFileScanner - INFO - Starting Text File Scanner
+2025-11-23 16:03:11 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:03:11 - TextFileScanner - INFO - ScannerController initialized
+2025-11-23 16:03:11 - TextFileScanner - INFO - Testing n8n connection...
+2025-11-23 16:03:11 - TextFileScanner - INFO - Testing connection to http://localhost:5678/webhook/text-scanner
+2025-11-23 16:03:11 - TextFileScanner - INFO - n8n connection test passed
+2025-11-23 16:03:11 - TextFileScanner - INFO - Application ready
+2025-11-23 16:03:32 - TextFileScanner - INFO - User selected file: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:03:32 - TextFileScanner - INFO - File selected: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:03:32 - TextFileScanner - INFO - Successfully read file: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:03:32 - TextFileScanner - INFO - Status: File loaded: test.txt
+2025-11-23 16:03:36 - TextFileScanner - INFO - Send button clicked
+2025-11-23 16:03:36 - TextFileScanner - INFO - Status: Sending to n8n...
+2025-11-23 16:03:36 - TextFileScanner - INFO - Sending to n8n: http://localhost:5678/webhook/text-scanner
+2025-11-23 16:03:36 - TextFileScanner - ERROR - n8n server returned status 404: {"code":404,"message":"The requested webhook \"POST text-scanner\" is not registered.","hint":"The workflow must be active for a production URL to run successfully. You can activate the workflow using the toggle in the top-right of the editor. Note that unlike test URL calls, production URL calls aren't shown on the canvas (only in the executions list)","stacktrace":"ResponseError: The requested webhook \"POST text-scanner\" is not registered.\n    at LiveWebhooks.findWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\live-webhooks.ts:173:10)\n    at LiveWebhooks.executeWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\live-webhooks.ts:83:19)\n    at WebhookRequestHandler.handleRequest (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:66:21)\n    at C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:257:3"}
+2025-11-23 16:03:39 - TextFileScanner - ERROR - Send failed: n8n server returned status 404: {"code":404,"message":"The requested webhook \"POST text-scanner\" is not registered.","hint":"The workflow must be active for a production URL to run successfully. You can activate the workflow using the toggle in the top-right of the editor. Note that unlike test URL calls, production URL calls aren't shown on the canvas (only in the executions list)","stacktrace":"ResponseError: The requested webhook \"POST text-scanner\" is not registered.\n    at LiveWebhooks.findWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\live-webhooks.ts:173:10)\n    at LiveWebhooks.executeWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\live-webhooks.ts:83:19)\n    at WebhookRequestHandler.handleRequest (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:66:21)\n    at C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:257:3"}
+2025-11-23 16:04:38 - TextFileScanner - INFO - Send button clicked
+2025-11-23 16:04:38 - TextFileScanner - INFO - Status: Sending to n8n...
+2025-11-23 16:04:38 - TextFileScanner - INFO - Sending to n8n: http://localhost:5678/webhook/text-scanner
+2025-11-23 16:04:38 - TextFileScanner - ERROR - n8n server returned status 404: {"code":404,"message":"The requested webhook \"POST text-scanner\" is not registered.","hint":"The workflow must be active for a production URL to run successfully. You can activate the workflow using the toggle in the top-right of the editor. Note that unlike test URL calls, production URL calls aren't shown on the canvas (only in the executions list)","stacktrace":"ResponseError: The requested webhook \"POST text-scanner\" is not registered.\n    at LiveWebhooks.findWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\live-webhooks.ts:173:10)\n    at LiveWebhooks.executeWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\live-webhooks.ts:83:19)\n    at WebhookRequestHandler.handleRequest (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:66:21)\n    at C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:257:3"}
+2025-11-23 16:04:50 - TextFileScanner - ERROR - Send failed: n8n server returned status 404: {"code":404,"message":"The requested webhook \"POST text-scanner\" is not registered.","hint":"The workflow must be active for a production URL to run successfully. You can activate the workflow using the toggle in the top-right of the editor. Note that unlike test URL calls, production URL calls aren't shown on the canvas (only in the executions list)","stacktrace":"ResponseError: The requested webhook \"POST text-scanner\" is not registered.\n    at LiveWebhooks.findWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\live-webhooks.ts:173:10)\n    at LiveWebhooks.executeWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\live-webhooks.ts:83:19)\n    at WebhookRequestHandler.handleRequest (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:66:21)\n    at C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:257:3"}
+2025-11-23 16:04:50 - TextFileScanner - INFO - Text File Scanner closed
+2025-11-23 16:04:50 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:05:46 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:05:46 - TextFileScanner - INFO - Starting Text File Scanner
+2025-11-23 16:05:46 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:05:46 - TextFileScanner - INFO - ScannerController initialized
+2025-11-23 16:05:46 - TextFileScanner - INFO - Testing n8n connection...
+2025-11-23 16:05:46 - TextFileScanner - INFO - Testing connection to http://localhost:5678/webhook-test/3122f617-07e5-49c1-bcd1-476a935e530f
+2025-11-23 16:05:46 - TextFileScanner - INFO - n8n connection test passed
+2025-11-23 16:05:46 - TextFileScanner - INFO - Application ready
+2025-11-23 16:06:18 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:06:18 - TextFileScanner - INFO - Starting Text File Scanner
+2025-11-23 16:06:18 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:06:18 - TextFileScanner - INFO - ScannerController initialized
+2025-11-23 16:06:18 - TextFileScanner - INFO - Testing n8n connection...
+2025-11-23 16:06:18 - TextFileScanner - INFO - Testing connection to http://localhost:5678/webhook-test/3122f617-07e5-49c1-bcd1-476a935e530f
+2025-11-23 16:06:18 - TextFileScanner - INFO - n8n connection test passed
+2025-11-23 16:06:18 - TextFileScanner - INFO - Application ready
+2025-11-23 16:06:29 - TextFileScanner - INFO - User selected file: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:06:29 - TextFileScanner - INFO - File selected: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:06:29 - TextFileScanner - INFO - Successfully read file: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:06:29 - TextFileScanner - INFO - Status: File loaded: test.txt
+2025-11-23 16:06:35 - TextFileScanner - INFO - Send button clicked
+2025-11-23 16:06:35 - TextFileScanner - INFO - Status: Sending to n8n...
+2025-11-23 16:06:35 - TextFileScanner - INFO - Sending to n8n: http://localhost:5678/webhook-test/3122f617-07e5-49c1-bcd1-476a935e530f
+2025-11-23 16:06:35 - TextFileScanner - ERROR - n8n server returned status 404: {"code":404,"message":"The requested webhook \"3122f617-07e5-49c1-bcd1-476a935e530f\" is not registered.","hint":"Click the 'Execute workflow' button on the canvas, then try again. (In test mode, the webhook only works for one call after you click this button)","stacktrace":"ResponseError: The requested webhook \"3122f617-07e5-49c1-bcd1-476a935e530f\" is not registered.\n    at TestWebhooks.getWebhookMethods (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\test-webhooks.ts:232:37)\n    at TestWebhooks.executeWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\test-webhooks.ts:83:22)\n    at WebhookRequestHandler.handleRequest (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:66:21)\n    at C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:257:3"}
+2025-11-23 16:06:36 - TextFileScanner - ERROR - Send failed: n8n server returned status 404: {"code":404,"message":"The requested webhook \"3122f617-07e5-49c1-bcd1-476a935e530f\" is not registered.","hint":"Click the 'Execute workflow' button on the canvas, then try again. (In test mode, the webhook only works for one call after you click this button)","stacktrace":"ResponseError: The requested webhook \"3122f617-07e5-49c1-bcd1-476a935e530f\" is not registered.\n    at TestWebhooks.getWebhookMethods (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\test-webhooks.ts:232:37)\n    at TestWebhooks.executeWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\test-webhooks.ts:83:22)\n    at WebhookRequestHandler.handleRequest (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:66:21)\n    at C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:257:3"}
+2025-11-23 16:10:01 - TextFileScanner - INFO - Text File Scanner closed
+2025-11-23 16:10:01 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:10:09 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:10:09 - TextFileScanner - INFO - Starting Text File Scanner
+2025-11-23 16:10:09 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:10:09 - TextFileScanner - INFO - ScannerController initialized
+2025-11-23 16:10:09 - TextFileScanner - INFO - Testing n8n connection...
+2025-11-23 16:10:09 - TextFileScanner - INFO - Testing connection to http://localhost:5678/webhook-test/3122f617-07e5-49c1-bcd1-476a935e530f
+2025-11-23 16:10:09 - TextFileScanner - INFO - n8n connection test passed
+2025-11-23 16:10:09 - TextFileScanner - INFO - Application ready
+2025-11-23 16:10:12 - TextFileScanner - INFO - User selected file: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:10:12 - TextFileScanner - INFO - File selected: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:10:12 - TextFileScanner - INFO - Successfully read file: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:10:12 - TextFileScanner - INFO - Status: File loaded: test.txt
+2025-11-23 16:10:16 - TextFileScanner - INFO - Text File Scanner closed
+2025-11-23 16:10:16 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:10:48 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:10:48 - TextFileScanner - INFO - Starting Text File Scanner
+2025-11-23 16:10:48 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:10:48 - TextFileScanner - INFO - ScannerController initialized
+2025-11-23 16:10:48 - TextFileScanner - INFO - Testing n8n connection...
+2025-11-23 16:10:48 - TextFileScanner - INFO - Testing connection to http://localhost:5678/webhook/3122f617-07e5-49c1-bcd1-476a935e530f
+2025-11-23 16:10:48 - TextFileScanner - INFO - n8n connection test passed
+2025-11-23 16:10:48 - TextFileScanner - INFO - Application ready
+2025-11-23 16:10:50 - TextFileScanner - INFO - User selected file: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:10:50 - TextFileScanner - INFO - File selected: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:10:50 - TextFileScanner - INFO - Successfully read file: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:10:50 - TextFileScanner - INFO - Status: File loaded: test.txt
+2025-11-23 16:10:51 - TextFileScanner - INFO - Send button clicked
+2025-11-23 16:10:51 - TextFileScanner - INFO - Status: Sending to n8n...
+2025-11-23 16:10:51 - TextFileScanner - INFO - Sending to n8n: http://localhost:5678/webhook/3122f617-07e5-49c1-bcd1-476a935e530f
+2025-11-23 16:10:51 - TextFileScanner - ERROR - n8n server returned status 404: {"code":404,"message":"The requested webhook \"POST 3122f617-07e5-49c1-bcd1-476a935e530f\" is not registered.","hint":"The workflow must be active for a production URL to run successfully. You can activate the workflow using the toggle in the top-right of the editor. Note that unlike test URL calls, production URL calls aren't shown on the canvas (only in the executions list)","stacktrace":"ResponseError: The requested webhook \"POST 3122f617-07e5-49c1-bcd1-476a935e530f\" is not registered.\n    at LiveWebhooks.findWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\live-webhooks.ts:173:10)\n    at LiveWebhooks.executeWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\live-webhooks.ts:83:19)\n    at WebhookRequestHandler.handleRequest (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:66:21)\n    at C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:257:3"}
+2025-11-23 16:13:14 - TextFileScanner - ERROR - Send failed: n8n server returned status 404: {"code":404,"message":"The requested webhook \"POST 3122f617-07e5-49c1-bcd1-476a935e530f\" is not registered.","hint":"The workflow must be active for a production URL to run successfully. You can activate the workflow using the toggle in the top-right of the editor. Note that unlike test URL calls, production URL calls aren't shown on the canvas (only in the executions list)","stacktrace":"ResponseError: The requested webhook \"POST 3122f617-07e5-49c1-bcd1-476a935e530f\" is not registered.\n    at LiveWebhooks.findWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\live-webhooks.ts:173:10)\n    at LiveWebhooks.executeWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\live-webhooks.ts:83:19)\n    at WebhookRequestHandler.handleRequest (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:66:21)\n    at C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:257:3"}
+2025-11-23 16:13:15 - TextFileScanner - INFO - Text File Scanner closed
+2025-11-23 16:13:15 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:13:20 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:13:20 - TextFileScanner - INFO - Starting Text File Scanner
+2025-11-23 16:13:20 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:13:20 - TextFileScanner - INFO - ScannerController initialized
+2025-11-23 16:13:20 - TextFileScanner - INFO - Testing n8n connection...
+2025-11-23 16:13:20 - TextFileScanner - INFO - Testing connection to http://localhost:5678/webhook-test/hook1
+2025-11-23 16:13:20 - TextFileScanner - INFO - n8n connection test passed
+2025-11-23 16:13:20 - TextFileScanner - INFO - Application ready
+2025-11-23 16:13:23 - TextFileScanner - INFO - User selected file: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:13:23 - TextFileScanner - INFO - File selected: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:13:23 - TextFileScanner - INFO - Successfully read file: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:13:23 - TextFileScanner - INFO - Status: File loaded: test.txt
+2025-11-23 16:13:24 - TextFileScanner - INFO - Send button clicked
+2025-11-23 16:13:24 - TextFileScanner - INFO - Status: Sending to n8n...
+2025-11-23 16:13:24 - TextFileScanner - INFO - Sending to n8n: http://localhost:5678/webhook-test/hook1
+2025-11-23 16:13:24 - TextFileScanner - ERROR - n8n server returned status 404: {"code":404,"message":"The requested webhook \"hook1\" is not registered.","hint":"Click the 'Execute workflow' button on the canvas, then try again. (In test mode, the webhook only works for one call after you click this button)","stacktrace":"ResponseError: The requested webhook \"hook1\" is not registered.\n    at TestWebhooks.getWebhookMethods (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\test-webhooks.ts:232:37)\n    at TestWebhooks.executeWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\test-webhooks.ts:83:22)\n    at WebhookRequestHandler.handleRequest (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:66:21)\n    at C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:257:3"}
+2025-11-23 16:13:49 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:13:49 - TextFileScanner - INFO - Starting Text File Scanner
+2025-11-23 16:13:49 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:13:49 - TextFileScanner - INFO - ScannerController initialized
+2025-11-23 16:13:49 - TextFileScanner - INFO - Testing n8n connection...
+2025-11-23 16:13:49 - TextFileScanner - INFO - Testing connection to http://localhost:5678/webhook-test/hook1
+2025-11-23 16:13:49 - TextFileScanner - INFO - n8n connection test passed
+2025-11-23 16:13:49 - TextFileScanner - INFO - Application ready
+2025-11-23 16:13:53 - TextFileScanner - INFO - Send button clicked
+2025-11-23 16:14:01 - TextFileScanner - INFO - User selected file: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:14:01 - TextFileScanner - INFO - File selected: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:14:01 - TextFileScanner - INFO - Successfully read file: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:14:01 - TextFileScanner - INFO - Status: File loaded: test.txt
+2025-11-23 16:14:02 - TextFileScanner - INFO - Send button clicked
+2025-11-23 16:14:02 - TextFileScanner - INFO - Status: Sending to n8n...
+2025-11-23 16:14:02 - TextFileScanner - INFO - Sending to n8n: http://localhost:5678/webhook-test/hook1
+2025-11-23 16:14:02 - TextFileScanner - ERROR - n8n server returned status 404: {"code":404,"message":"The requested webhook \"hook1\" is not registered.","hint":"Click the 'Execute workflow' button on the canvas, then try again. (In test mode, the webhook only works for one call after you click this button)","stacktrace":"ResponseError: The requested webhook \"hook1\" is not registered.\n    at TestWebhooks.getWebhookMethods (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\test-webhooks.ts:232:37)\n    at TestWebhooks.executeWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\test-webhooks.ts:83:22)\n    at WebhookRequestHandler.handleRequest (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:66:21)\n    at C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:257:3"}
+2025-11-23 16:14:05 - TextFileScanner - ERROR - Send failed: n8n server returned status 404: {"code":404,"message":"The requested webhook \"hook1\" is not registered.","hint":"Click the 'Execute workflow' button on the canvas, then try again. (In test mode, the webhook only works for one call after you click this button)","stacktrace":"ResponseError: The requested webhook \"hook1\" is not registered.\n    at TestWebhooks.getWebhookMethods (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\test-webhooks.ts:232:37)\n    at TestWebhooks.executeWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\test-webhooks.ts:83:22)\n    at WebhookRequestHandler.handleRequest (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:66:21)\n    at C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:257:3"}
+2025-11-23 16:14:41 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:14:41 - TextFileScanner - INFO - Starting Text File Scanner
+2025-11-23 16:14:41 - TextFileScanner - INFO - ==================================================
+2025-11-23 16:14:41 - TextFileScanner - INFO - ScannerController initialized
+2025-11-23 16:14:41 - TextFileScanner - INFO - Testing n8n connection...
+2025-11-23 16:14:41 - TextFileScanner - INFO - Testing connection to http://localhost:5678/webhook-test/hook1
+2025-11-23 16:14:41 - TextFileScanner - INFO - n8n connection test passed
+2025-11-23 16:14:41 - TextFileScanner - INFO - Application ready
+2025-11-23 16:14:43 - TextFileScanner - INFO - User selected file: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:14:43 - TextFileScanner - INFO - File selected: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:14:43 - TextFileScanner - INFO - Successfully read file: C:/Users/user/Desktop/n8ntest/test.txt
+2025-11-23 16:14:43 - TextFileScanner - INFO - Status: File loaded: test.txt
+2025-11-23 16:14:45 - TextFileScanner - INFO - Send button clicked
+2025-11-23 16:14:45 - TextFileScanner - INFO - Status: Sending to n8n...
+2025-11-23 16:14:45 - TextFileScanner - INFO - Sending to n8n: http://localhost:5678/webhook-test/hook1
+2025-11-23 16:14:45 - TextFileScanner - ERROR - n8n server returned status 404: {"code":404,"message":"The requested webhook \"hook1\" is not registered.","hint":"Click the 'Execute workflow' button on the canvas, then try again. (In test mode, the webhook only works for one call after you click this button)","stacktrace":"ResponseError: The requested webhook \"hook1\" is not registered.\n    at TestWebhooks.getWebhookMethods (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\test-webhooks.ts:232:37)\n    at TestWebhooks.executeWebhook (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\test-webhooks.ts:83:22)\n    at WebhookRequestHandler.handleRequest (C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:66:21)\n    at C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\n8n\\src\\webhooks\\webhook-request-handler.ts:257:3"}
