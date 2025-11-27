@@ -17,7 +17,7 @@ class HTTPClient:
     
     def send_to_n8n(self, file_name, content, metadata=None):
         """
-        Send file content to n8n webhook
+        Send file content to n8n webhook and wait for response
         
         Args:
             file_name (str): Name of the file
@@ -25,7 +25,7 @@ class HTTPClient:
             metadata (dict): Optional metadata to send
             
         Returns:
-            tuple: (success: bool, response: str, error_msg: str or None)
+            tuple: (success: bool, response_data: dict or str, error_msg: str or None)
         """
         if not self.webhook_url:
             error_msg = "N8N webhook URL not configured"
@@ -45,6 +45,7 @@ class HTTPClient:
             logger.info(f"Sending to n8n: {self.webhook_url}")
             logger.debug(f"Payload size: {len(json.dumps(payload))} bytes")
             
+            # Make POST request - this blocks until response is received
             response = requests.post(
                 self.webhook_url,
                 json=payload,
@@ -55,15 +56,24 @@ class HTTPClient:
             self.last_response = response
             
             if response.status_code in [200, 201, 202]:
-                logger.info(f"Successfully sent to n8n (Status: {response.status_code})")
-                return True, response.text, None
+                logger.info(f"Successfully received response from n8n (Status: {response.status_code})")
+                
+                # Try to parse JSON response
+                try:
+                    response_data = response.json()
+                    logger.debug(f"Parsed JSON response: {response_data}")
+                    return True, response_data, None
+                except json.JSONDecodeError:
+                    # If not JSON, return text
+                    logger.debug(f"Response is not JSON, returning text")
+                    return True, response.text, None
             else:
                 error_msg = f"n8n server returned status {response.status_code}: {response.text}"
                 logger.error(error_msg)
-                return False, response.text, error_msg
+                return False, None, error_msg
                 
         except requests.exceptions.Timeout:
-            error_msg = f"Request timeout (>{self.timeout}s) - n8n server may be unreachable"
+            error_msg = f"Request timeout (>{self.timeout}s) - n8n processing may be taking too long"
             logger.error(error_msg)
             return False, None, error_msg
         except requests.exceptions.ConnectionError as e:
