@@ -176,6 +176,16 @@ class MainWindow:
             self.response_text.insert('1.0', response)
         self.response_text.config(state=tk.DISABLED)
     
+    def display_response(self, response_text):
+        """
+        Display n8n response/summarization
+        
+        Args:
+            response_text (str): Response text to display
+        """
+        self.set_response(response_text)
+        logger.info(f"Displayed response: {len(response_text)} characters")
+    
     def append_response(self, text):
         """Append to response textbox"""
         self.response_text.config(state=tk.NORMAL)
