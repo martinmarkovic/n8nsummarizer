@@ -61,15 +61,15 @@ class ScannerController:
             return
         
         # Show loading state
-        self.view.set_status("Sending to n8n...")
+        self.view.set_status("Sending to n8n and waiting for response...")
         self.view.show_loading(True)
         
         try:
             # Get file info
             file_info = self.file_scanner.get_file_info()
             
-            # Send via HTTP using model
-            success, response, error = self.http_client.send_to_n8n(
+            # Send via HTTP using model - this waits for response
+            success, response_data, error = self.http_client.send_to_n8n(
                 file_name=file_info['name'],
                 content=content,
                 metadata={
@@ -79,9 +79,19 @@ class ScannerController:
             )
             
             if success:
-                self.view.show_success(f"Successfully sent '{file_info['name']}' to n8n!")
+                # Extract summarization from response
+                summary = self._extract_summary(response_data)
+                
+                if summary:
+                    # Display the summary in the view
+                    self.view.display_response(summary)
+                    self.view.show_success(f"Summarization received for '{file_info['name']}'!")
+                    logger.info("Summarization successfully received")
+                else:
+                    self.view.show_success(f"Successfully sent '{file_info['name']}' to n8n!")
+                    logger.info("File successfully sent to n8n (no summary in response)")
+                
                 self.view.set_status("Ready")
-                logger.info("File successfully sent to n8n")
             else:
                 self.view.show_error(f"Failed to send to n8n:\n{error}")
                 logger.error(f"Send failed: {error}")
@@ -93,6 +103,36 @@ class ScannerController:
         
         finally:
             self.view.show_loading(False)
+    
+    def _extract_summary(self, response_data):
+        """
+        Extract summary from n8n response
+        
+        Args:
+            response_data: Response from n8n (dict or str)
+            
+        Returns:
+            str: Extracted summary or None
+        """
+        if response_data is None:
+            return None
+        
+        # If it's a string, return it
+        if isinstance(response_data, str):
+            return response_data
+        
+        # If it's a dict, try common keys
+        if isinstance(response_data, dict):
+            # Try common response keys
+            for key in ['summary', 'summarization', 'result', 'output', 'text', 'content']:
+                if key in response_data:
+                    return response_data[key]
+            
+            # If no common key found, return formatted JSON
+            import json
+            return json.dumps(response_data, indent=2)
+        
+        return str(response_data)
     
     def handle_clear_clicked(self):
         """Handle clear button click from view"""
