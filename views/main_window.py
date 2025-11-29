@@ -1,5 +1,5 @@
 """
-Extended Main Window GUI - Tkinter with webhook override + adjusted fonts
+Extended Main Window GUI - Tkinter with webhook override + larger fonts
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
@@ -56,7 +56,7 @@ class MainWindow:
         browse_btn = ttk.Button(button_frame, text="Browse File", command=self._browse_file)
         browse_btn.grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
         
-        # WEBHOOK OVERRIDE SECTION - NEW
+        # WEBHOOK OVERRIDE SECTION
         webhook_frame = ttk.LabelFrame(main_frame, text="n8n Webhook Override", padding="10")
         webhook_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
         webhook_frame.columnconfigure(0, weight=1)
@@ -79,7 +79,7 @@ class MainWindow:
         self.webhook_entry = ttk.Entry(webhook_entry_frame, textvariable=self.custom_webhook_var, width=80)
         self.webhook_entry.grid(row=0, column=0, sticky=(tk.W, tk.E))
         
-        # File Info Section (moved down)
+        # File Info Section
         info_frame = ttk.LabelFrame(main_frame, text="File Info", padding="10")
         info_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
         info_frame.columnconfigure(0, weight=1)
@@ -90,7 +90,7 @@ class MainWindow:
         info_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.info_text.config(yscrollcommand=info_scrollbar.set)
         
-        # Content and Response Section (Side by side) - ADJUSTED FONT SIZE
+        # Content and Response Section (Side by side)
         content_response_frame = ttk.Frame(main_frame)
         content_response_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         content_response_frame.columnconfigure(0, weight=1)
@@ -109,7 +109,7 @@ class MainWindow:
         )
         self.content_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Response Section (Right) - ADJUSTED FONT SIZE
+        # Response Section (Right)
         response_frame = ttk.LabelFrame(content_response_frame, text="n8n Response", padding="10")
         response_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         response_frame.columnconfigure(0, weight=1)
@@ -143,14 +143,14 @@ class MainWindow:
         self.progress = ttk.Progressbar(status_frame, mode='indeterminate')
     
     def _apply_styling(self):
-        """Apply custom styling with larger LabelFrame labels"""
+        """Apply custom styling with larger LabelFrame labels and buttons"""
         style = ttk.Style()
         style.theme_use('clam')
         style.configure('TLabel', background='#f7f9fb')
         style.configure('TFrame', background='#f7f9fb')
         style.configure('TLabelFrame', background='#f7f9fb')
-        style.configure('TLabelFrame.Label', background='#f7f9fb', font=('Segoe UI', 15))  # Increased to 15
-        style.configure('TButton', font=('Segoe UI', 10))
+        style.configure('TLabelFrame.Label', background='#f7f9fb', font=('Segoe UI', 30))  # Doubled: 15→30
+        style.configure('TButton', font=('Segoe UI', 13))  # +30%: 10→13
     
     def _browse_file(self):
         """Handle browse file button"""
