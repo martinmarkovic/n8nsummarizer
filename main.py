@@ -24,8 +24,9 @@ def main():
         # Initialize controller (connects view and models)
         controller = ScannerController(view)
         
-        # Test n8n connection on startup
-        controller.test_n8n_connection()
+        # Note: Connection test removed from startup to avoid GUI delay
+        # User can manually test connection by clicking "Send" button
+        # Connection will be tested automatically when sending data
         
         logger.info("Application ready")
         
