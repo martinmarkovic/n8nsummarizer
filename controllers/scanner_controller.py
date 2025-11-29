@@ -1,5 +1,5 @@
 """
-Scanner Controller - Coordinates between View and Models
+Scanner Controller - Coordinates between View and Models with webhook override
 """
 from models.file_scanner import FileScanner
 from models.http_client import HTTPClient
@@ -7,7 +7,7 @@ from utils.logger import logger
 
 
 class ScannerController:
-    """Controller for coordinating file scanning and HTTP transmission"""
+    """Controller for coordinating file scanning and HTTP transmission with webhook override"""
     
     def __init__(self, view):
         self.view = view
@@ -45,7 +45,7 @@ class ScannerController:
             self.view.set_file_info(None)
     
     def handle_send_clicked(self):
-        """Handle send button click from view"""
+        """Handle send button click from view with webhook override logic"""
         logger.info("Send button clicked")
         
         # Validate file is loaded
@@ -68,6 +68,23 @@ class ScannerController:
             # Get file info
             file_info = self.file_scanner.get_file_info()
             
+            # CHECK WEBHOOK OVERRIDE
+            webhook_override = self.view.get_webhook_override()
+            custom_webhook_url = None
+            
+            if webhook_override['override']:
+                custom_url = webhook_override['custom_url']
+                if custom_url.strip():
+                    custom_webhook_url = custom_url.strip()
+                    logger.info(f"Using custom webhook override: {custom_webhook_url}")
+                    # Temporarily override HTTPClient webhook URL
+                    self.http_client.webhook_url = custom_webhook_url
+                else:
+                    self.view.show_error("Custom webhook URL is empty!")
+                    return
+            else:
+                logger.info("Using config default webhook URL")
+            
             # Send via HTTP using model - this waits for response
             success, response_data, error = self.http_client.send_to_n8n(
                 file_name=file_info['name'],
@@ -85,10 +102,12 @@ class ScannerController:
                 if summary:
                     # Display the summary in the view
                     self.view.display_response(summary)
-                    self.view.show_success(f"Summarization received for '{file_info['name']}'!")
+                    webhook_used = custom_webhook_url or "config default"
+                    self.view.show_success(f"Summarization received for '{file_info['name']}'! (Webhook: {webhook_used})")
                     logger.info("Summarization successfully received")
                 else:
-                    self.view.show_success(f"Successfully sent '{file_info['name']}' to n8n!")
+                    webhook_used = custom_webhook_url or "config default"
+                    self.view.show_success(f"Successfully sent '{file_info['name']}' to n8n! (Webhook: {webhook_used})")
                     logger.info("File successfully sent to n8n (no summary in response)")
                 
                 self.view.set_status("Ready")
