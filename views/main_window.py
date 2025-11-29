@@ -133,7 +133,7 @@ class MainWindow:
         
         # Status Bar
         status_frame = ttk.Frame(main_frame)
-        status_frame.grid(row=6, row=5, column=0, columnspan=2, sticky=(tk.W, tk.E))
+        status_frame.grid(row=6, column=0, columnspan=2, sticky=(tk.W, tk.E))
         status_frame.columnconfigure(0, weight=1)
         
         self.status_var = tk.StringVar(value="Ready")
