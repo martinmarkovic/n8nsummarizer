@@ -9,11 +9,14 @@ Python GUI application for sending file content to n8n webhooks and receiving su
 - **Light mode** with clean, modern brown tones
 - **Persistent preference** saved to `.env`
 - **One-click toggle** button in header
+- **Purple section labels** in dark mode (File Selection, Webhook Override, File Info, etc.)
 
 ### 📤 Export Response Functionality
 - **Export as .txt** - Plain text export with timestamp
 - **Export as .docx** - Formatted Word document export
-- **Custom save location** with file dialog
+- **Export location options**:
+  - ☑️ **Use original file location** - Auto-save to source file's folder (no dialog)
+  - ☐ **Custom location** - Choose location with file dialog
 - **Automatic timestamps** in filenames
 
 ## Features
@@ -94,16 +97,36 @@ python main.py
 - **Toggle** - Click moon (🌙) or sun (☀️) button in header
 - **Automatic persistence** - Choice saved to `.env`
 - **Restart behavior** - Loads saved theme on startup
+- **Purple accents** - All section labels turn purple in dark mode
 
 ### Export Responses
+
+**Export Location Options:**
+
+1. **☑️ Use original file location for export** (checkbox)
+   - When **checked**: Exports save to the same folder as the loaded file
+   - No file dialog shown - instant save
+   - Perfect for keeping exports with source files
+
+2. **☐ Use original file location for export** (unchecked)
+   - When **unchecked**: File dialog appears
+   - Choose custom save location
+   - Default folder: `exports/`
+
+**Export Steps:**
 1. Ensure response content is displayed
-2. Click **📄 Export as .txt** or **📝 Export as .docx**
-3. Choose save location in file dialog
-4. Files saved with automatic timestamps
+2. (Optional) Check "Use original file location" to auto-save
+3. Click **📄 Export as .txt** or **📝 Export as .docx**
+4. If checkbox unchecked, choose location in dialog
+5. Files saved with automatic timestamps
 
 **Export formats:**
 - `.txt` - Plain text with original formatting
 - `.docx` - Word document with heading, timestamp, and formatted content
+
+**Example filenames:**
+- `n8n_response_20251129_142030.txt`
+- `n8n_response_20251129_142030.docx`
 
 ## Theme Colors
 
@@ -116,8 +139,12 @@ python main.py
 ### Dark Mode (Slack-Inspired)
 - **Background**: `#1a1d21` (Dark gray, not pure black)
 - **Surface**: `#222529` (Slightly lighter gray)
-- **Accent**: `#8b5cf6` (Pleasant purple)
+- **Accent**: `#8b5cf6` (Pleasant purple) ⭐
 - **Text**: `#e8e8e8` (Almost white, very light gray)
+
+**Purple Accent Zones (Dark Mode):**
+- Section labels: "File Selection", "n8n Webhook Override", "File Info"
+- Content frames: "Content Preview & Edit", "n8n Response"
 
 ## Dependencies
 
@@ -139,10 +166,17 @@ pip install -r requirements.txt
 
 ## Changelog
 
-### v1.4 (2025-11-29)
+### v1.4.1 (2025-11-29) - Latest
+- 💜 **FIXED**: Purple accents now properly applied to all section labels in dark mode
+- ☑️ **NEW**: "Use original file location for export" checkbox
+  - Auto-saves exports to source file folder when checked
+  - No file dialog interruption
+- 📁 **IMPROVED**: Export location preference persists during session
+
+### v1.4.0 (2025-11-29)
 - ✨ **NEW**: Dark/light mode toggle with Slack-inspired dark theme
 - ✨ **NEW**: Export response as .txt or .docx
-- 💜 **IMPROVED**: Pleasant purple accents in dark mode
+- 💜 **NEW**: Pleasant purple accents in dark mode
 - 💾 **IMPROVED**: Theme preference persists to .env
 - 📁 **IMPROVED**: Automatic exports folder creation
 
