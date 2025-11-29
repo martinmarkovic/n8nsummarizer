@@ -1,14 +1,14 @@
 """
-Extended Main Window GUI - Tkinter with response textbox and wider layout
+Extended Main Window GUI - Tkinter with webhook override + double text size
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
-from config import APP_TITLE, APP_WIDTH, APP_HEIGHT, SUPPORTED_EXTENSIONS
+from config import APP_TITLE, APP_WIDTH, APP_HEIGHT, SUPPORTED_EXTENSIONS, N8N_WEBHOOK_URL
 from utils.logger import logger
 
 
 class MainWindow:
-    """Main GUI window for Text File Scanner - Extended"""
+    """Main GUI window for Text File Scanner - Extended with webhook override"""
     
     def __init__(self, root):
         self.root = root
@@ -21,11 +21,15 @@ class MainWindow:
         self.on_send_clicked = None
         self.on_clear_clicked = None
         
+        # Webhook override state
+        self.webhook_override_var = tk.BooleanVar(value=False)
+        self.custom_webhook_var = tk.StringVar(value=N8N_WEBHOOK_URL or '')
+        
         self._setup_ui()
         self._apply_styling()
     
     def _setup_ui(self):
-        """Setup UI components with side-by-side layout"""
+        """Setup UI components with side-by-side layout + webhook override"""
         # Main frame
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -52,9 +56,32 @@ class MainWindow:
         browse_btn = ttk.Button(button_frame, text="Browse File", command=self._browse_file)
         browse_btn.grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
         
-        # File Info Section
+        # WEBHOOK OVERRIDE SECTION - NEW
+        webhook_frame = ttk.LabelFrame(main_frame, text="n8n Webhook Override", padding="10")
+        webhook_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        webhook_frame.columnconfigure(0, weight=1)
+        
+        # Checkbox
+        override_check = ttk.Checkbutton(
+            webhook_frame, 
+            text="Override config default webhook",
+            variable=self.webhook_override_var
+        )
+        override_check.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        
+        # Webhook URL input
+        ttk.Label(webhook_frame, text="Custom Webhook URL:").grid(row=1, column=0, sticky=tk.W, pady=(0, 5))
+        
+        webhook_entry_frame = ttk.Frame(webhook_frame)
+        webhook_entry_frame.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=(0, 5))
+        webhook_entry_frame.columnconfigure(0, weight=1)
+        
+        self.webhook_entry = ttk.Entry(webhook_entry_frame, textvariable=self.custom_webhook_var, width=80)
+        self.webhook_entry.grid(row=0, column=0, sticky=(tk.W, tk.E))
+        
+        # File Info Section (moved down)
         info_frame = ttk.LabelFrame(main_frame, text="File Info", padding="10")
-        info_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        info_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
         info_frame.columnconfigure(0, weight=1)
         
         self.info_text = tk.Text(info_frame, height=5, width=100, state=tk.DISABLED, wrap=tk.WORD)
@@ -63,13 +90,13 @@ class MainWindow:
         info_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.info_text.config(yscrollcommand=info_scrollbar.set)
         
-        # Content and Response Section (Side by side)
+        # Content and Response Section (Side by side) - DOUBLE TEXT SIZE
         content_response_frame = ttk.Frame(main_frame)
-        content_response_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        content_response_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         content_response_frame.columnconfigure(0, weight=1)
         content_response_frame.columnconfigure(1, weight=1)
         content_response_frame.rowconfigure(0, weight=1)
-        main_frame.rowconfigure(3, weight=1)
+        main_frame.rowconfigure(4, weight=1)
         
         # Content Preview Section (Left)
         content_frame = ttk.LabelFrame(content_response_frame, text="Content Preview & Edit", padding="10")
@@ -78,24 +105,24 @@ class MainWindow:
         content_frame.rowconfigure(0, weight=1)
         
         self.content_text = scrolledtext.ScrolledText(
-            content_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 9)
+            content_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 18)
         )
         self.content_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Response Section (Right)
+        # Response Section (Right) - DOUBLE TEXT SIZE
         response_frame = ttk.LabelFrame(content_response_frame, text="n8n Response", padding="10")
         response_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         response_frame.columnconfigure(0, weight=1)
         response_frame.rowconfigure(0, weight=1)
         
         self.response_text = scrolledtext.ScrolledText(
-            response_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 9), state=tk.DISABLED
+            response_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 18), state=tk.DISABLED
         )
         self.response_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # Buttons Section
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        button_frame.grid(row=5, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
         button_frame.columnconfigure(1, weight=1)
         
         self.send_btn = ttk.Button(button_frame, text="Send to n8n", command=self._send_clicked)
@@ -106,7 +133,7 @@ class MainWindow:
         
         # Status Bar
         status_frame = ttk.Frame(main_frame)
-        status_frame.grid(row=5, column=0, columnspan=2, sticky=(tk.W, tk.E))
+        status_frame.grid(row=6, row=5, column=0, columnspan=2, sticky=(tk.W, tk.E))
         status_frame.columnconfigure(0, weight=1)
         
         self.status_var = tk.StringVar(value="Ready")
@@ -151,6 +178,13 @@ class MainWindow:
     def _clear_clicked(self):
         if self.on_clear_clicked:
             self.on_clear_clicked()
+    
+    def get_webhook_override(self):
+        """Get webhook override state for controller"""
+        return {
+            'override': self.webhook_override_var.get(),
+            'custom_url': self.custom_webhook_var.get().strip()
+        }
     
     def set_file_path(self, file_path):
         if file_path:
