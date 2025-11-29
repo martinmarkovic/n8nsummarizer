@@ -1,7 +1,8 @@
 """
-Scanner Controller - Coordinates between View and Models with webhook override + .env saving
+Scanner Controller - Coordinates between View and Models with webhook override + threading
 """
 import os
+import threading
 from models.file_scanner import FileScanner
 from models.http_client import HTTPClient
 from utils.logger import logger
@@ -46,7 +47,7 @@ class ScannerController:
             self.view.set_file_info(None)
     
     def handle_send_clicked(self):
-        """Handle send button click - always use GUI webhook, optionally save to .env"""
+        """Handle send button click - starts background thread for n8n request"""
         logger.info("Send button clicked")
         
         # Validate file is loaded
@@ -81,19 +82,31 @@ class ScannerController:
                 self.view.show_error(f"Warning: Could not save to .env file: {e}")
                 # Continue anyway - still send the request
         
+        # Show initial status in response box
+        file_info = self.file_scanner.get_file_info()
+        status_msg = f"⏳ Sending request to n8n...\n\nWebhook: {gui_webhook_url}\nFile: {file_info['name']}\nSize: {file_info['size_kb']:.2f} KB\n\nWaiting for response..."
+        self.view.display_response(status_msg)
+        
         # Show loading state
         self.view.set_status("Sending to n8n and waiting for response...")
         self.view.show_loading(True)
         
+        # Run request in background thread to prevent GUI freeze
+        thread = threading.Thread(
+            target=self._send_to_n8n_thread,
+            args=(file_info, content, gui_webhook_url, webhook_override['override']),
+            daemon=True
+        )
+        thread.start()
+    
+    def _send_to_n8n_thread(self, file_info, content, webhook_url, saved_to_env):
+        """Background thread function to send request to n8n"""
         try:
-            # Get file info
-            file_info = self.file_scanner.get_file_info()
-            
             # ALWAYS use GUI webhook
-            self.http_client.webhook_url = gui_webhook_url
-            logger.info(f"Using webhook from GUI: {gui_webhook_url}")
+            self.http_client.webhook_url = webhook_url
+            logger.info(f"Using webhook from GUI: {webhook_url}")
             
-            # Send via HTTP using model - this waits for response
+            # Send via HTTP using model - this blocks until response is received
             success, response_data, error = self.http_client.send_to_n8n(
                 file_name=file_info['name'],
                 content=content,
@@ -103,33 +116,49 @@ class ScannerController:
                 }
             )
             
+            # Update UI from main thread using after()
             if success:
                 # Extract summarization from response
                 summary = self._extract_summary(response_data)
                 
-                saved_msg = " (saved to .env)" if webhook_override['override'] else ""
+                saved_msg = " (saved to .env)" if saved_to_env else ""
                 
                 if summary:
-                    # Display the summary in the view
-                    self.view.display_response(summary)
-                    self.view.show_success(f"Summarization received for '{file_info['name']}'!{saved_msg}")
-                    logger.info("Summarization successfully received")
+                    # Clear previous status and display summary
+                    self.view.root.after(0, self._on_success_with_summary, summary, file_info['name'], saved_msg)
                 else:
-                    self.view.show_success(f"Successfully sent '{file_info['name']}' to n8n!{saved_msg}")
-                    logger.info("File successfully sent to n8n (no summary in response)")
-                
-                self.view.set_status("Ready")
+                    self.view.root.after(0, self._on_success_no_summary, file_info['name'], saved_msg)
             else:
-                self.view.show_error(f"Failed to send to n8n:\n{error}")
-                logger.error(f"Send failed: {error}")
+                self.view.root.after(0, self._on_error, error)
         
         except Exception as e:
             error_msg = f"Unexpected error: {str(e)}"
-            self.view.show_error(error_msg)
             logger.error(error_msg)
-        
-        finally:
-            self.view.show_loading(False)
+            self.view.root.after(0, self._on_error, error_msg)
+    
+    def _on_success_with_summary(self, summary, file_name, saved_msg):
+        """Called from main thread when summary is received"""
+        self.view.display_response(summary)
+        self.view.show_success(f"Summarization received for '{file_name}'!{saved_msg}")
+        logger.info("Summarization successfully received")
+        self.view.set_status("Ready")
+        self.view.show_loading(False)
+    
+    def _on_success_no_summary(self, file_name, saved_msg):
+        """Called from main thread when request succeeds but no summary"""
+        self.view.display_response("✓ Request sent successfully\n\nNo summary returned from n8n workflow.")
+        self.view.show_success(f"Successfully sent '{file_name}' to n8n!{saved_msg}")
+        logger.info("File successfully sent to n8n (no summary in response)")
+        self.view.set_status("Ready")
+        self.view.show_loading(False)
+    
+    def _on_error(self, error_msg):
+        """Called from main thread when error occurs"""
+        self.view.display_response(f"❌ Error\n\n{error_msg}")
+        self.view.show_error(f"Failed to send to n8n:\n{error_msg}")
+        logger.error(f"Send failed: {error_msg}")
+        self.view.set_status("Ready")
+        self.view.show_loading(False)
     
     def _save_webhook_to_env(self, webhook_url):
         """Save webhook URL to .env file"""
