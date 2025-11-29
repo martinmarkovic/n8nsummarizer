@@ -1,5 +1,5 @@
 """
-Extended Main Window GUI - Tkinter with webhook override + double text size
+Extended Main Window GUI - Tkinter with webhook override + adjusted fonts
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
@@ -64,13 +64,13 @@ class MainWindow:
         # Checkbox
         override_check = ttk.Checkbutton(
             webhook_frame, 
-            text="Override config default webhook",
+            text="Save to .env when sending",
             variable=self.webhook_override_var
         )
         override_check.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
         
         # Webhook URL input
-        ttk.Label(webhook_frame, text="Custom Webhook URL:").grid(row=1, column=0, sticky=tk.W, pady=(0, 5))
+        ttk.Label(webhook_frame, text="Webhook URL:").grid(row=1, column=0, sticky=tk.W, pady=(0, 5))
         
         webhook_entry_frame = ttk.Frame(webhook_frame)
         webhook_entry_frame.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=(0, 5))
@@ -90,7 +90,7 @@ class MainWindow:
         info_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.info_text.config(yscrollcommand=info_scrollbar.set)
         
-        # Content and Response Section (Side by side) - DOUBLE TEXT SIZE
+        # Content and Response Section (Side by side) - ADJUSTED FONT SIZE
         content_response_frame = ttk.Frame(main_frame)
         content_response_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         content_response_frame.columnconfigure(0, weight=1)
@@ -105,18 +105,18 @@ class MainWindow:
         content_frame.rowconfigure(0, weight=1)
         
         self.content_text = scrolledtext.ScrolledText(
-            content_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 18)
+            content_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 15)
         )
         self.content_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Response Section (Right) - DOUBLE TEXT SIZE
+        # Response Section (Right) - ADJUSTED FONT SIZE
         response_frame = ttk.LabelFrame(content_response_frame, text="n8n Response", padding="10")
         response_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         response_frame.columnconfigure(0, weight=1)
         response_frame.rowconfigure(0, weight=1)
         
         self.response_text = scrolledtext.ScrolledText(
-            response_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 18), state=tk.DISABLED
+            response_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 15), state=tk.DISABLED
         )
         self.response_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
@@ -143,13 +143,13 @@ class MainWindow:
         self.progress = ttk.Progressbar(status_frame, mode='indeterminate')
     
     def _apply_styling(self):
-        """Apply custom styling"""
+        """Apply custom styling with larger LabelFrame labels"""
         style = ttk.Style()
         style.theme_use('clam')
         style.configure('TLabel', background='#f7f9fb')
         style.configure('TFrame', background='#f7f9fb')
         style.configure('TLabelFrame', background='#f7f9fb')
-        style.configure('TLabelFrame.Label', background='#f7f9fb')
+        style.configure('TLabelFrame.Label', background='#f7f9fb', font=('Segoe UI', 15))  # Increased to 15
         style.configure('TButton', font=('Segoe UI', 10))
     
     def _browse_file(self):
