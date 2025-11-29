@@ -1,6 +1,7 @@
 """
-Scanner Controller - Coordinates between View and Models with webhook override
+Scanner Controller - Coordinates between View and Models with webhook override + .env saving
 """
+import os
 from models.file_scanner import FileScanner
 from models.http_client import HTTPClient
 from utils.logger import logger
@@ -45,7 +46,7 @@ class ScannerController:
             self.view.set_file_info(None)
     
     def handle_send_clicked(self):
-        """Handle send button click from view with webhook override logic"""
+        """Handle send button click - always use GUI webhook, optionally save to .env"""
         logger.info("Send button clicked")
         
         # Validate file is loaded
@@ -60,6 +61,26 @@ class ScannerController:
             self.view.show_error("File content is empty. Cannot send empty content.")
             return
         
+        # Get webhook from GUI
+        webhook_override = self.view.get_webhook_override()
+        gui_webhook_url = webhook_override['custom_url']
+        
+        if not gui_webhook_url or not gui_webhook_url.strip():
+            self.view.show_error("Webhook URL in GUI is empty! Please enter a valid webhook URL.")
+            return
+        
+        gui_webhook_url = gui_webhook_url.strip()
+        
+        # If checkbox is checked, save to .env
+        if webhook_override['override']:
+            try:
+                self._save_webhook_to_env(gui_webhook_url)
+                logger.info(f"Saved webhook to .env: {gui_webhook_url}")
+            except Exception as e:
+                logger.error(f"Failed to save webhook to .env: {e}")
+                self.view.show_error(f"Warning: Could not save to .env file: {e}")
+                # Continue anyway - still send the request
+        
         # Show loading state
         self.view.set_status("Sending to n8n and waiting for response...")
         self.view.show_loading(True)
@@ -68,22 +89,9 @@ class ScannerController:
             # Get file info
             file_info = self.file_scanner.get_file_info()
             
-            # CHECK WEBHOOK OVERRIDE
-            webhook_override = self.view.get_webhook_override()
-            custom_webhook_url = None
-            
-            if webhook_override['override']:
-                custom_url = webhook_override['custom_url']
-                if custom_url.strip():
-                    custom_webhook_url = custom_url.strip()
-                    logger.info(f"Using custom webhook override: {custom_webhook_url}")
-                    # Temporarily override HTTPClient webhook URL
-                    self.http_client.webhook_url = custom_webhook_url
-                else:
-                    self.view.show_error("Custom webhook URL is empty!")
-                    return
-            else:
-                logger.info("Using config default webhook URL")
+            # ALWAYS use GUI webhook
+            self.http_client.webhook_url = gui_webhook_url
+            logger.info(f"Using webhook from GUI: {gui_webhook_url}")
             
             # Send via HTTP using model - this waits for response
             success, response_data, error = self.http_client.send_to_n8n(
@@ -99,15 +107,15 @@ class ScannerController:
                 # Extract summarization from response
                 summary = self._extract_summary(response_data)
                 
+                saved_msg = " (saved to .env)" if webhook_override['override'] else ""
+                
                 if summary:
                     # Display the summary in the view
                     self.view.display_response(summary)
-                    webhook_used = custom_webhook_url or "config default"
-                    self.view.show_success(f"Summarization received for '{file_info['name']}'! (Webhook: {webhook_used})")
+                    self.view.show_success(f"Summarization received for '{file_info['name']}'!{saved_msg}")
                     logger.info("Summarization successfully received")
                 else:
-                    webhook_used = custom_webhook_url or "config default"
-                    self.view.show_success(f"Successfully sent '{file_info['name']}' to n8n! (Webhook: {webhook_used})")
+                    self.view.show_success(f"Successfully sent '{file_info['name']}' to n8n!{saved_msg}")
                     logger.info("File successfully sent to n8n (no summary in response)")
                 
                 self.view.set_status("Ready")
@@ -122,6 +130,36 @@ class ScannerController:
         
         finally:
             self.view.show_loading(False)
+    
+    def _save_webhook_to_env(self, webhook_url):
+        """Save webhook URL to .env file"""
+        env_file = '.env'
+        env_lines = []
+        webhook_found = False
+        
+        # Read existing .env if it exists
+        if os.path.exists(env_file):
+            with open(env_file, 'r', encoding='utf-8') as f:
+                env_lines = f.readlines()
+        
+        # Update or add N8N_WEBHOOK_URL
+        new_lines = []
+        for line in env_lines:
+            if line.strip().startswith('N8N_WEBHOOK_URL='):
+                new_lines.append(f'N8N_WEBHOOK_URL={webhook_url}\n')
+                webhook_found = True
+            else:
+                new_lines.append(line)
+        
+        # If not found, add it
+        if not webhook_found:
+            new_lines.append(f'N8N_WEBHOOK_URL={webhook_url}\n')
+        
+        # Write back to .env
+        with open(env_file, 'w', encoding='utf-8') as f:
+            f.writelines(new_lines)
+        
+        logger.info(f"Updated .env file with webhook: {webhook_url}")
     
     def _extract_summary(self, response_data):
         """
