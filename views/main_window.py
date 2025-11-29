@@ -1,14 +1,19 @@
 """
-Extended Main Window GUI - Tkinter with webhook override + larger fonts
+Extended Main Window GUI - Tk inter with theme toggle + export functionality
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
-from config import APP_TITLE, APP_WIDTH, APP_HEIGHT, SUPPORTED_EXTENSIONS, N8N_WEBHOOK_URL
+import os
+from datetime import datetime
+from config import (
+    APP_TITLE, APP_WIDTH, APP_HEIGHT, SUPPORTED_EXTENSIONS, 
+    N8N_WEBHOOK_URL, DARK_THEME, LIGHT_THEME, DEFAULT_THEME, EXPORT_DIR
+)
 from utils.logger import logger
 
 
 class MainWindow:
-    """Main GUI window for Text File Scanner - Extended with webhook override"""
+    """Main GUI window with dark/light mode and export functionality"""
     
     def __init__(self, root):
         self.root = root
@@ -20,16 +25,23 @@ class MainWindow:
         self.on_file_selected = None
         self.on_send_clicked = None
         self.on_clear_clicked = None
+        self.on_export_txt = None
+        self.on_export_docx = None
+        self.on_theme_toggle = None
         
         # Webhook override state
         self.webhook_override_var = tk.BooleanVar(value=False)
         self.custom_webhook_var = tk.StringVar(value=N8N_WEBHOOK_URL or '')
         
+        # Theme state
+        self.current_theme = DEFAULT_THEME
+        self.theme_colors = LIGHT_THEME if self.current_theme == 'light' else DARK_THEME
+        
         self._setup_ui()
-        self._apply_styling()
+        self._apply_theme()
     
     def _setup_ui(self):
-        """Setup UI components with side-by-side layout + webhook override"""
+        """Setup UI components"""
         # Main frame
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -37,9 +49,21 @@ class MainWindow:
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(0, weight=1)
         
-        # Title
-        title_label = ttk.Label(main_frame, text=APP_TITLE, font=("Segoe UI", 14, "bold"))
-        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 15), sticky=tk.W)
+        # Header with Title + Theme Toggle
+        header_frame = ttk.Frame(main_frame)
+        header_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 15))
+        header_frame.columnconfigure(0, weight=1)
+        
+        title_label = ttk.Label(header_frame, text=APP_TITLE, font=("Segoe UI", 14, "bold"))
+        title_label.grid(row=0, column=0, sticky=tk.W)
+        
+        # Theme toggle button
+        self.theme_btn = ttk.Button(
+            header_frame, 
+            text="🌙 Dark Mode" if self.current_theme == 'light' else "☀️ Light Mode",
+            command=self._toggle_theme
+        )
+        self.theme_btn.grid(row=0, column=1, sticky=tk.E, padx=(10, 0))
         
         # File Selection Section
         file_frame = ttk.LabelFrame(main_frame, text="File Selection", padding="10")
@@ -47,8 +71,8 @@ class MainWindow:
         file_frame.columnconfigure(0, weight=1)
         
         self.file_path_var = tk.StringVar(value="No file selected")
-        path_label = ttk.Label(file_frame, textvariable=self.file_path_var, foreground="#666")
-        path_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 8))
+        self.path_label = ttk.Label(file_frame, textvariable=self.file_path_var)
+        self.path_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 8))
         
         button_frame = ttk.Frame(file_frame)
         button_frame.grid(row=1, column=0, sticky=(tk.W, tk.E))
@@ -56,12 +80,11 @@ class MainWindow:
         browse_btn = ttk.Button(button_frame, text="Browse File", command=self._browse_file)
         browse_btn.grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
         
-        # WEBHOOK OVERRIDE SECTION
+        # Webhook Override Section
         webhook_frame = ttk.LabelFrame(main_frame, text="n8n Webhook Override", padding="10")
         webhook_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
         webhook_frame.columnconfigure(0, weight=1)
         
-        # Checkbox
         override_check = ttk.Checkbutton(
             webhook_frame, 
             text="Save to .env when sending",
@@ -69,7 +92,6 @@ class MainWindow:
         )
         override_check.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
         
-        # Webhook URL input
         ttk.Label(webhook_frame, text="Webhook URL:").grid(row=1, column=0, sticky=tk.W, pady=(0, 5))
         
         webhook_entry_frame = ttk.Frame(webhook_frame)
@@ -90,7 +112,7 @@ class MainWindow:
         info_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.info_text.config(yscrollcommand=info_scrollbar.set)
         
-        # Content and Response Section (Side by side)
+        # Content and Response Section
         content_response_frame = ttk.Frame(main_frame)
         content_response_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         content_response_frame.columnconfigure(0, weight=1)
@@ -98,7 +120,7 @@ class MainWindow:
         content_response_frame.rowconfigure(0, weight=1)
         main_frame.rowconfigure(4, weight=1)
         
-        # Content Preview Section (Left)
+        # Content Preview (Left)
         content_frame = ttk.LabelFrame(content_response_frame, text="Content Preview & Edit", padding="10")
         content_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
         content_frame.columnconfigure(0, weight=1)
@@ -109,9 +131,14 @@ class MainWindow:
         )
         self.content_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Response Section (Right)
-        response_frame = ttk.LabelFrame(content_response_frame, text="n8n Response", padding="10")
-        response_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
+        # Response Section (Right) with Export Buttons
+        response_container = ttk.Frame(content_response_frame)
+        response_container.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
+        response_container.columnconfigure(0, weight=1)
+        response_container.rowconfigure(0, weight=1)
+        
+        response_frame = ttk.LabelFrame(response_container, text="n8n Response", padding="10")
+        response_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         response_frame.columnconfigure(0, weight=1)
         response_frame.rowconfigure(0, weight=1)
         
@@ -119,6 +146,18 @@ class MainWindow:
             response_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 15), state=tk.DISABLED
         )
         self.response_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Export Buttons (below response box)
+        export_frame = ttk.Frame(response_container)
+        export_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
+        
+        ttk.Label(export_frame, text="Export Response:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+        
+        self.export_txt_btn = ttk.Button(export_frame, text="📄 Export as .txt", command=self._export_txt_clicked)
+        self.export_txt_btn.grid(row=0, column=1, padx=(0, 5))
+        
+        self.export_docx_btn = ttk.Button(export_frame, text="📝 Export as .docx", command=self._export_docx_clicked)
+        self.export_docx_btn.grid(row=0, column=2)
         
         # Buttons Section
         button_frame = ttk.Frame(main_frame)
@@ -142,15 +181,55 @@ class MainWindow:
         
         self.progress = ttk.Progressbar(status_frame, mode='indeterminate')
     
-    def _apply_styling(self):
-        """Apply custom styling with larger LabelFrame labels and buttons"""
+    def _apply_theme(self):
+        """Apply current theme colors"""
         style = ttk.Style()
         style.theme_use('clam')
-        style.configure('TLabel', background='#f7f9fb')
-        style.configure('TFrame', background='#f7f9fb')
-        style.configure('TLabelFrame', background='#f7f9fb')
-        style.configure('TLabelFrame.Label', background='#f7f9fb', font=('Segoe UI', 30))  # Doubled: 15→30
-        style.configure('TButton', font=('Segoe UI', 13))  # +30%: 10→13
+        
+        colors = self.theme_colors
+        
+        # Configure widget styles
+        style.configure('TLabel', background=colors['bg_primary'], foreground=colors['text_primary'])
+        style.configure('TFrame', background=colors['bg_primary'])
+        style.configure('TLabelFrame', background=colors['bg_primary'], bordercolor=colors['border'])
+        style.configure('TLabelFrame.Label', background=colors['bg_primary'], foreground=colors['accent'], font=('Segoe UI', 30))
+        style.configure('TButton', font=('Segoe UI', 13), background=colors['button_bg'], foreground=colors['text_primary'])
+        style.map('TButton', background=[('active', colors['button_hover'])])
+        style.configure('TCheckbutton', background=colors['bg_primary'], foreground=colors['text_primary'])
+        style.configure('TEntry', fieldbackground=colors['bg_secondary'], foreground=colors['text_primary'])
+        
+        # Apply to root and text widgets
+        self.root.configure(bg=colors['bg_primary'])
+        
+        # Text widgets
+        text_bg = colors['bg_secondary']
+        text_fg = colors['text_primary']
+        
+        self.content_text.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
+        self.response_text.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
+        self.info_text.configure(bg=text_bg, fg=text_fg)
+        
+        # Path label color
+        self.path_label.configure(foreground=colors['text_secondary'])
+        
+        logger.info(f"Applied {self.current_theme} theme")
+    
+    def _toggle_theme(self):
+        """Toggle between dark and light mode"""
+        self.current_theme = 'dark' if self.current_theme == 'light' else 'light'
+        self.theme_colors = DARK_THEME if self.current_theme == 'dark' else LIGHT_THEME
+        
+        # Update button text
+        self.theme_btn.configure(
+            text="🌙 Dark Mode" if self.current_theme == 'light' else "☀️ Light Mode"
+        )
+        
+        # Apply new theme
+        self._apply_theme()
+        
+        # Call controller callback to save preference
+        if self.on_theme_toggle:
+            self.on_theme_toggle(self.current_theme)
     
     def _browse_file(self):
         """Handle browse file button"""
@@ -179,12 +258,26 @@ class MainWindow:
         if self.on_clear_clicked:
             self.on_clear_clicked()
     
+    def _export_txt_clicked(self):
+        """Export response as .txt file"""
+        if self.on_export_txt:
+            self.on_export_txt()
+    
+    def _export_docx_clicked(self):
+        """Export response as .docx file"""
+        if self.on_export_docx:
+            self.on_export_docx()
+    
     def get_webhook_override(self):
-        """Get webhook override state for controller"""
+        """Get webhook override state"""
         return {
             'override': self.webhook_override_var.get(),
             'custom_url': self.custom_webhook_var.get().strip()
         }
+    
+    def get_response_content(self):
+        """Get current response text content"""
+        return self.response_text.get('1.0', tk.END).rstrip()
     
     def set_file_path(self, file_path):
         if file_path:
@@ -211,12 +304,7 @@ class MainWindow:
         self.response_text.config(state=tk.DISABLED)
     
     def display_response(self, response_text):
-        """
-        Display n8n response/summarization
-        
-        Args:
-            response_text (str): Response text to display
-        """
+        """Display n8n response/summarization"""
         self.set_response(response_text)
         logger.info(f"Displayed response: {len(response_text)} characters")
     
@@ -228,7 +316,7 @@ class MainWindow:
         self.response_text.config(state=tk.DISABLED)
     
     def set_file_info(self, info_dict):
-        """Update file info display with character count"""
+        """Update file info display"""
         self.info_text.config(state=tk.NORMAL)
         self.info_text.delete('1.0', tk.END)
         if info_dict:
