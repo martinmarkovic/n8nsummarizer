@@ -154,29 +154,45 @@ class ScannerController:
             self.view.show_error("No response content to export!")
             return
         
+        # Get export preferences
+        export_prefs = self.view.get_export_preferences()
+        
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         default_filename = f"n8n_response_{timestamp}.txt"
         
-        file_path = filedialog.asksaveasfilename(
-            title="Export Response as .txt",
-            defaultextension=".txt",
-            initialdir=EXPORT_DIR,
-            initialfile=default_filename,
-            filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")]
-        )
-        
-        if file_path:
-            try:
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(response_content)
-                
-                logger.info(f"Exported response to: {file_path}")
-                self.view.show_success(f"Response exported successfully to:\n{file_path}")
-                self.view.set_status(f"Exported to {os.path.basename(file_path)}")
-            except Exception as e:
-                error_msg = f"Failed to export .txt file: {str(e)}"
-                logger.error(error_msg)
-                self.view.show_error(error_msg)
+        # Determine initial directory
+        if export_prefs['use_original_location'] and export_prefs['original_directory']:
+            initial_dir = export_prefs['original_directory']
+            logger.info(f"Using original file location for export: {initial_dir}")
+            # Auto-save without dialog
+            file_path = os.path.join(initial_dir, default_filename)
+            self._save_txt_file(file_path, response_content)
+        else:
+            # Show file dialog
+            file_path = filedialog.asksaveasfilename(
+                title="Export Response as .txt",
+                defaultextension=".txt",
+                initialdir=EXPORT_DIR,
+                initialfile=default_filename,
+                filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")]
+            )
+            
+            if file_path:
+                self._save_txt_file(file_path, response_content)
+    
+    def _save_txt_file(self, file_path, content):
+        """Save content to .txt file"""
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            logger.info(f"Exported response to: {file_path}")
+            self.view.show_success(f"Response exported successfully to:\n{file_path}")
+            self.view.set_status(f"Exported to {os.path.basename(file_path)}")
+        except Exception as e:
+            error_msg = f"Failed to export .txt file: {str(e)}"
+            logger.error(error_msg)
+            self.view.show_error(error_msg)
     
     def handle_export_docx(self):
         """Export response content as .docx file"""
@@ -195,37 +211,55 @@ class ScannerController:
             )
             return
         
+        # Get export preferences
+        export_prefs = self.view.get_export_preferences()
+        
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         default_filename = f"n8n_response_{timestamp}.docx"
         
-        file_path = filedialog.asksaveasfilename(
-            title="Export Response as .docx",
-            defaultextension=".docx",
-            initialdir=EXPORT_DIR,
-            initialfile=default_filename,
-            filetypes=[("Word Documents", "*.docx"), ("All Files", "*.*")]
-        )
-        
-        if file_path:
-            try:
-                document = Document()
-                document.add_heading('n8n Response Summary', 0)
-                
-                document.add_paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                document.add_paragraph()
-                
-                for line in response_content.split('\n'):
-                    document.add_paragraph(line)
-                
-                document.save(file_path)
-                
-                logger.info(f"Exported response to: {file_path}")
-                self.view.show_success(f"Response exported successfully to:\n{file_path}")
-                self.view.set_status(f"Exported to {os.path.basename(file_path)}")
-            except Exception as e:
-                error_msg = f"Failed to export .docx file: {str(e)}"
-                logger.error(error_msg)
-                self.view.show_error(error_msg)
+        # Determine initial directory
+        if export_prefs['use_original_location'] and export_prefs['original_directory']:
+            initial_dir = export_prefs['original_directory']
+            logger.info(f"Using original file location for export: {initial_dir}")
+            # Auto-save without dialog
+            file_path = os.path.join(initial_dir, default_filename)
+            self._save_docx_file(file_path, response_content)
+        else:
+            # Show file dialog
+            file_path = filedialog.asksaveasfilename(
+                title="Export Response as .docx",
+                defaultextension=".docx",
+                initialdir=EXPORT_DIR,
+                initialfile=default_filename,
+                filetypes=[("Word Documents", "*.docx"), ("All Files", "*.*")]
+            )
+            
+            if file_path:
+                self._save_docx_file(file_path, response_content)
+    
+    def _save_docx_file(self, file_path, content):
+        """Save content to .docx file"""
+        try:
+            from docx import Document
+            
+            document = Document()
+            document.add_heading('n8n Response Summary', 0)
+            
+            document.add_paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            document.add_paragraph()
+            
+            for line in content.split('\n'):
+                document.add_paragraph(line)
+            
+            document.save(file_path)
+            
+            logger.info(f"Exported response to: {file_path}")
+            self.view.show_success(f"Response exported successfully to:\n{file_path}")
+            self.view.set_status(f"Exported to {os.path.basename(file_path)}")
+        except Exception as e:
+            error_msg = f"Failed to export .docx file: {str(e)}"
+            logger.error(error_msg)
+            self.view.show_error(error_msg)
     
     def handle_theme_toggle(self, theme):
         """Handle theme toggle - save preference to .env"""
