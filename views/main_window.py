@@ -1,5 +1,5 @@
 """
-Extended Main Window GUI - Tk inter with theme toggle + export functionality
+Extended Main Window GUI - Tkinter with theme toggle + export functionality
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
@@ -33,9 +33,15 @@ class MainWindow:
         self.webhook_override_var = tk.BooleanVar(value=False)
         self.custom_webhook_var = tk.StringVar(value=N8N_WEBHOOK_URL or '')
         
+        # Export location preference
+        self.use_original_location_var = tk.BooleanVar(value=False)
+        
         # Theme state
         self.current_theme = DEFAULT_THEME
         self.theme_colors = LIGHT_THEME if self.current_theme == 'light' else DARK_THEME
+        
+        # Store current file path for export location
+        self.current_file_directory = None
         
         self._setup_ui()
         self._apply_theme()
@@ -54,8 +60,8 @@ class MainWindow:
         header_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 15))
         header_frame.columnconfigure(0, weight=1)
         
-        title_label = ttk.Label(header_frame, text=APP_TITLE, font=("Segoe UI", 14, "bold"))
-        title_label.grid(row=0, column=0, sticky=tk.W)
+        self.title_label = ttk.Label(header_frame, text=APP_TITLE, font=("Segoe UI", 14, "bold"))
+        self.title_label.grid(row=0, column=0, sticky=tk.W)
         
         # Theme toggle button
         self.theme_btn = ttk.Button(
@@ -66,35 +72,35 @@ class MainWindow:
         self.theme_btn.grid(row=0, column=1, sticky=tk.E, padx=(10, 0))
         
         # File Selection Section
-        file_frame = ttk.LabelFrame(main_frame, text="File Selection", padding="10")
-        file_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
-        file_frame.columnconfigure(0, weight=1)
+        self.file_frame = ttk.LabelFrame(main_frame, text="File Selection", padding="10")
+        self.file_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        self.file_frame.columnconfigure(0, weight=1)
         
         self.file_path_var = tk.StringVar(value="No file selected")
-        self.path_label = ttk.Label(file_frame, textvariable=self.file_path_var)
+        self.path_label = ttk.Label(self.file_frame, textvariable=self.file_path_var)
         self.path_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 8))
         
-        button_frame = ttk.Frame(file_frame)
+        button_frame = ttk.Frame(self.file_frame)
         button_frame.grid(row=1, column=0, sticky=(tk.W, tk.E))
         
         browse_btn = ttk.Button(button_frame, text="Browse File", command=self._browse_file)
         browse_btn.grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
         
         # Webhook Override Section
-        webhook_frame = ttk.LabelFrame(main_frame, text="n8n Webhook Override", padding="10")
-        webhook_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
-        webhook_frame.columnconfigure(0, weight=1)
+        self.webhook_frame = ttk.LabelFrame(main_frame, text="n8n Webhook Override", padding="10")
+        self.webhook_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        self.webhook_frame.columnconfigure(0, weight=1)
         
         override_check = ttk.Checkbutton(
-            webhook_frame, 
+            self.webhook_frame, 
             text="Save to .env when sending",
             variable=self.webhook_override_var
         )
         override_check.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
         
-        ttk.Label(webhook_frame, text="Webhook URL:").grid(row=1, column=0, sticky=tk.W, pady=(0, 5))
+        ttk.Label(self.webhook_frame, text="Webhook URL:").grid(row=1, column=0, sticky=tk.W, pady=(0, 5))
         
-        webhook_entry_frame = ttk.Frame(webhook_frame)
+        webhook_entry_frame = ttk.Frame(self.webhook_frame)
         webhook_entry_frame.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=(0, 5))
         webhook_entry_frame.columnconfigure(0, weight=1)
         
@@ -102,13 +108,13 @@ class MainWindow:
         self.webhook_entry.grid(row=0, column=0, sticky=(tk.W, tk.E))
         
         # File Info Section
-        info_frame = ttk.LabelFrame(main_frame, text="File Info", padding="10")
-        info_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
-        info_frame.columnconfigure(0, weight=1)
+        self.info_frame = ttk.LabelFrame(main_frame, text="File Info", padding="10")
+        self.info_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        self.info_frame.columnconfigure(0, weight=1)
         
-        self.info_text = tk.Text(info_frame, height=5, width=100, state=tk.DISABLED, wrap=tk.WORD)
+        self.info_text = tk.Text(self.info_frame, height=5, width=100, state=tk.DISABLED, wrap=tk.WORD)
         self.info_text.grid(row=0, column=0, sticky=(tk.W, tk.E))
-        info_scrollbar = ttk.Scrollbar(info_frame, orient=tk.VERTICAL, command=self.info_text.yview)
+        info_scrollbar = ttk.Scrollbar(self.info_frame, orient=tk.VERTICAL, command=self.info_text.yview)
         info_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.info_text.config(yscrollcommand=info_scrollbar.set)
         
@@ -121,13 +127,13 @@ class MainWindow:
         main_frame.rowconfigure(4, weight=1)
         
         # Content Preview (Left)
-        content_frame = ttk.LabelFrame(content_response_frame, text="Content Preview & Edit", padding="10")
-        content_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
-        content_frame.columnconfigure(0, weight=1)
-        content_frame.rowconfigure(0, weight=1)
+        self.content_frame = ttk.LabelFrame(content_response_frame, text="Content Preview & Edit", padding="10")
+        self.content_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
+        self.content_frame.columnconfigure(0, weight=1)
+        self.content_frame.rowconfigure(0, weight=1)
         
         self.content_text = scrolledtext.ScrolledText(
-            content_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 15)
+            self.content_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 15)
         )
         self.content_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
@@ -137,26 +143,39 @@ class MainWindow:
         response_container.columnconfigure(0, weight=1)
         response_container.rowconfigure(0, weight=1)
         
-        response_frame = ttk.LabelFrame(response_container, text="n8n Response", padding="10")
-        response_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        response_frame.columnconfigure(0, weight=1)
-        response_frame.rowconfigure(0, weight=1)
+        self.response_frame = ttk.LabelFrame(response_container, text="n8n Response", padding="10")
+        self.response_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.response_frame.columnconfigure(0, weight=1)
+        self.response_frame.rowconfigure(0, weight=1)
         
         self.response_text = scrolledtext.ScrolledText(
-            response_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 15), state=tk.DISABLED
+            self.response_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 15), state=tk.DISABLED
         )
         self.response_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Export Buttons (below response box)
-        export_frame = ttk.Frame(response_container)
-        export_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
+        # Export Controls (below response box)
+        export_controls_frame = ttk.Frame(response_container)
+        export_controls_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
+        export_controls_frame.columnconfigure(0, weight=1)
         
-        ttk.Label(export_frame, text="Export Response:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+        # Export location checkbox
+        export_check = ttk.Checkbutton(
+            export_controls_frame,
+            text="Use original file location for export",
+            variable=self.use_original_location_var
+        )
+        export_check.grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
         
-        self.export_txt_btn = ttk.Button(export_frame, text="📄 Export as .txt", command=self._export_txt_clicked)
+        # Export buttons
+        export_buttons_frame = ttk.Frame(export_controls_frame)
+        export_buttons_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E))
+        
+        ttk.Label(export_buttons_frame, text="Export Response:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+        
+        self.export_txt_btn = ttk.Button(export_buttons_frame, text="📄 Export as .txt", command=self._export_txt_clicked)
         self.export_txt_btn.grid(row=0, column=1, padx=(0, 5))
         
-        self.export_docx_btn = ttk.Button(export_frame, text="📝 Export as .docx", command=self._export_docx_clicked)
+        self.export_docx_btn = ttk.Button(export_buttons_frame, text="📝 Export as .docx", command=self._export_docx_clicked)
         self.export_docx_btn.grid(row=0, column=2)
         
         # Buttons Section
@@ -212,6 +231,9 @@ class MainWindow:
         # Path label color
         self.path_label.configure(foreground=colors['text_secondary'])
         
+        # Title label color
+        self.title_label.configure(foreground=colors['text_primary'])
+        
         logger.info(f"Applied {self.current_theme} theme")
     
     def _toggle_theme(self):
@@ -246,7 +268,10 @@ class MainWindow:
         ]
         file_path = filedialog.askopenfilename(title="Select a file", filetypes=filetypes)
         if file_path:
+            # Store directory for export location
+            self.current_file_directory = os.path.dirname(file_path)
             logger.info(f"User selected file: {file_path}")
+            logger.info(f"File directory stored: {self.current_file_directory}")
             if self.on_file_selected:
                 self.on_file_selected(file_path)
     
@@ -275,6 +300,13 @@ class MainWindow:
             'custom_url': self.custom_webhook_var.get().strip()
         }
     
+    def get_export_preferences(self):
+        """Get export preferences"""
+        return {
+            'use_original_location': self.use_original_location_var.get(),
+            'original_directory': self.current_file_directory
+        }
+    
     def get_response_content(self):
         """Get current response text content"""
         return self.response_text.get('1.0', tk.END).rstrip()
@@ -282,8 +314,11 @@ class MainWindow:
     def set_file_path(self, file_path):
         if file_path:
             self.file_path_var.set(f"[FILE] {file_path}")
+            # Store directory
+            self.current_file_directory = os.path.dirname(file_path)
         else:
             self.file_path_var.set("No file selected")
+            self.current_file_directory = None
     
     def set_content(self, content):
         self.content_text.config(state=tk.NORMAL)
