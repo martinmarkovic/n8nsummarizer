@@ -43,6 +43,11 @@ ENV/
 logs/
 *.log
 
+# Exports
+exports/
+*.txt
+*.docx
+
 # OS specific
 .DS_Store
 Thumbs.db
