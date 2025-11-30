@@ -7,7 +7,8 @@ import os
 from datetime import datetime
 from config import (
     APP_TITLE, APP_WIDTH, APP_HEIGHT, SUPPORTED_EXTENSIONS, 
-    N8N_WEBHOOK_URL, DARK_THEME, LIGHT_THEME, DEFAULT_THEME, EXPORT_DIR
+    N8N_WEBHOOK_URL, DARK_THEME, LIGHT_THEME, DEFAULT_THEME, EXPORT_DIR,
+    DEFAULT_USE_ORIGINAL_LOCATION, DEFAULT_AUTO_EXPORT_TXT, DEFAULT_AUTO_EXPORT_DOCX
 )
 from utils.logger import logger
 
@@ -33,9 +34,10 @@ class MainWindow:
         self.webhook_override_var = tk.BooleanVar(value=False)
         self.custom_webhook_var = tk.StringVar(value=N8N_WEBHOOK_URL or '')
         
-        # Export preferences
-        self.use_original_location_var = tk.BooleanVar(value=False)
-        self.auto_export_var = tk.BooleanVar(value=False)  # NEW: Auto-export checkbox
+        # Export preferences - Load from config defaults
+        self.use_original_location_var = tk.BooleanVar(value=DEFAULT_USE_ORIGINAL_LOCATION)
+        self.auto_export_txt_var = tk.BooleanVar(value=DEFAULT_AUTO_EXPORT_TXT)
+        self.auto_export_docx_var = tk.BooleanVar(value=DEFAULT_AUTO_EXPORT_DOCX)
         
         # Theme state
         self.current_theme = DEFAULT_THEME
@@ -43,7 +45,7 @@ class MainWindow:
         
         # Store current file info for smart export naming
         self.current_file_directory = None
-        self.current_file_basename = None  # NEW: Store original filename without extension
+        self.current_file_basename = None
         
         self._setup_ui()
         self._apply_theme()
@@ -160,7 +162,7 @@ class MainWindow:
         export_controls_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
         export_controls_frame.columnconfigure(0, weight=1)
         
-        # Export checkboxes
+        # Export location checkbox (checked by default)
         export_check1 = ttk.Checkbutton(
             export_controls_frame,
             text="Use original file location for export",
@@ -168,17 +170,24 @@ class MainWindow:
         )
         export_check1.grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 2))
         
-        # NEW: Auto-export checkbox
+        # Separate auto-export checkboxes
         export_check2 = ttk.Checkbutton(
             export_controls_frame,
-            text="Auto-export as .txt and .docx after summarization",
-            variable=self.auto_export_var
+            text="Auto-export as .txt after summarization",
+            variable=self.auto_export_txt_var
         )
-        export_check2.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        export_check2.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=(0, 2))
+        
+        export_check3 = ttk.Checkbutton(
+            export_controls_frame,
+            text="Auto-export as .docx after summarization",
+            variable=self.auto_export_docx_var
+        )
+        export_check3.grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
         
         # Export buttons
         export_buttons_frame = ttk.Frame(export_controls_frame)
-        export_buttons_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E))
+        export_buttons_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E))
         
         ttk.Label(export_buttons_frame, text="Export Response:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
         
@@ -319,9 +328,10 @@ class MainWindow:
         """Get export preferences"""
         return {
             'use_original_location': self.use_original_location_var.get(),
-            'auto_export': self.auto_export_var.get(),  # NEW
+            'auto_export_txt': self.auto_export_txt_var.get(),
+            'auto_export_docx': self.auto_export_docx_var.get(),
             'original_directory': self.current_file_directory,
-            'original_basename': self.current_file_basename  # NEW
+            'original_basename': self.current_file_basename
         }
     
     def get_response_content(self):
