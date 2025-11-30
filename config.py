@@ -33,14 +33,14 @@ LIGHT_THEME = {
     'button_hover': '#e8e9eb',
 }
 
-# Dark Mode Colors (Slack-inspired)
+# Dark Mode Colors (Slack-inspired with pure black accents)
 DARK_THEME = {
     'bg_primary': '#1a1d21',      # Dark gray (not pure black)
     'bg_secondary': '#222529',    # Slightly lighter gray
     'text_primary': '#e8e8e8',    # Almost white, very light gray
     'text_secondary': '#9ca3af',  # Medium gray for secondary text
-    'accent': '#8b5cf6',          # Pleasant purple
-    'accent_light': '#6d28d9',    # Darker purple for hover
+    'accent': '#000000',          # Pure black for section labels
+    'accent_light': '#1a1a1a',    # Very dark gray for hover
     'border': '#374151',          # Dark border
     'button_bg': '#2d3139',       # Button background
     'button_hover': '#383c45',    # Button hover
