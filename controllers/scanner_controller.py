@@ -1,5 +1,5 @@
 """
-Scanner Controller - with webhook override, threading, exports, and theme toggle
+Scanner Controller - with webhook override, threading, exports, theme toggle, and auto-export
 """
 import os
 import threading
@@ -12,7 +12,7 @@ from config import EXPORT_DIR
 
 
 class ScannerController:
-    """Controller with export and theme functionality"""
+    """Controller with export, theme, and auto-export functionality"""
     
     def __init__(self, view):
         self.view = view
@@ -27,7 +27,7 @@ class ScannerController:
         self.view.on_export_docx = self.handle_export_docx
         self.view.on_theme_toggle = self.handle_theme_toggle
         
-        logger.info("ScannerController initialized with export and theme support")
+        logger.info("ScannerController initialized with export, theme, and auto-export support")
     
     def handle_file_selected(self, file_path):
         """Handle file selection from view"""
@@ -126,11 +126,53 @@ class ScannerController:
             self.view.root.after(0, self._on_error, error_msg)
     
     def _on_success_with_summary(self, summary, file_name, saved_msg):
+        """Handle successful summarization response"""
         self.view.display_response(summary)
-        self.view.show_success(f"Summarization received for '{file_name}'!{saved_msg}")
+        
+        # Check if auto-export is enabled
+        export_prefs = self.view.get_export_preferences()
+        if export_prefs['auto_export']:
+            logger.info("Auto-export enabled - exporting both .txt and .docx")
+            self._auto_export_response(summary, silent=True)
+            success_msg = f"Summarization received and auto-exported for '{file_name}'!{saved_msg}"
+        else:
+            success_msg = f"Summarization received for '{file_name}'!{saved_msg}"
+        
+        self.view.show_success(success_msg)
         logger.info("Summarization successfully received")
         self.view.set_status("Ready")
         self.view.show_loading(False)
+    
+    def _auto_export_response(self, response_content, silent=False):
+        """Auto-export response as both .txt and .docx"""
+        export_prefs = self.view.get_export_preferences()
+        
+        # Determine base filename - use original filename + "Summary" or timestamp
+        if export_prefs['original_basename']:
+            base_filename = f"{export_prefs['original_basename']}_Summary"
+            logger.info(f"Using smart filename: {base_filename}")
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            base_filename = f"n8n_response_{timestamp}"
+            logger.info(f"Using timestamp filename: {base_filename}")
+        
+        # Determine save directory
+        if export_prefs['use_original_location'] and export_prefs['original_directory']:
+            save_dir = export_prefs['original_directory']
+            logger.info(f"Auto-export to original location: {save_dir}")
+        else:
+            save_dir = EXPORT_DIR
+            logger.info(f"Auto-export to default location: {save_dir}")
+        
+        # Export .txt
+        txt_path = os.path.join(save_dir, f"{base_filename}.txt")
+        self._save_txt_file(txt_path, response_content, silent=True)
+        
+        # Export .docx
+        docx_path = os.path.join(save_dir, f"{base_filename}.docx")
+        self._save_docx_file(docx_path, response_content, silent=True)
+        
+        logger.info(f"Auto-exported to:\n  .txt: {txt_path}\n  .docx: {docx_path}")
     
     def _on_success_no_summary(self, file_name, saved_msg):
         self.view.display_response("Request sent successfully.\n\nNo summary returned from n8n workflow.")
@@ -146,8 +188,8 @@ class ScannerController:
         self.view.set_status("Ready")
         self.view.show_loading(False)
     
-    def handle_export_txt(self):
-        """Export response content as .txt file"""
+    def handle_export_txt(self, manual_call=True):
+        """Export response content as .txt file (manual export)"""
         response_content = self.view.get_response_content()
         
         if not response_content or not response_content.strip():
@@ -157,8 +199,12 @@ class ScannerController:
         # Get export preferences
         export_prefs = self.view.get_export_preferences()
         
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_filename = f"n8n_response_{timestamp}.txt"
+        # Determine filename - use original filename + "Summary" or timestamp
+        if export_prefs['original_basename']:
+            default_filename = f"{export_prefs['original_basename']}_Summary.txt"
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            default_filename = f"n8n_response_{timestamp}.txt"
         
         # Determine initial directory
         if export_prefs['use_original_location'] and export_prefs['original_directory']:
@@ -180,22 +226,24 @@ class ScannerController:
             if file_path:
                 self._save_txt_file(file_path, response_content)
     
-    def _save_txt_file(self, file_path, content):
+    def _save_txt_file(self, file_path, content, silent=False):
         """Save content to .txt file"""
         try:
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(content)
             
             logger.info(f"Exported response to: {file_path}")
-            self.view.show_success(f"Response exported successfully to:\n{file_path}")
-            self.view.set_status(f"Exported to {os.path.basename(file_path)}")
+            if not silent:
+                self.view.show_success(f"Response exported successfully to:\n{file_path}")
+                self.view.set_status(f"Exported to {os.path.basename(file_path)}")
         except Exception as e:
             error_msg = f"Failed to export .txt file: {str(e)}"
             logger.error(error_msg)
-            self.view.show_error(error_msg)
+            if not silent:
+                self.view.show_error(error_msg)
     
     def handle_export_docx(self):
-        """Export response content as .docx file"""
+        """Export response content as .docx file (manual export)"""
         response_content = self.view.get_response_content()
         
         if not response_content or not response_content.strip():
@@ -214,8 +262,12 @@ class ScannerController:
         # Get export preferences
         export_prefs = self.view.get_export_preferences()
         
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_filename = f"n8n_response_{timestamp}.docx"
+        # Determine filename - use original filename + "Summary" or timestamp
+        if export_prefs['original_basename']:
+            default_filename = f"{export_prefs['original_basename']}_Summary.docx"
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            default_filename = f"n8n_response_{timestamp}.docx"
         
         # Determine initial directory
         if export_prefs['use_original_location'] and export_prefs['original_directory']:
@@ -237,7 +289,7 @@ class ScannerController:
             if file_path:
                 self._save_docx_file(file_path, response_content)
     
-    def _save_docx_file(self, file_path, content):
+    def _save_docx_file(self, file_path, content, silent=False):
         """Save content to .docx file"""
         try:
             from docx import Document
@@ -254,12 +306,14 @@ class ScannerController:
             document.save(file_path)
             
             logger.info(f"Exported response to: {file_path}")
-            self.view.show_success(f"Response exported successfully to:\n{file_path}")
-            self.view.set_status(f"Exported to {os.path.basename(file_path)}")
+            if not silent:
+                self.view.show_success(f"Response exported successfully to:\n{file_path}")
+                self.view.set_status(f"Exported to {os.path.basename(file_path)}")
         except Exception as e:
             error_msg = f"Failed to export .docx file: {str(e)}"
             logger.error(error_msg)
-            self.view.show_error(error_msg)
+            if not silent:
+                self.view.show_error(error_msg)
     
     def handle_theme_toggle(self, theme):
         """Handle theme toggle - save preference to .env"""
