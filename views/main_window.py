@@ -33,15 +33,17 @@ class MainWindow:
         self.webhook_override_var = tk.BooleanVar(value=False)
         self.custom_webhook_var = tk.StringVar(value=N8N_WEBHOOK_URL or '')
         
-        # Export location preference
+        # Export preferences
         self.use_original_location_var = tk.BooleanVar(value=False)
+        self.auto_export_var = tk.BooleanVar(value=False)  # NEW: Auto-export checkbox
         
         # Theme state
         self.current_theme = DEFAULT_THEME
         self.theme_colors = LIGHT_THEME if self.current_theme == 'light' else DARK_THEME
         
-        # Store current file path for export location
+        # Store current file info for smart export naming
         self.current_file_directory = None
+        self.current_file_basename = None  # NEW: Store original filename without extension
         
         self._setup_ui()
         self._apply_theme()
@@ -137,7 +139,7 @@ class MainWindow:
         )
         self.content_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Response Section (Right) with Export Buttons
+        # Response Section (Right) with Export Controls
         response_container = ttk.Frame(content_response_frame)
         response_container.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         response_container.columnconfigure(0, weight=1)
@@ -158,17 +160,25 @@ class MainWindow:
         export_controls_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
         export_controls_frame.columnconfigure(0, weight=1)
         
-        # Export location checkbox
-        export_check = ttk.Checkbutton(
+        # Export checkboxes
+        export_check1 = ttk.Checkbutton(
             export_controls_frame,
             text="Use original file location for export",
             variable=self.use_original_location_var
         )
-        export_check.grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        export_check1.grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 2))
+        
+        # NEW: Auto-export checkbox
+        export_check2 = ttk.Checkbutton(
+            export_controls_frame,
+            text="Auto-export as .txt and .docx after summarization",
+            variable=self.auto_export_var
+        )
+        export_check2.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
         
         # Export buttons
         export_buttons_frame = ttk.Frame(export_controls_frame)
-        export_buttons_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E))
+        export_buttons_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E))
         
         ttk.Label(export_buttons_frame, text="Export Response:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
         
@@ -268,10 +278,15 @@ class MainWindow:
         ]
         file_path = filedialog.askopenfilename(title="Select a file", filetypes=filetypes)
         if file_path:
-            # Store directory for export location
+            # Store directory and basename for smart export naming
             self.current_file_directory = os.path.dirname(file_path)
+            filename = os.path.basename(file_path)
+            self.current_file_basename = os.path.splitext(filename)[0]  # Remove extension
+            
             logger.info(f"User selected file: {file_path}")
             logger.info(f"File directory stored: {self.current_file_directory}")
+            logger.info(f"File basename stored: {self.current_file_basename}")
+            
             if self.on_file_selected:
                 self.on_file_selected(file_path)
     
@@ -304,7 +319,9 @@ class MainWindow:
         """Get export preferences"""
         return {
             'use_original_location': self.use_original_location_var.get(),
-            'original_directory': self.current_file_directory
+            'auto_export': self.auto_export_var.get(),  # NEW
+            'original_directory': self.current_file_directory,
+            'original_basename': self.current_file_basename  # NEW
         }
     
     def get_response_content(self):
@@ -314,11 +331,14 @@ class MainWindow:
     def set_file_path(self, file_path):
         if file_path:
             self.file_path_var.set(f"[FILE] {file_path}")
-            # Store directory
+            # Store directory and basename
             self.current_file_directory = os.path.dirname(file_path)
+            filename = os.path.basename(file_path)
+            self.current_file_basename = os.path.splitext(filename)[0]
         else:
             self.file_path_var.set("No file selected")
             self.current_file_directory = None
+            self.current_file_basename = None
     
     def set_content(self, content):
         self.content_text.config(state=tk.NORMAL)
