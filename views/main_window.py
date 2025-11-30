@@ -1,5 +1,12 @@
 """
-Extended Main Window GUI - Tkinter with theme toggle + export functionality
+Main Window GUI v2.0 - Tabbed Interface
+
+This is the main window with tabbed interface supporting multiple features:
+- Tab 1: File Summarizer (current functionality)
+- Tab 2: YouTube Summarizer (placeholder for future implementation)
+
+Created: 2025-11-30
+Version: 2.0
 """
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
@@ -14,11 +21,11 @@ from utils.logger import logger
 
 
 class MainWindow:
-    """Main GUI window with dark/light mode and export functionality"""
+    """Main GUI window with tabbed interface for multiple features"""
     
     def __init__(self, root):
         self.root = root
-        self.root.title(APP_TITLE)
+        self.root.title(f"{APP_TITLE} v2.0")
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
         
@@ -51,20 +58,21 @@ class MainWindow:
         self._apply_theme()
     
     def _setup_ui(self):
-        """Setup UI components"""
+        """Setup UI components with tabbed interface"""
         # Main frame
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(1, weight=1)  # Tab area expands
         
         # Header with Title + Theme Toggle
         header_frame = ttk.Frame(main_frame)
-        header_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 15))
+        header_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 15))
         header_frame.columnconfigure(0, weight=1)
         
-        self.title_label = ttk.Label(header_frame, text=APP_TITLE, font=("Segoe UI", 14, "bold"))
+        self.title_label = ttk.Label(header_frame, text=f"{APP_TITLE} v2.0", font=("Segoe UI", 14, "bold"))
         self.title_label.grid(row=0, column=0, sticky=tk.W)
         
         # Theme toggle button
@@ -75,86 +83,111 @@ class MainWindow:
         )
         self.theme_btn.grid(row=0, column=1, sticky=tk.E, padx=(10, 0))
         
+        # Create Notebook (Tabbed Interface)
+        self.notebook = ttk.Notebook(main_frame)
+        self.notebook.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        
+        # Tab 1: File Summarizer (current functionality)
+        self.file_tab = ttk.Frame(self.notebook, padding="10")
+        self.notebook.add(self.file_tab, text="📄 File Summarizer")
+        self._setup_file_tab()
+        
+        # Tab 2: YouTube Summarizer (placeholder)
+        self.youtube_tab = ttk.Frame(self.notebook, padding="10")
+        self.notebook.add(self.youtube_tab, text="🎥 YouTube")
+        self._setup_youtube_tab()
+        
+        # Status Bar (global - below tabs)
+        status_frame = ttk.Frame(main_frame)
+        status_frame.grid(row=2, column=0, sticky=(tk.W, tk.E))
+        status_frame.columnconfigure(0, weight=1)
+        
+        self.status_var = tk.StringVar(value="Ready - File Summarizer")
+        self.status_label = ttk.Label(status_frame, textvariable=self.status_var, relief=tk.SUNKEN)
+        self.status_label.grid(row=0, column=0, sticky=(tk.W, tk.E))
+        
+        self.progress = ttk.Progressbar(status_frame, mode='indeterminate')
+    
+    def _setup_file_tab(self):
+        """Setup File Summarizer tab with current functionality"""
+        self.file_tab.columnconfigure(0, weight=1)
+        self.file_tab.rowconfigure(3, weight=1)  # Content area expands
+        
         # File Selection Section
-        self.file_frame = ttk.LabelFrame(main_frame, text="File Selection", padding="10")
-        self.file_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
-        self.file_frame.columnconfigure(0, weight=1)
+        file_frame = ttk.LabelFrame(self.file_tab, text="File Selection", padding="10")
+        file_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        file_frame.columnconfigure(0, weight=1)
         
         self.file_path_var = tk.StringVar(value="No file selected")
-        self.path_label = ttk.Label(self.file_frame, textvariable=self.file_path_var)
+        self.path_label = ttk.Label(file_frame, textvariable=self.file_path_var)
         self.path_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 8))
         
-        button_frame = ttk.Frame(self.file_frame)
+        button_frame = ttk.Frame(file_frame)
         button_frame.grid(row=1, column=0, sticky=(tk.W, tk.E))
         
         browse_btn = ttk.Button(button_frame, text="Browse File", command=self._browse_file)
         browse_btn.grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
         
         # Webhook Override Section
-        self.webhook_frame = ttk.LabelFrame(main_frame, text="n8n Webhook Override", padding="10")
-        self.webhook_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
-        self.webhook_frame.columnconfigure(0, weight=1)
+        webhook_frame = ttk.LabelFrame(self.file_tab, text="n8n Webhook Override", padding="10")
+        webhook_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        webhook_frame.columnconfigure(1, weight=1)
         
         override_check = ttk.Checkbutton(
-            self.webhook_frame, 
+            webhook_frame, 
             text="Save to .env when sending",
             variable=self.webhook_override_var
         )
         override_check.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
         
-        ttk.Label(self.webhook_frame, text="Webhook URL:").grid(row=1, column=0, sticky=tk.W, pady=(0, 5))
+        ttk.Label(webhook_frame, text="Webhook URL:").grid(row=1, column=0, sticky=tk.W, pady=(0, 5))
         
-        webhook_entry_frame = ttk.Frame(self.webhook_frame)
-        webhook_entry_frame.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=(0, 5))
-        webhook_entry_frame.columnconfigure(0, weight=1)
-        
-        self.webhook_entry = ttk.Entry(webhook_entry_frame, textvariable=self.custom_webhook_var, width=80)
-        self.webhook_entry.grid(row=0, column=0, sticky=(tk.W, tk.E))
+        self.webhook_entry = ttk.Entry(webhook_frame, textvariable=self.custom_webhook_var)
+        self.webhook_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=(0, 5))
         
         # File Info Section
-        self.info_frame = ttk.LabelFrame(main_frame, text="File Info", padding="10")
-        self.info_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
-        self.info_frame.columnconfigure(0, weight=1)
+        info_frame = ttk.LabelFrame(self.file_tab, text="File Info", padding="10")
+        info_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        info_frame.columnconfigure(0, weight=1)
         
-        self.info_text = tk.Text(self.info_frame, height=5, width=100, state=tk.DISABLED, wrap=tk.WORD)
+        self.info_text = tk.Text(info_frame, height=4, state=tk.DISABLED, wrap=tk.WORD)
         self.info_text.grid(row=0, column=0, sticky=(tk.W, tk.E))
-        info_scrollbar = ttk.Scrollbar(self.info_frame, orient=tk.VERTICAL, command=self.info_text.yview)
+        info_scrollbar = ttk.Scrollbar(info_frame, orient=tk.VERTICAL, command=self.info_text.yview)
         info_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.info_text.config(yscrollcommand=info_scrollbar.set)
         
-        # Content and Response Section (NO export controls below response anymore)
-        content_response_frame = ttk.Frame(main_frame)
-        content_response_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        # Content and Response Section
+        content_response_frame = ttk.Frame(self.file_tab)
+        content_response_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         content_response_frame.columnconfigure(0, weight=1)
         content_response_frame.columnconfigure(1, weight=1)
         content_response_frame.rowconfigure(0, weight=1)
-        main_frame.rowconfigure(4, weight=1)
         
         # Content Preview (Left)
-        self.content_frame = ttk.LabelFrame(content_response_frame, text="Content Preview & Edit", padding="10")
-        self.content_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
-        self.content_frame.columnconfigure(0, weight=1)
-        self.content_frame.rowconfigure(0, weight=1)
+        content_frame = ttk.LabelFrame(content_response_frame, text="Content Preview & Edit", padding="10")
+        content_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
+        content_frame.columnconfigure(0, weight=1)
+        content_frame.rowconfigure(0, weight=1)
         
         self.content_text = scrolledtext.ScrolledText(
-            self.content_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 15)
+            content_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 10)
         )
         self.content_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Response Section (Right) - Just the text box, no controls below
-        self.response_frame = ttk.LabelFrame(content_response_frame, text="n8n Response", padding="10")
-        self.response_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
-        self.response_frame.columnconfigure(0, weight=1)
-        self.response_frame.rowconfigure(0, weight=1)
+        # Response Section (Right)
+        response_frame = ttk.LabelFrame(content_response_frame, text="n8n Response", padding="10")
+        response_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
+        response_frame.columnconfigure(0, weight=1)
+        response_frame.rowconfigure(0, weight=1)
         
         self.response_text = scrolledtext.ScrolledText(
-            self.response_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 15), state=tk.DISABLED
+            response_frame, height=20, width=65, wrap=tk.WORD, font=("Courier", 10), state=tk.DISABLED
         )
         self.response_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # Bottom Action Bar - Send to n8n, Export Controls, and Clear All
-        bottom_frame = ttk.Frame(main_frame)
-        bottom_frame.grid(row=5, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        bottom_frame = ttk.Frame(self.file_tab)
+        bottom_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         bottom_frame.columnconfigure(1, weight=1)  # Middle section expands
         
         # Left: Send to n8n button
@@ -165,7 +198,7 @@ class MainWindow:
         export_controls_frame = ttk.Frame(bottom_frame)
         export_controls_frame.grid(row=0, column=1, sticky=(tk.W, tk.E))
         
-        # Row 1: Checkboxes (horizontal)
+        # Checkboxes (horizontal)
         ttk.Checkbutton(
             export_controls_frame,
             text="Use original location",
@@ -184,7 +217,7 @@ class MainWindow:
             variable=self.auto_export_docx_var
         ).grid(row=0, column=2, sticky=tk.W, padx=(0, 20))
         
-        # Row 1 continued: Export buttons
+        # Export buttons
         ttk.Label(export_controls_frame, text="Export:").grid(row=0, column=3, sticky=tk.W, padx=(0, 5))
         
         self.export_txt_btn = ttk.Button(export_controls_frame, text="📄 .txt", command=self._export_txt_clicked)
@@ -196,17 +229,54 @@ class MainWindow:
         # Right: Clear All button
         self.clear_btn = ttk.Button(bottom_frame, text="Clear All", command=self._clear_clicked)
         self.clear_btn.grid(row=0, column=2, sticky=tk.E, padx=(20, 0))
+    
+    def _setup_youtube_tab(self):
+        """Setup YouTube Summarizer tab (placeholder)"""
+        self.youtube_tab.columnconfigure(0, weight=1)
+        self.youtube_tab.rowconfigure(0, weight=1)
         
-        # Status Bar
-        status_frame = ttk.Frame(main_frame)
-        status_frame.grid(row=6, column=0, columnspan=2, sticky=(tk.W, tk.E))
-        status_frame.columnconfigure(0, weight=1)
+        # Placeholder content
+        placeholder_frame = ttk.Frame(self.youtube_tab)
+        placeholder_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        placeholder_frame.columnconfigure(0, weight=1)
+        placeholder_frame.rowconfigure(0, weight=1)
         
-        self.status_var = tk.StringVar(value="Ready")
-        self.status_label = ttk.Label(status_frame, textvariable=self.status_var, relief=tk.SUNKEN)
-        self.status_label.grid(row=0, column=0, sticky=(tk.W, tk.E))
+        # Centered message
+        message_frame = ttk.Frame(placeholder_frame)
+        message_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
         
-        self.progress = ttk.Progressbar(status_frame, mode='indeterminate')
+        ttk.Label(
+            message_frame, 
+            text="🎥 YouTube Summarizer", 
+            font=("Segoe UI", 18, "bold")
+        ).pack(pady=(0, 10))
+        
+        ttk.Label(
+            message_frame,
+            text="Coming soon in v2.1!",
+            font=("Segoe UI", 12)
+        ).pack(pady=(0, 5))
+        
+        ttk.Label(
+            message_frame,
+            text="Features planned:",
+            font=("Segoe UI", 10, "bold")
+        ).pack(pady=(10, 5))
+        
+        features = [
+            "• Enter YouTube video URL",
+            "• Fetch video metadata",
+            "• Download transcript automatically",
+            "• Send to n8n for summarization",
+            "• Export transcript + summary"
+        ]
+        
+        for feature in features:
+            ttk.Label(
+                message_frame,
+                text=feature,
+                font=("Segoe UI", 10)
+            ).pack(anchor=tk.W, pady=2)
     
     def _apply_theme(self):
         """Apply current theme colors"""
@@ -219,11 +289,14 @@ class MainWindow:
         style.configure('TLabel', background=colors['bg_primary'], foreground=colors['text_primary'])
         style.configure('TFrame', background=colors['bg_primary'])
         style.configure('TLabelFrame', background=colors['bg_primary'], bordercolor=colors['border'])
-        style.configure('TLabelFrame.Label', background=colors['bg_primary'], foreground=colors['accent'], font=('Segoe UI', 30))
-        style.configure('TButton', font=('Segoe UI', 13), background=colors['button_bg'], foreground=colors['text_primary'])
+        style.configure('TLabelFrame.Label', background=colors['bg_primary'], foreground=colors['accent'], font=('Segoe UI', 10))
+        style.configure('TButton', font=('Segoe UI', 10), background=colors['button_bg'], foreground=colors['text_primary'])
         style.map('TButton', background=[('active', colors['button_hover'])])
         style.configure('TCheckbutton', background=colors['bg_primary'], foreground=colors['text_primary'])
         style.configure('TEntry', fieldbackground=colors['bg_secondary'], foreground=colors['text_primary'])
+        style.configure('TNotebook', background=colors['bg_primary'])
+        style.configure('TNotebook.Tab', background=colors['bg_secondary'], foreground=colors['text_primary'])
+        style.map('TNotebook.Tab', background=[('selected', colors['bg_primary'])])
         
         # Apply to root and text widgets
         self.root.configure(bg=colors['bg_primary'])
@@ -242,7 +315,7 @@ class MainWindow:
         # Title label color
         self.title_label.configure(foreground=colors['text_primary'])
         
-        logger.info(f"Applied {self.current_theme} theme")
+        logger.info(f"Applied {self.current_theme} theme to v2.0 tabbed interface")
     
     def _toggle_theme(self):
         """Toggle between dark and light mode"""
@@ -388,11 +461,11 @@ class MainWindow:
         logger.info(f"Status: {message}")
     
     def show_success(self, message):
-        self.set_status(f"[OK] {message}", 'success')
+        self.set_status(f"✓ {message}", 'success')
         messagebox.showinfo("Success", message)
     
     def show_error(self, message):
-        self.set_status(f"[ERROR] {message}", 'error')
+        self.set_status(f"✗ {message}", 'error')
         messagebox.showerror("Error", message)
     
     def show_loading(self, show=True):
@@ -410,4 +483,4 @@ class MainWindow:
         self.set_content("")
         self.set_response("")
         self.set_file_info(None)
-        self.set_status("Cleared")
+        self.set_status("Cleared - Ready")
