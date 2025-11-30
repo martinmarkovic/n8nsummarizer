@@ -72,6 +72,7 @@ class ScannerController:
         
         gui_webhook_url = gui_webhook_url.strip()
         
+        # Save webhook if override is checked
         if webhook_override['override']:
             try:
                 self._save_webhook_to_env(gui_webhook_url)
@@ -79,6 +80,14 @@ class ScannerController:
             except Exception as e:
                 logger.error(f"Failed to save webhook to .env: {e}")
                 self.view.show_error(f"Warning: Could not save to .env file: {e}")
+        
+        # Save export preferences to .env (ALWAYS after first send)
+        try:
+            export_prefs = self.view.get_export_preferences()
+            self._save_export_preferences_to_env(export_prefs)
+            logger.info(f"Saved export preferences to .env")
+        except Exception as e:
+            logger.error(f"Failed to save export preferences to .env: {e}")
         
         file_info = self.file_scanner.get_file_info()
         status_msg = f"Sending request to n8n...\n\nWebhook: {gui_webhook_url}\nFile: {file_info['name']}\nSize: {file_info['size_kb']:.2f} KB\n\nWaiting for response..."
@@ -129,12 +138,23 @@ class ScannerController:
         """Handle successful summarization response"""
         self.view.display_response(summary)
         
-        # Check if auto-export is enabled
+        # Check if auto-export is enabled for .txt or .docx
         export_prefs = self.view.get_export_preferences()
-        if export_prefs['auto_export']:
-            logger.info("Auto-export enabled - exporting both .txt and .docx")
-            self._auto_export_response(summary, silent=True)
-            success_msg = f"Summarization received and auto-exported for '{file_name}'!{saved_msg}"
+        auto_txt = export_prefs['auto_export_txt']
+        auto_docx = export_prefs['auto_export_docx']
+        
+        if auto_txt or auto_docx:
+            logger.info(f"Auto-export enabled - .txt: {auto_txt}, .docx: {auto_docx}")
+            self._auto_export_response(summary, auto_txt, auto_docx, silent=True)
+            
+            exported_formats = []
+            if auto_txt:
+                exported_formats.append('.txt')
+            if auto_docx:
+                exported_formats.append('.docx')
+            
+            formats_str = ' and '.join(exported_formats)
+            success_msg = f"Summarization received and auto-exported as {formats_str} for '{file_name}'!{saved_msg}"
         else:
             success_msg = f"Summarization received for '{file_name}'!{saved_msg}"
         
@@ -143,8 +163,8 @@ class ScannerController:
         self.view.set_status("Ready")
         self.view.show_loading(False)
     
-    def _auto_export_response(self, response_content, silent=False):
-        """Auto-export response as both .txt and .docx"""
+    def _auto_export_response(self, response_content, export_txt=True, export_docx=True, silent=False):
+        """Auto-export response as .txt and/or .docx"""
         export_prefs = self.view.get_export_preferences()
         
         # Determine base filename - use original filename + "Summary" or timestamp
@@ -164,15 +184,60 @@ class ScannerController:
             save_dir = EXPORT_DIR
             logger.info(f"Auto-export to default location: {save_dir}")
         
-        # Export .txt
-        txt_path = os.path.join(save_dir, f"{base_filename}.txt")
-        self._save_txt_file(txt_path, response_content, silent=True)
+        # Export .txt if enabled
+        if export_txt:
+            txt_path = os.path.join(save_dir, f"{base_filename}.txt")
+            self._save_txt_file(txt_path, response_content, silent=True)
+            logger.info(f"Auto-exported .txt to: {txt_path}")
         
-        # Export .docx
-        docx_path = os.path.join(save_dir, f"{base_filename}.docx")
-        self._save_docx_file(docx_path, response_content, silent=True)
+        # Export .docx if enabled
+        if export_docx:
+            docx_path = os.path.join(save_dir, f"{base_filename}.docx")
+            self._save_docx_file(docx_path, response_content, silent=True)
+            logger.info(f"Auto-exported .docx to: {docx_path}")
+    
+    def _save_export_preferences_to_env(self, export_prefs):
+        """Save export preferences to .env file"""
+        env_file = '.env'
+        env_lines = []
         
-        logger.info(f"Auto-exported to:\n  .txt: {txt_path}\n  .docx: {docx_path}")
+        if os.path.exists(env_file):
+            with open(env_file, 'r', encoding='utf-8') as f:
+                env_lines = f.readlines()
+        
+        # Track which preferences were found
+        found = {
+            'use_original_location': False,
+            'auto_txt': False,
+            'auto_docx': False
+        }
+        
+        new_lines = []
+        for line in env_lines:
+            if line.strip().startswith('EXPORT_USE_ORIGINAL_LOCATION='):
+                new_lines.append(f"EXPORT_USE_ORIGINAL_LOCATION={'true' if export_prefs['use_original_location'] else 'false'}\n")
+                found['use_original_location'] = True
+            elif line.strip().startswith('EXPORT_AUTO_TXT='):
+                new_lines.append(f"EXPORT_AUTO_TXT={'true' if export_prefs['auto_export_txt'] else 'false'}\n")
+                found['auto_txt'] = True
+            elif line.strip().startswith('EXPORT_AUTO_DOCX='):
+                new_lines.append(f"EXPORT_AUTO_DOCX={'true' if export_prefs['auto_export_docx'] else 'false'}\n")
+                found['auto_docx'] = True
+            else:
+                new_lines.append(line)
+        
+        # Add missing preferences
+        if not found['use_original_location']:
+            new_lines.append(f"EXPORT_USE_ORIGINAL_LOCATION={'true' if export_prefs['use_original_location'] else 'false'}\n")
+        if not found['auto_txt']:
+            new_lines.append(f"EXPORT_AUTO_TXT={'true' if export_prefs['auto_export_txt'] else 'false'}\n")
+        if not found['auto_docx']:
+            new_lines.append(f"EXPORT_AUTO_DOCX={'true' if export_prefs['auto_export_docx'] else 'false'}\n")
+        
+        with open(env_file, 'w', encoding='utf-8') as f:
+            f.writelines(new_lines)
+        
+        logger.info(f"Export preferences saved: use_original={export_prefs['use_original_location']}, auto_txt={export_prefs['auto_export_txt']}, auto_docx={export_prefs['auto_export_docx']}")
     
     def _on_success_no_summary(self, file_name, saved_msg):
         self.view.display_response("Request sent successfully.\n\nNo summary returned from n8n workflow.")
