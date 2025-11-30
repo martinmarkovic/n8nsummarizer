@@ -1,23 +1,24 @@
-# Text File Scanner - Extended v1.4
+# Text File Scanner - Extended v1.5
 
-Python GUI application for sending file content to n8n webhooks and receiving summarization responses, with **dark/light mode toggle** and **export functionality**.
+Python GUI application for sending file content to n8n webhooks and receiving summarization responses, with **dark/light mode toggle**, **export functionality**, and **smart auto-export**.
 
-## ✨ New in v1.4
+## ✨ New in v1.5
 
-### 🌙 Dark/Light Mode Toggle
-- **Slack-inspired dark theme** with pleasant purple accents
-- **Light mode** with clean, modern brown tones
-- **Persistent preference** saved to `.env`
-- **One-click toggle** button in header
-- **Purple section labels** in dark mode (File Selection, Webhook Override, File Info, etc.)
+### 🖤 Pure Black Accents in Dark Mode
+- **Pure black section labels** (#000000) in dark mode
+- Better contrast and visual clarity
+- Sharper, more professional appearance
 
-### 📤 Export Response Functionality
-- **Export as .txt** - Plain text export with timestamp
-- **Export as .docx** - Formatted Word document export
-- **Export location options**:
-  - ☑️ **Use original file location** - Auto-save to source file's folder (no dialog)
-  - ☐ **Custom location** - Choose location with file dialog
-- **Automatic timestamps** in filenames
+### 🎯 Smart Export Filenames
+- **Intelligent naming**: Exports now use `[OriginalFileName]_Summary.txt/.docx`
+- **No more generic timestamps**: Get meaningful filenames automatically
+- **Example**: `meeting_notes.txt` → exports as `meeting_notes_Summary.txt` and `meeting_notes_Summary.docx`
+
+### ⚡ Auto-Export After Summarization
+- **One-click automation**: Check "Auto-export as .txt and .docx after summarization"
+- **Both formats at once**: Automatically creates .txt AND .docx files
+- **No interruptions**: Silent export - no file dialogs, just results
+- **Smart locations**: Respects "Use original file location" setting
 
 ## Features
 
@@ -29,12 +30,21 @@ Python GUI application for sending file content to n8n webhooks and receiving su
 - ⚙️ **Webhook Override** - Customize webhook URL directly in GUI
 - 💾 **Persistent Settings** - Save webhook and theme to `.env`
 
+### Export Features
+- 💾 **Smart Filenames** - `[OriginalName]_Summary.txt/.docx`
+- ⚡ **Auto-Export** - Automatic .txt + .docx after summarization
+- 📂 **Location Control**:
+  - ☑️ **Use original file location** - Save exports next to source file
+  - ☐ **Custom location** - Choose with file dialog
+- 📄 **Manual Export** - Export as .txt or .docx anytime
+
 ### UI Features
 - **Side-by-side layout** - Content preview and response display
 - **Editable content** - Modify file content before sending
 - **File info display** - Size, lines, characters, path
 - **Progress indicator** - Visual feedback during processing
 - **Large, readable fonts** - 30pt labels, 15pt text, 13pt buttons
+- 🌙/**☀️ Dark/Light Mode** - Toggle with persistent preference
 
 ## Installation
 
@@ -42,7 +52,7 @@ Python GUI application for sending file content to n8n webhooks and receiving su
 ```bash
 git clone https://github.com/martinmarkovic/n8nsummarizer.git
 cd n8nsummarizer
-git checkout v1.4
+git checkout v1.5
 ```
 
 ### 2. Create Virtual Environment
@@ -88,45 +98,53 @@ python main.py
 ### Basic Workflow
 1. **Select File** - Click "Browse File" to load a text file
 2. **Review Content** - Check/edit content in left pane
-3. **Configure Webhook** - Enter or verify webhook URL
+3. **Configure Export** (optional):
+   - ☑️ Check "Auto-export as .txt and .docx" for automatic saving
+   - ☑️ Check "Use original file location" to save next to source file
 4. **Send Request** - Click "Send to n8n"
 5. **View Response** - Summary appears in right pane
-6. **Export** (optional) - Save response as .txt or .docx
+6. **Automatic Export** - If enabled, both files save automatically!
+
+### Export Workflow Examples
+
+#### Example 1: Auto-Export to Original Location
+**Setup:**
+- File: `C:\Documents\meeting_notes.txt`
+- ☑️ Auto-export enabled
+- ☑️ Use original location enabled
+
+**Result after summarization:**
+- `C:\Documents\meeting_notes_Summary.txt` (created automatically)
+- `C:\Documents\meeting_notes_Summary.docx` (created automatically)
+- No file dialogs - instant save!
+
+#### Example 2: Auto-Export to Default Location
+**Setup:**
+- File: `C:\Documents\meeting_notes.txt`
+- ☑️ Auto-export enabled
+- ☐ Use original location disabled
+
+**Result after summarization:**
+- `exports/meeting_notes_Summary.txt`
+- `exports/meeting_notes_Summary.docx`
+- Files in default exports folder
+
+#### Example 3: Manual Export with Smart Filenames
+**Setup:**
+- File: `budget_2024.csv`
+- ☐ Auto-export disabled
+
+**Steps:**
+1. Get summarization response
+2. Click "📄 Export as .txt" or "📝 Export as .docx"
+3. Default filename: `budget_2024_Summary.txt` or `budget_2024_Summary.docx`
+4. Choose location and save
 
 ### Dark/Light Mode
 - **Toggle** - Click moon (🌙) or sun (☀️) button in header
+- **Pure black accents** - Section labels turn black in dark mode
 - **Automatic persistence** - Choice saved to `.env`
 - **Restart behavior** - Loads saved theme on startup
-- **Purple accents** - All section labels turn purple in dark mode
-
-### Export Responses
-
-**Export Location Options:**
-
-1. **☑️ Use original file location for export** (checkbox)
-   - When **checked**: Exports save to the same folder as the loaded file
-   - No file dialog shown - instant save
-   - Perfect for keeping exports with source files
-
-2. **☐ Use original file location for export** (unchecked)
-   - When **unchecked**: File dialog appears
-   - Choose custom save location
-   - Default folder: `exports/`
-
-**Export Steps:**
-1. Ensure response content is displayed
-2. (Optional) Check "Use original file location" to auto-save
-3. Click **📄 Export as .txt** or **📝 Export as .docx**
-4. If checkbox unchecked, choose location in dialog
-5. Files saved with automatic timestamps
-
-**Export formats:**
-- `.txt` - Plain text with original formatting
-- `.docx` - Word document with heading, timestamp, and formatted content
-
-**Example filenames:**
-- `n8n_response_20251129_142030.txt`
-- `n8n_response_20251129_142030.docx`
 
 ## Theme Colors
 
@@ -136,13 +154,13 @@ python main.py
 - **Accent**: `#5e5240` (Brown)
 - **Text**: `#1f2329` (Almost black)
 
-### Dark Mode (Slack-Inspired)
+### Dark Mode (Professional Black Accents)
 - **Background**: `#1a1d21` (Dark gray, not pure black)
 - **Surface**: `#222529` (Slightly lighter gray)
-- **Accent**: `#8b5cf6` (Pleasant purple) ⭐
+- **Accent**: `#000000` (Pure black) ⭐
 - **Text**: `#e8e8e8` (Almost white, very light gray)
 
-**Purple Accent Zones (Dark Mode):**
+**Pure Black Accent Zones (Dark Mode):**
 - Section labels: "File Selection", "n8n Webhook Override", "File Info"
 - Content frames: "Content Preview & Edit", "n8n Response"
 
@@ -166,15 +184,22 @@ pip install -r requirements.txt
 
 ## Changelog
 
-### v1.4.1 (2025-11-29) - Latest
-- 💜 **FIXED**: Purple accents now properly applied to all section labels in dark mode
+### v1.5.0 (2025-11-30) - Latest
+- 🖤 **CHANGED**: Dark mode accents now pure black (#000000) instead of purple
+- 🎯 **NEW**: Smart export filenames - `[OriginalName]_Summary.txt/.docx`
+- ⚡ **NEW**: Auto-export checkbox - automatically saves both .txt and .docx after summarization
+- 🔇 **IMPROVED**: Silent auto-export - no file dialogs when enabled
+- 📁 **IMPROVED**: Export filename logic unified across manual and auto-export
+
+### v1.4.1 (2025-11-29)
+- 💜 **FIXED**: Purple accents properly applied to all section labels in dark mode
 - ☑️ **NEW**: "Use original file location for export" checkbox
   - Auto-saves exports to source file folder when checked
   - No file dialog interruption
 - 📁 **IMPROVED**: Export location preference persists during session
 
 ### v1.4.0 (2025-11-29)
-- ✨ **NEW**: Dark/light mode toggle with Slack-inspired dark theme
+- ✨ **NEW**: Dark/light mode toggle
 - ✨ **NEW**: Export response as .txt or .docx
 - 💜 **NEW**: Pleasant purple accents in dark mode
 - 💾 **IMPROVED**: Theme preference persists to .env
@@ -190,6 +215,19 @@ pip install -r requirements.txt
 - ⚙️ **NEW**: Webhook override in GUI
 - 💾 **NEW**: Save webhook to .env option
 - 🔗 **IMPROVED**: Always use GUI webhook for requests
+
+## Export Filename Examples
+
+**Smart filenames automatically adapt:**
+
+| Original File | Export Filenames |
+|---------------|------------------|
+| `meeting_notes.txt` | `meeting_notes_Summary.txt`<br>`meeting_notes_Summary.docx` |
+| `budget_2024.csv` | `budget_2024_Summary.txt`<br>`budget_2024_Summary.docx` |
+| `transcript.srt` | `transcript_Summary.txt`<br>`transcript_Summary.docx` |
+| `analysis.log` | `analysis_Summary.txt`<br>`analysis_Summary.docx` |
+
+**Note**: If no file is loaded, exports use timestamp format: `n8n_response_20251130_143022.txt`
 
 ## License
 
