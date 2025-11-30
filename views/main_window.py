@@ -122,7 +122,7 @@ class MainWindow:
         info_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.info_text.config(yscrollcommand=info_scrollbar.set)
         
-        # Content and Response Section
+        # Content and Response Section (NO export controls below response anymore)
         content_response_frame = ttk.Frame(main_frame)
         content_response_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         content_response_frame.columnconfigure(0, weight=1)
@@ -141,14 +141,9 @@ class MainWindow:
         )
         self.content_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Response Section (Right) with Export Controls
-        response_container = ttk.Frame(content_response_frame)
-        response_container.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
-        response_container.columnconfigure(0, weight=1)
-        response_container.rowconfigure(0, weight=1)
-        
-        self.response_frame = ttk.LabelFrame(response_container, text="n8n Response", padding="10")
-        self.response_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # Response Section (Right) - Just the text box, no controls below
+        self.response_frame = ttk.LabelFrame(content_response_frame, text="n8n Response", padding="10")
+        self.response_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
         self.response_frame.columnconfigure(0, weight=1)
         self.response_frame.rowconfigure(0, weight=1)
         
@@ -157,56 +152,50 @@ class MainWindow:
         )
         self.response_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Export Controls (below response box)
-        export_controls_frame = ttk.Frame(response_container)
-        export_controls_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
-        export_controls_frame.columnconfigure(0, weight=1)
+        # Bottom Action Bar - Send to n8n, Export Controls, and Clear All
+        bottom_frame = ttk.Frame(main_frame)
+        bottom_frame.grid(row=5, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        bottom_frame.columnconfigure(1, weight=1)  # Middle section expands
         
-        # Export location checkbox (checked by default)
-        export_check1 = ttk.Checkbutton(
+        # Left: Send to n8n button
+        self.send_btn = ttk.Button(bottom_frame, text="Send to n8n", command=self._send_clicked)
+        self.send_btn.grid(row=0, column=0, sticky=tk.W, padx=(0, 20))
+        
+        # Middle: Export Controls (compact horizontal layout)
+        export_controls_frame = ttk.Frame(bottom_frame)
+        export_controls_frame.grid(row=0, column=1, sticky=(tk.W, tk.E))
+        
+        # Row 1: Checkboxes (horizontal)
+        ttk.Checkbutton(
             export_controls_frame,
-            text="Use original file location for export",
+            text="Use original location",
             variable=self.use_original_location_var
-        )
-        export_check1.grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 2))
+        ).grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
         
-        # Separate auto-export checkboxes
-        export_check2 = ttk.Checkbutton(
+        ttk.Checkbutton(
             export_controls_frame,
-            text="Auto-export as .txt after summarization",
+            text="Auto .txt",
             variable=self.auto_export_txt_var
-        )
-        export_check2.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=(0, 2))
+        ).grid(row=0, column=1, sticky=tk.W, padx=(0, 10))
         
-        export_check3 = ttk.Checkbutton(
+        ttk.Checkbutton(
             export_controls_frame,
-            text="Auto-export as .docx after summarization",
+            text="Auto .docx",
             variable=self.auto_export_docx_var
-        )
-        export_check3.grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        ).grid(row=0, column=2, sticky=tk.W, padx=(0, 20))
         
-        # Export buttons
-        export_buttons_frame = ttk.Frame(export_controls_frame)
-        export_buttons_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E))
+        # Row 1 continued: Export buttons
+        ttk.Label(export_controls_frame, text="Export:").grid(row=0, column=3, sticky=tk.W, padx=(0, 5))
         
-        ttk.Label(export_buttons_frame, text="Export Response:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+        self.export_txt_btn = ttk.Button(export_controls_frame, text="📄 .txt", command=self._export_txt_clicked)
+        self.export_txt_btn.grid(row=0, column=4, padx=(0, 5))
         
-        self.export_txt_btn = ttk.Button(export_buttons_frame, text="📄 Export as .txt", command=self._export_txt_clicked)
-        self.export_txt_btn.grid(row=0, column=1, padx=(0, 5))
+        self.export_docx_btn = ttk.Button(export_controls_frame, text="📝 .docx", command=self._export_docx_clicked)
+        self.export_docx_btn.grid(row=0, column=5)
         
-        self.export_docx_btn = ttk.Button(export_buttons_frame, text="📝 Export as .docx", command=self._export_docx_clicked)
-        self.export_docx_btn.grid(row=0, column=2)
-        
-        # Buttons Section
-        button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=5, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
-        button_frame.columnconfigure(1, weight=1)
-        
-        self.send_btn = ttk.Button(button_frame, text="Send to n8n", command=self._send_clicked)
-        self.send_btn.grid(row=0, column=0, padx=(0, 10), sticky=tk.W)
-        
-        self.clear_btn = ttk.Button(button_frame, text="Clear All", command=self._clear_clicked)
-        self.clear_btn.grid(row=0, column=1, padx=5, sticky=tk.E)
+        # Right: Clear All button
+        self.clear_btn = ttk.Button(bottom_frame, text="Clear All", command=self._clear_clicked)
+        self.clear_btn.grid(row=0, column=2, sticky=tk.E, padx=(20, 0))
         
         # Status Bar
         status_frame = ttk.Frame(main_frame)
