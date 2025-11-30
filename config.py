@@ -57,3 +57,8 @@ MAX_CONTENT_LENGTH = 500000  # Characters, for webhook safety
 # Export Settings
 EXPORT_DIR = os.path.join(os.path.dirname(__file__), 'exports')
 os.makedirs(EXPORT_DIR, exist_ok=True)
+
+# Export Preferences (defaults from config, overridden by .env after first use)
+DEFAULT_USE_ORIGINAL_LOCATION = os.getenv('EXPORT_USE_ORIGINAL_LOCATION', 'true').lower() == 'true'
+DEFAULT_AUTO_EXPORT_TXT = os.getenv('EXPORT_AUTO_TXT', 'false').lower() == 'true'
+DEFAULT_AUTO_EXPORT_DOCX = os.getenv('EXPORT_AUTO_DOCX', 'false').lower() == 'true'
