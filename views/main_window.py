@@ -1,10 +1,10 @@
 """
-Main Window GUI v2.5 - Fixed duplicate files and transcript loading
+Main Window GUI v3.0 - YouTube Summarization tab added
 
 This window manages:
 - Header (title + theme toggle)
 - Tab container (notebook)
-- Tab initialization (FileTab, TranscriberTab)
+- Tab initialization (FileTab, YouTubeSummarizerTab, TranscriberTab)
 - Theme management
 - Status bar
 
@@ -16,7 +16,8 @@ Refactored: 2025-12-07 (v2.2 - Views refactoring)
 Updated: 2025-12-07 (v2.3 - Transcriber tab integration)
 Enhanced: 2025-12-07 (v2.4 - UI improvements and output options)
 Fixed: 2025-12-07 (v2.5 - Removed duplicate transcribe_tab.py)
-Version: 2.5
+New: 2025-12-07 (v3.0 - YouTube Summarization tab)
+Version: 3.0
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -25,6 +26,7 @@ from config import (
 )
 from utils.logger import logger
 from views.file_tab import FileTab
+from views.youtube_summarizer_tab import YouTubeSummarizerTab
 from views.transcriber_tab import TranscriberTab
 
 
@@ -38,6 +40,11 @@ class MainWindow:
     - Tab initialization
     - Theme management
     - Status bar
+    
+    Tab order:
+    1. File Summarizer
+    2. YouTube Summarization (NEW in v3.0)
+    3. Transcriber
     """
     
     def __init__(self, root):
@@ -48,7 +55,7 @@ class MainWindow:
             root: Tkinter root window
         """
         self.root = root
-        self.root.title(f"{APP_TITLE} v2.5")
+        self.root.title(f"{APP_TITLE} v3.0")
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
         
@@ -63,7 +70,7 @@ class MainWindow:
         self._setup_ui()
         self._apply_theme()
         
-        logger.info(f"MainWindow initialized (v2.5 - {self.current_theme} theme)")
+        logger.info(f"MainWindow initialized (v3.0 - {self.current_theme} theme)")
     
     def _setup_ui(self):
         """
@@ -72,7 +79,7 @@ class MainWindow:
         Creates:
         - Main frame
         - Header (title + theme toggle)
-        - Tab notebook with FileTab and TranscriberTab
+        - Tab notebook with FileTab, YouTubeSummarizerTab, and TranscriberTab
         - Status bar
         """
         # Main frame
@@ -105,7 +112,7 @@ class MainWindow:
         
         self.title_label = ttk.Label(
             header_frame,
-            text=f"{APP_TITLE} v2.5",
+            text=f"{APP_TITLE} v3.0",
             font=("Segoe UI", 14, "bold")
         )
         self.title_label.grid(row=0, column=0, sticky=tk.W)
@@ -120,7 +127,12 @@ class MainWindow:
     
     def _setup_tabs(self, parent):
         """
-        Setup tab notebook with FileTab and TranscriberTab.
+        Setup tab notebook with FileTab, YouTubeSummarizerTab, and TranscriberTab.
+        
+        Tab order (v3.0):
+        1. File Summarizer
+        2. YouTube Summarization (NEW)
+        3. Transcriber
         
         Args:
             parent: Parent frame
@@ -129,15 +141,18 @@ class MainWindow:
         self.notebook = ttk.Notebook(parent)
         self.notebook.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         
-        # File Summarizer Tab
+        # Tab 1: File Summarizer
         self.file_tab = FileTab(self.notebook)
         self.notebook.add(self.file_tab, text="📄 File Summarizer")
         
-        # Transcriber Tab (Local Files + YouTube URLs)
-        # Note: Using transcriber_tab.py (new implementation)
-        # Old transcribe_tab.py (YouTube only) removed in v2.5
+        # Tab 2: YouTube Summarization (NEW in v3.0)
+        self.youtube_summarizer_tab = YouTubeSummarizerTab(self.notebook)
+        self.notebook.add(self.youtube_summarizer_tab, text="🎬 YouTube Summarization")
+        
+        # Tab 3: Transcriber
+        # Note: Using transcriber_tab.py (supports local files + YouTube URLs)
         self.transcriber_tab = TranscriberTab(self.notebook)
-        self.notebook.add(self.transcriber_tab, text="🎬 Transcriber")
+        self.notebook.add(self.transcriber_tab, text="📹 Transcriber")
         
         # NOTE: To add new tabs in future:
         # 1. Create new tab class inheriting from BaseTab in views/
@@ -200,6 +215,10 @@ class MainWindow:
             self.file_tab.info_text.configure(bg=text_bg, fg=text_fg)
             self.file_tab.path_label.configure(foreground=colors['text_secondary'])
         
+        # YouTube Summarizer tab
+        if hasattr(self, 'youtube_summarizer_tab'):
+            self.youtube_summarizer_tab.summary_text.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
+        
         # Transcriber tab
         if hasattr(self, 'transcriber_tab'):
             self.transcriber_tab.transcript_text.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
@@ -248,11 +267,13 @@ class MainWindow:
         Get currently active tab.
         
         Returns:
-            Current tab widget (FileTab or TranscriberTab)
+            Current tab widget (FileTab, YouTubeSummarizerTab, or TranscriberTab)
         """
         tab_index = self.notebook.index(self.notebook.select())
         if tab_index == 0:
             return self.file_tab
         elif tab_index == 1:
+            return self.youtube_summarizer_tab
+        elif tab_index == 2:
             return self.transcriber_tab
         return None
