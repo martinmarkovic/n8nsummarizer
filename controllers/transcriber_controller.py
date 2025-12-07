@@ -1,14 +1,20 @@
 """
-Transcriber Controller v2.4 - Enhanced with Output Options
+Transcriber Controller v3.1.2 - Transcript storage & tab integration
 
 Responsibilities:
     - Listen to Transcriber tab UI events
     - Call TranscribeModel to transcribe files/URLs
     - Handle output location and format selection
+    - Store transcript in memory (NEW v3.1.2)
     - Export individual file formats
     - Update view with results
     - Handle errors and status messages
     - Cleanup temporary files
+
+New in v3.1.2:
+    - Store transcript in memory (persist for session)
+    - Enables export even if temp files deleted
+    - Allows sharing transcript with other controllers
 
 Connects:
     - TranscriberTab (view)
@@ -17,11 +23,13 @@ Connects:
 Reusable by:
     - TranscriberTab (primary)
     - FileTab (secondary - transcribe first, then summarize)
+    - YouTubeSummarizerTab (receives forwarded transcripts)
     - Other tabs (future)
 
 Created: 2025-12-07 (v2.3)
 Enhanced: 2025-12-07 (v2.4 - Output options)
-Version: 2.4
+Improved: 2025-12-07 (v3.1.2 - In-memory storage)
+Version: 3.1.2
 """
 from models.transcribe_model import TranscribeModel
 from models.n8n_model import N8NModel
@@ -41,6 +49,7 @@ class TranscriberController:
     - Transcribe local files or YouTube URLs
     - Manage output location (original vs custom)
     - Handle user-selected file formats
+    - Store transcript in memory (NEW v3.1.2)
     - Export individual formats
     - Cleanup temporary files
     """
@@ -57,6 +66,10 @@ class TranscriberController:
         self.n8n_model = N8NModel()
         self.last_transcript_path = None  # Store last export location
         
+        # In-memory storage (NEW v3.1.2 - persist for session)
+        self.current_transcript = None  # Transcript content in memory
+        self.current_transcript_format = None  # Format (.txt, .srt, etc.)
+        
         # Wire up view callbacks
         self.view.on_file_selected = self._handle_file_selected
         self.view.on_transcribe_clicked = self._handle_transcribe_clicked
@@ -65,7 +78,20 @@ class TranscriberController:
         self.view.on_export_srt_clicked = self._handle_export_srt_clicked
         self.view.on_clear_clicked = self._handle_clear_clicked
         
-        logger.info("TranscriberController initialized")
+        logger.info("TranscriberController initialized (v3.1.2)")
+    
+    def set_transcript_from_youtube(self, transcript_content: str, format_ext: str):
+        """
+        Set transcript received from YouTube Summarizer tab.
+        NEW in v3.1.2
+        
+        Args:
+            transcript_content: Transcript text
+            format_ext: Format (.txt, .srt, etc.)
+        """
+        self.current_transcript = transcript_content
+        self.current_transcript_format = format_ext
+        logger.info(f"Transcript received from YouTube tab ({format_ext}, {len(transcript_content)} chars)")
     
     def _handle_file_selected(self, file_path: str):
         """
@@ -174,6 +200,10 @@ class TranscriberController:
             )
             
             if success and srt_content:
+                # Store transcript in memory (NEW v3.1.2)
+                self.current_transcript = srt_content
+                self.current_transcript_format = keep_formats[0] if keep_formats else '.txt'
+                
                 # Store last transcript path for exports
                 self.last_transcript_path = metadata.get('output_dir')
                 
@@ -258,6 +288,10 @@ class TranscriberController:
             )
             
             if success and srt_content:
+                # Store transcript in memory (NEW v3.1.2)
+                self.current_transcript = srt_content
+                self.current_transcript_format = keep_formats[0] if keep_formats else '.txt'
+                
                 # Store last transcript path for exports
                 self.last_transcript_path = metadata.get('output_dir')
                 
@@ -295,65 +329,105 @@ class TranscriberController:
     def _handle_export_txt_clicked(self):
         """
         Handle Export .txt button click.
+        Uses in-memory transcript if available (NEW v3.1.2)
         """
-        if not self.last_transcript_path:
+        # Check in-memory transcript FIRST (NEW v3.1.2)
+        if self.current_transcript:
+            try:
+                from tkinter import filedialog
+                filename = f"transcript_{self.current_transcript_format}.txt"
+                file_path = filedialog.asksaveasfilename(
+                    defaultextension=".txt",
+                    initialfile=filename,
+                    filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")]
+                )
+                if file_path:
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(self.current_transcript)
+                    self.view.show_success(f"Transcript exported to: {file_path}")
+                    logger.info(f"Transcript exported: {file_path}")
+            except Exception as e:
+                self.view.show_error(f"Failed to export: {str(e)}")
+                logger.error(f"Export failed: {str(e)}", exc_info=True)
+        elif self.last_transcript_path:
+            try:
+                transcript_path = Path(self.last_transcript_path)
+                # Find .txt file in the directory
+                txt_files = list(transcript_path.glob("*.txt"))
+                if not txt_files:
+                    self.view.show_error("No .txt file found. Check output formats.")
+                    return
+                
+                # Open directory containing the file
+                import subprocess
+                import sys
+                if os.name == 'nt':  # Windows
+                    os.startfile(transcript_path)
+                else:  # Linux/Mac
+                    subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(transcript_path)])
+                
+                self.view.show_success(f"Opened: {transcript_path}")
+            except Exception as e:
+                self.view.show_error(f"Failed to export .txt: {str(e)}")
+                logger.error(f"Export .txt failed: {str(e)}", exc_info=True)
+        else:
             self.view.show_error("No transcript to export. Transcribe first.")
-            return
-        
-        try:
-            transcript_path = Path(self.last_transcript_path)
-            # Find .txt file in the directory
-            txt_files = list(transcript_path.glob("*.txt"))
-            if not txt_files:
-                self.view.show_error("No .txt file found. Check output formats.")
-                return
-            
-            # Open directory containing the file
-            import subprocess
-            if os.name == 'nt':  # Windows
-                os.startfile(transcript_path)
-            else:  # Linux/Mac
-                subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(transcript_path)])
-            
-            self.view.show_success(f"Opened: {transcript_path}")
-        except Exception as e:
-            self.view.show_error(f"Failed to export .txt: {str(e)}")
-            logger.error(f"Export .txt failed: {str(e)}", exc_info=True)
     
     def _handle_export_srt_clicked(self):
         """
         Handle Export .srt button click.
+        Uses in-memory transcript if available (NEW v3.1.2)
         """
-        if not self.last_transcript_path:
+        # Check in-memory transcript FIRST (NEW v3.1.2)
+        if self.current_transcript:
+            try:
+                from tkinter import filedialog
+                filename = f"transcript_{self.current_transcript_format}.srt"
+                file_path = filedialog.asksaveasfilename(
+                    defaultextension=".srt",
+                    initialfile=filename,
+                    filetypes=[("SRT Files", "*.srt"), ("All Files", "*.*")]
+                )
+                if file_path:
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(self.current_transcript)
+                    self.view.show_success(f"Transcript exported to: {file_path}")
+                    logger.info(f"Transcript exported: {file_path}")
+            except Exception as e:
+                self.view.show_error(f"Failed to export: {str(e)}")
+                logger.error(f"Export failed: {str(e)}", exc_info=True)
+        elif self.last_transcript_path:
+            try:
+                transcript_path = Path(self.last_transcript_path)
+                # Find .srt file in the directory
+                srt_files = list(transcript_path.glob("*.srt"))
+                if not srt_files:
+                    self.view.show_error("No .srt file found. Check output formats.")
+                    return
+                
+                # Open directory containing the file
+                import subprocess
+                import sys
+                if os.name == 'nt':  # Windows
+                    os.startfile(transcript_path)
+                else:  # Linux/Mac
+                    subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(transcript_path)])
+                
+                self.view.show_success(f"Opened: {transcript_path}")
+            except Exception as e:
+                self.view.show_error(f"Failed to export .srt: {str(e)}")
+                logger.error(f"Export .srt failed: {str(e)}", exc_info=True)
+        else:
             self.view.show_error("No transcript to export. Transcribe first.")
-            return
-        
-        try:
-            transcript_path = Path(self.last_transcript_path)
-            # Find .srt file in the directory
-            srt_files = list(transcript_path.glob("*.srt"))
-            if not srt_files:
-                self.view.show_error("No .srt file found. Check output formats.")
-                return
-            
-            # Open directory containing the file
-            import subprocess
-            import sys
-            if os.name == 'nt':  # Windows
-                os.startfile(transcript_path)
-            else:  # Linux/Mac
-                subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(transcript_path)])
-            
-            self.view.show_success(f"Opened: {transcript_path}")
-        except Exception as e:
-            self.view.show_error(f"Failed to export .srt: {str(e)}")
-            logger.error(f"Export .srt failed: {str(e)}", exc_info=True)
     
     def _handle_clear_clicked(self):
         """
         Handle Clear button click.
         """
         self.view.clear_all()
+        # Clear in-memory transcript (NEW v3.1.2)
+        self.current_transcript = None
+        self.current_transcript_format = None
         logger.info("Transcriber tab cleared")
     
     def _cleanup_temp_files(self):
