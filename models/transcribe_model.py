@@ -1,17 +1,23 @@
 """
-Transcribe Model - Business logic for transcribe-anything wrapper
+Transcribe Model v2.4 - Business logic for transcribe-anything wrapper
 
 Responsibilities:
     - Call transcribe-anything CLI for local files and YouTube URLs
     - Extract YouTube video titles for output naming
     - Manage output files (SRT, TXT, etc.)
+    - Handle user-selected file formats
+    - Delete unwanted formats
     - Handle device selection (CPU, CUDA, Insane, MPS)
-    - Return SRT transcript for n8n processing
+    - Return SRT transcript for processing
+    - Cleanup temporary files
 
 Reusable by:
     - TranscriberTab (primary)
     - FileTab (secondary - transcribe files first)
     - Future tabs (bulk transcriber, translation, etc.)
+
+Version: 2.4
+Updated: 2025-12-07
 """
 import subprocess
 import tempfile
@@ -30,11 +36,14 @@ class TranscribeModel:
     - Local media files (mp4, avi, mkv, mp3, wav, etc.)
     - YouTube videos and playlists
     - Multiple device types (CPU, CUDA, Insane Mode, MPS)
+    - User-selected output formats
     
     Output handling:
-    - Generates .txt and .srt by default
-    - Optional: .json, .vtt, .tsv
+    - Generates multiple formats (.txt, .srt, .vtt, .json, .tsv)
+    - Keeps only user-selected formats
+    - Deletes unwanted formats automatically
     - Returns SRT content for processing
+    - Cleans up temporary files
     """
     
     def __init__(self, transcribe_path: str = None):
@@ -54,7 +63,7 @@ class TranscribeModel:
             # Audio
             '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.aiff', '.au'
         }
-        logger.info("TranscribeModel initialized (transcribe-anything wrapper)")
+        logger.info("TranscribeModel initialized (transcribe-anything wrapper v2.4)")
     
     def transcribe_file(
         self,
@@ -233,9 +242,7 @@ class TranscribeModel:
                 f'--output_dir "{output_dir}"'
             ]
             
-            # Alternative: Use batch file on Windows (if direct command fails)
             cmd_str = ' '.join(cmd)
-            
             logger.info(f"Running: {cmd_str}")
             
             # Execute command
