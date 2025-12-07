@@ -1,5 +1,5 @@
 """
-Transcribe Model v2.4 - Business logic for transcribe-anything wrapper
+Transcribe Model v2.5 - Business logic for transcribe-anything wrapper
 
 Responsibilities:
     - Call transcribe-anything CLI for local files and YouTube URLs
@@ -10,13 +10,14 @@ Responsibilities:
     - Handle device selection (CPU, CUDA, Insane, MPS)
     - Return SRT transcript for processing
     - Cleanup temporary files
+    - Load ANY available format if preferred not available
 
 Reusable by:
     - TranscriberTab (primary)
     - FileTab (secondary - transcribe files first)
     - Future tabs (bulk transcriber, translation, etc.)
 
-Version: 2.4
+Version: 2.5
 Updated: 2025-12-07
 """
 import subprocess
@@ -42,7 +43,8 @@ class TranscribeModel:
     - Generates multiple formats (.txt, .srt, .vtt, .json, .tsv)
     - Keeps only user-selected formats
     - Deletes unwanted formats automatically
-    - Returns SRT content for processing
+    - Loads ANY available format for display (fallback strategy)
+    - Returns transcript content for processing
     - Cleans up temporary files
     """
     
@@ -63,7 +65,7 @@ class TranscribeModel:
             # Audio
             '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.aiff', '.au'
         }
-        logger.info("TranscribeModel initialized (transcribe-anything wrapper v2.4)")
+        logger.info("TranscribeModel initialized (transcribe-anything wrapper v2.5)")
     
     def transcribe_file(
         self,
@@ -85,7 +87,7 @@ class TranscribeModel:
         Returns:
             Tuple: (success, srt_content, error_msg, metadata_dict)
             - success: bool
-            - srt_content: str (SRT transcript content) or None
+            - srt_content: str (transcript content) or None
             - error_msg: str or None
             - metadata: dict with info like file_name, base_name, etc.
         """
@@ -124,7 +126,7 @@ class TranscribeModel:
                     return False, None, error, None
                 
                 # Move and manage output files
-                srt_content, metadata = self._process_outputs(
+                transcript_content, metadata = self._process_outputs(
                     temp_path=temp_path,
                     output_dir=output_dir,
                     base_name=base_name,
@@ -132,11 +134,11 @@ class TranscribeModel:
                     source_type="file"
                 )
                 
-                if srt_content is None:
-                    return False, None, "No SRT transcript generated", None
+                if transcript_content is None:
+                    return False, None, "No transcript generated", None
                 
                 logger.info(f"Successfully transcribed: {file_path.name}")
-                return True, srt_content, None, metadata
+                return True, transcript_content, None, metadata
         
         except Exception as e:
             error = f"Error transcribing file: {str(e)}"
@@ -201,7 +203,7 @@ class TranscribeModel:
                     return False, None, error, None
                 
                 # Move and manage output files
-                srt_content, metadata = self._process_outputs(
+                transcript_content, metadata = self._process_outputs(
                     temp_path=temp_path,
                     output_dir=output_dir,
                     base_name=base_name,
@@ -210,11 +212,11 @@ class TranscribeModel:
                     url=youtube_url
                 )
                 
-                if srt_content is None:
-                    return False, None, "No SRT transcript generated", None
+                if transcript_content is None:
+                    return False, None, "No transcript generated", None
                 
                 logger.info(f"Successfully transcribed YouTube video: {base_name}")
-                return True, srt_content, None, metadata
+                return True, transcript_content, None, metadata
         
         except Exception as e:
             error = f"Error transcribing YouTube: {str(e)}"
@@ -284,26 +286,31 @@ class TranscribeModel:
         
         - Moves kept formats to output_dir
         - Deletes unwanted formats
-        - Returns SRT content
+        - Returns transcript content (loads ANY available format)
         - Generates metadata
         
         Returns:
-            Tuple: (srt_content_str, metadata_dict)
+            Tuple: (transcript_content_str, metadata_dict)
         """
         try:
-            srt_content = None
+            transcript_content = None
             files_created = []
+            format_loaded = None
             metadata = {
                 'base_name': base_name,
                 'source_type': source_type,
                 'url': url,
                 'output_dir': str(output_dir),
                 'files_kept': [],
-                'files_deleted': []
+                'files_deleted': [],
+                'format_loaded': None
             }
             
             # Expected output files from transcribe-anything
             output_extensions = ['.txt', '.srt', '.vtt', '.json', '.tsv']
+            
+            # Priority order for loading transcript (if preferred format not available)
+            load_priority = ['.srt', '.txt', '.vtt', '.json', '.tsv']
             
             # Find and process output files
             for temp_file in temp_path.iterdir():
@@ -330,10 +337,14 @@ class TranscribeModel:
                         files_created.append(new_name)
                         metadata['files_kept'].append(new_name)
                         
-                        # Read SRT content if this is the SRT file
-                        if ext == '.srt':
+                        # Try to load content (use priority order)
+                        if transcript_content is None or ext in load_priority[: load_priority.index(ext) + 1]:
                             with open(final_path, 'r', encoding='utf-8') as f:
-                                srt_content = f.read()
+                                content = f.read()
+                                if content.strip():
+                                    transcript_content = content
+                                    format_loaded = ext
+                                    logger.info(f"Loaded transcript from: {ext}")
                         
                         logger.info(f"Created: {new_name}")
                     except Exception as e:
@@ -347,8 +358,29 @@ class TranscribeModel:
                     except Exception as e:
                         logger.warning(f"Failed to delete {temp_file.name}: {str(e)}")
             
-            logger.info(f"Output processing complete: {len(files_created)} files created")
-            return srt_content, metadata
+            # If no transcript loaded from kept formats, try to load ANY available format
+            if transcript_content is None:
+                logger.info("No transcript in kept formats, trying fallback...")
+                for temp_file in temp_path.iterdir():
+                    if not temp_file.is_file():
+                        continue
+                    ext = temp_file.suffix.lower()
+                    if ext in output_extensions:
+                        try:
+                            with open(temp_file, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                                if content.strip():
+                                    transcript_content = content
+                                    format_loaded = ext
+                                    logger.info(f"Loaded transcript from fallback format: {ext}")
+                                    break
+                        except Exception as e:
+                            logger.warning(f"Failed to load {temp_file}: {str(e)}")
+            
+            metadata['format_loaded'] = format_loaded
+            
+            logger.info(f"Output processing complete: {len(files_created)} files created, loaded from {format_loaded}")
+            return transcript_content, metadata
         
         except Exception as e:
             logger.error(f"Error processing outputs: {str(e)}", exc_info=True)
