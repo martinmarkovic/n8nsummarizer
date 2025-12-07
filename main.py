@@ -1,13 +1,17 @@
 """
-Main entry point for n8n Summarizer application (v3.0)
+Main entry point for n8n Summarizer application (v3.1)
 
 Wires up views and controllers:
 - FileTab ↔ FileController
-- YouTubeSummarizerTab ↔ YouTubeSummarizerController (NEW in v3.0)
+- YouTubeSummarizerTab ↔ YouTubeSummarizerController (with Transcriber tab reference)
 - TranscriberTab ↔ TranscriberController
 
-Version: 3.0
-Updated: 2025-12-07 - YouTube Summarization tab integration
+New in v3.1:
+    - YouTubeSummarizerController receives reference to TranscriberTab
+    - Transcripts forwarded to Transcriber tab
+
+Version: 3.1
+Updated: 2025-12-07 - YouTube to Transcriber tab integration
 """
 import tkinter as tk
 from views.main_window import MainWindow
@@ -25,11 +29,11 @@ def main():
     Creates:
     - MainWindow (views layer)
     - FileController (coordinates FileTab + models)
-    - YouTubeSummarizerController (coordinates YouTubeSummarizerTab + models) [NEW]
+    - YouTubeSummarizerController (coordinates YouTubeSummarizerTab + models, with Transcriber tab reference)
     - TranscriberController (coordinates TranscriberTab + models)
     """
     logger.info("=" * 50)
-    logger.info(f"Starting {APP_TITLE} v3.0")
+    logger.info(f"Starting {APP_TITLE} v3.1")
     logger.info("=" * 50)
     
     try:
@@ -44,15 +48,19 @@ def main():
         file_controller = FileController(window.file_tab)
         logger.info("FileController initialized")
         
-        # Initialize YouTube Summarizer tab controller (NEW in v3.0)
-        # Wires: YouTubeSummarizerTab UI ↔ YouTubeSummarizerController ↔ TranscribeModel + N8NModel
-        youtube_summarizer_controller = YouTubeSummarizerController(window.youtube_summarizer_tab)
-        logger.info("YouTubeSummarizerController initialized")
-        
-        # Initialize Transcriber tab controller (Local Files + YouTube URLs)
+        # Initialize Transcriber tab controller FIRST (so it's available for YouTube controller)
         # Wires: TranscriberTab UI ↔ TranscriberController ↔ TranscribeModel + N8NModel
         transcriber_controller = TranscriberController(window.transcriber_tab)
         logger.info("TranscriberController initialized")
+        
+        # Initialize YouTube Summarizer tab controller (NEW in v3.1)
+        # Wires: YouTubeSummarizerTab UI ↔ YouTubeSummarizerController ↔ TranscribeModel + N8NModel
+        # Pass transcriber_tab reference so transcripts can be forwarded
+        youtube_summarizer_controller = YouTubeSummarizerController(
+            window.youtube_summarizer_tab,
+            transcriber_tab=window.transcriber_tab  # NEW: Pass transcriber tab reference
+        )
+        logger.info("YouTubeSummarizerController initialized")
         
         logger.info("Application ready")
         
