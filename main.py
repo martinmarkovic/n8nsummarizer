@@ -1,14 +1,14 @@
 """
-Main entry point for n8n Summarizer application (v2.2)
+Main entry point for n8n Summarizer application (v2.3)
 
 Wires up views and controllers:
 - FileTab ↔ FileController
-- TranscribeTab ↔ TranscribeController
+- TranscriberTab ↔ TranscriberController
 """
 import tkinter as tk
 from views.main_window import MainWindow
 from controllers.file_controller import FileController
-from controllers.transcribe_controller import TranscribeController
+from controllers.transcriber_controller import TranscriberController
 from utils.logger import logger
 from config import APP_TITLE
 
@@ -20,10 +20,10 @@ def main():
     Creates:
     - MainWindow (views layer)
     - FileController (coordinates FileTab + models)
-    - TranscribeController (coordinates TranscribeTab + models)
+    - TranscriberController (coordinates TranscriberTab + models)
     """
     logger.info("=" * 50)
-    logger.info(f"Starting {APP_TITLE} v2.2")
+    logger.info(f"Starting {APP_TITLE} v2.3")
     logger.info("=" * 50)
     
     try:
@@ -38,10 +38,10 @@ def main():
         file_controller = FileController(window.file_tab)
         logger.info("FileController initialized")
         
-        # Initialize YouTube Transcriber tab controller
-        # Wires: TranscribeTab UI ↔ TranscribeController ↔ TranscribeModel + N8NModel
-        transcribe_controller = TranscribeController(window.transcribe_tab)
-        logger.info("TranscribeController initialized")
+        # Initialize Transcriber tab controller (Local Files + YouTube URLs)
+        # Wires: TranscriberTab UI ↔ TranscriberController ↔ TranscribeModel + N8NModel
+        transcriber_controller = TranscriberController(window.transcriber_tab)
+        logger.info("TranscriberController initialized")
         
         logger.info("Application ready")
         
