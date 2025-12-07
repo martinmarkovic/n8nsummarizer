@@ -1,12 +1,14 @@
 """
-Transcriber Controller - Coordinates transcription UI and model
+Transcriber Controller v2.4 - Enhanced with Output Options
 
 Responsibilities:
     - Listen to Transcriber tab UI events
     - Call TranscribeModel to transcribe files/URLs
+    - Handle output location and format selection
+    - Export individual file formats
     - Update view with results
     - Handle errors and status messages
-    - Manage output files (SRT, TXT)
+    - Cleanup temporary files
 
 Connects:
     - TranscriberTab (view)
@@ -18,13 +20,17 @@ Reusable by:
     - Other tabs (future)
 
 Created: 2025-12-07 (v2.3)
-Version: 2.3
+Enhanced: 2025-12-07 (v2.4 - Output options)
+Version: 2.4
 """
 from models.transcribe_model import TranscribeModel
 from models.n8n_model import N8NModel
 from utils.logger import logger
 from pathlib import Path
 import threading
+import os
+import shutil
+import tempfile
 
 
 class TranscriberController:
@@ -33,9 +39,10 @@ class TranscriberController:
     
     Responsibilities:
     - Transcribe local files or YouTube URLs
-    - Manage output files (SRT, TXT by default)
-    - Handle device selection
-    - Update UI with results
+    - Manage output location (original vs custom)
+    - Handle user-selected file formats
+    - Export individual formats
+    - Cleanup temporary files
     """
     
     def __init__(self, view):
@@ -48,11 +55,14 @@ class TranscriberController:
         self.view = view
         self.transcribe_model = TranscribeModel()
         self.n8n_model = N8NModel()
+        self.last_transcript_path = None  # Store last export location
         
         # Wire up view callbacks
         self.view.on_file_selected = self._handle_file_selected
         self.view.on_transcribe_clicked = self._handle_transcribe_clicked
         self.view.on_copy_clicked = self._handle_copy_clicked
+        self.view.on_export_txt_clicked = self._handle_export_txt_clicked
+        self.view.on_export_srt_clicked = self._handle_export_srt_clicked
         self.view.on_clear_clicked = self._handle_clear_clicked
         
         logger.info("TranscriberController initialized")
@@ -65,7 +75,6 @@ class TranscriberController:
             file_path: Path to selected file
         """
         logger.info(f"File selected: {file_path}")
-        # Just confirm selection - transcription happens on button click
         self.view.set_status(f"Ready to transcribe: {Path(file_path).name}")
     
     def _handle_transcribe_clicked(self):
@@ -82,6 +91,33 @@ class TranscriberController:
         else:
             self._transcribe_youtube_url(device)
     
+    def _get_output_directory(self, default_dir: Path = None) -> Path:
+        """
+        Get output directory based on user selection.
+        
+        Args:
+            default_dir: Default directory if original location selected
+        
+        Returns:
+            Path to output directory
+        """
+        location = self.view.get_output_location()
+        
+        if location == "custom":
+            custom_path = self.view.get_output_path()
+            if custom_path:
+                return Path(custom_path)
+            else:
+                self.view.show_error("Please select a custom output directory")
+                return None
+        else:
+            # Original location
+            if default_dir:
+                return default_dir
+            else:
+                # For YouTube without specified dir, use Documents
+                return Path.home() / "Documents" / "Transcribe Anything"
+    
     def _transcribe_local_file(self, device: str):
         """
         Transcribe a local file.
@@ -95,36 +131,52 @@ class TranscriberController:
             self.view.show_error("Please select a file first")
             return
         
+        # Get output directory
+        output_dir = self._get_output_directory(Path(file_path).parent)
+        if not output_dir:
+            return
+        
         # Show loading state
         self.view.set_status(f"Transcribing: {Path(file_path).name}...")
         self.view.show_loading(True)
         
-        # Run in background thread to avoid blocking UI
+        # Run in background thread
         thread = threading.Thread(
             target=self._transcribe_file_background,
-            args=(file_path, device),
+            args=(file_path, device, output_dir),
             daemon=True
         )
         thread.start()
     
-    def _transcribe_file_background(self, file_path: str, device: str):
+    def _transcribe_file_background(self, file_path: str, device: str, output_dir: Path):
         """
         Background thread for file transcription.
         
         Args:
             file_path: Path to local file
             device: Device to use
+            output_dir: Output directory
         """
         try:
             logger.info(f"Starting transcription: {file_path}")
             
+            # Get user-selected formats
+            keep_formats = self.view.get_keep_formats()
+            if not keep_formats:
+                self.view.show_error("Please select at least one output format")
+                return
+            
             success, srt_content, error, metadata = self.transcribe_model.transcribe_file(
                 file_path=file_path,
                 device=device,
-                keep_formats=['.txt', '.srt']  # Only keep txt and srt
+                output_dir=str(output_dir),
+                keep_formats=keep_formats
             )
             
             if success and srt_content:
+                # Store last transcript path for exports
+                self.last_transcript_path = metadata.get('output_dir')
+                
                 # Display transcript
                 self.view.set_transcript(srt_content)
                 self.view.set_status(
@@ -145,6 +197,7 @@ class TranscriberController:
         
         finally:
             self.view.show_loading(False)
+            self._cleanup_temp_files()
     
     def _transcribe_youtube_url(self, device: str):
         """
@@ -186,13 +239,28 @@ class TranscriberController:
         try:
             logger.info(f"Starting YouTube transcription: {url}")
             
+            # Get user-selected formats
+            keep_formats = self.view.get_keep_formats()
+            if not keep_formats:
+                self.view.show_error("Please select at least one output format")
+                return
+            
+            # Get output directory
+            output_dir = self._get_output_directory()
+            if not output_dir:
+                return
+            
             success, srt_content, error, metadata = self.transcribe_model.transcribe_youtube(
                 youtube_url=url,
                 device=device,
-                keep_formats=['.txt', '.srt']  # Only keep txt and srt
+                output_dir=str(output_dir),
+                keep_formats=keep_formats
             )
             
             if success and srt_content:
+                # Store last transcript path for exports
+                self.last_transcript_path = metadata.get('output_dir')
+                
                 # Display transcript
                 self.view.set_transcript(srt_content)
                 self.view.set_status(
@@ -213,6 +281,7 @@ class TranscriberController:
         
         finally:
             self.view.show_loading(False)
+            self._cleanup_temp_files()
     
     def _handle_copy_clicked(self):
         """
@@ -223,12 +292,90 @@ class TranscriberController:
         else:
             logger.warning("Failed to copy transcript")
     
+    def _handle_export_txt_clicked(self):
+        """
+        Handle Export .txt button click.
+        """
+        if not self.last_transcript_path:
+            self.view.show_error("No transcript to export. Transcribe first.")
+            return
+        
+        try:
+            transcript_path = Path(self.last_transcript_path)
+            # Find .txt file in the directory
+            txt_files = list(transcript_path.glob("*.txt"))
+            if not txt_files:
+                self.view.show_error("No .txt file found. Check output formats.")
+                return
+            
+            # Open directory containing the file
+            import subprocess
+            if os.name == 'nt':  # Windows
+                os.startfile(transcript_path)
+            else:  # Linux/Mac
+                subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(transcript_path)])
+            
+            self.view.show_success(f"Opened: {transcript_path}")
+        except Exception as e:
+            self.view.show_error(f"Failed to export .txt: {str(e)}")
+            logger.error(f"Export .txt failed: {str(e)}", exc_info=True)
+    
+    def _handle_export_srt_clicked(self):
+        """
+        Handle Export .srt button click.
+        """
+        if not self.last_transcript_path:
+            self.view.show_error("No transcript to export. Transcribe first.")
+            return
+        
+        try:
+            transcript_path = Path(self.last_transcript_path)
+            # Find .srt file in the directory
+            srt_files = list(transcript_path.glob("*.srt"))
+            if not srt_files:
+                self.view.show_error("No .srt file found. Check output formats.")
+                return
+            
+            # Open directory containing the file
+            import subprocess
+            import sys
+            if os.name == 'nt':  # Windows
+                os.startfile(transcript_path)
+            else:  # Linux/Mac
+                subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(transcript_path)])
+            
+            self.view.show_success(f"Opened: {transcript_path}")
+        except Exception as e:
+            self.view.show_error(f"Failed to export .srt: {str(e)}")
+            logger.error(f"Export .srt failed: {str(e)}", exc_info=True)
+    
     def _handle_clear_clicked(self):
         """
         Handle Clear button click.
         """
         self.view.clear_all()
         logger.info("Transcriber tab cleared")
+    
+    def _cleanup_temp_files(self):
+        """
+        Cleanup temporary files created during transcription.
+        """
+        try:
+            # Clean up system temp directory
+            temp_dir = tempfile.gettempdir()
+            # Look for transcribe-anything temp files and remove them
+            for item in Path(temp_dir).iterdir():
+                if 'transcribe' in str(item).lower():
+                    try:
+                        if item.is_dir():
+                            shutil.rmtree(item)
+                        else:
+                            item.unlink()
+                        logger.info(f"Cleaned up temp file: {item}")
+                    except Exception as e:
+                        logger.warning(f"Could not clean up {item}: {str(e)}")
+        except Exception as e:
+            logger.warning(f"Temp cleanup error: {str(e)}")
     
     # Public methods for use by other controllers/tabs
     
@@ -244,31 +391,35 @@ class TranscriberController:
     def transcribe_file_for_tab(
         self,
         file_path: str,
-        device: str = "cuda"
+        device: str = "cuda",
+        keep_formats: list = None
     ) -> tuple:
         """
         Transcribe file for use by other tabs (like FileTab).
         
-        This allows FileTab to transcribe a file, then summarize the transcript.
-        
         Args:
             file_path: Path to media file
             device: Device to use
+            keep_formats: Formats to keep (default: ['.txt', '.srt'])
         
         Returns:
             Tuple: (success, transcript_content, error_msg, metadata)
         """
+        if keep_formats is None:
+            keep_formats = ['.txt', '.srt']
+        
         logger.info(f"Transcribing file for tab: {file_path}")
         return self.transcribe_model.transcribe_file(
             file_path=file_path,
             device=device,
-            keep_formats=['.txt', '.srt']
+            keep_formats=keep_formats
         )
     
     def transcribe_youtube_for_tab(
         self,
         youtube_url: str,
-        device: str = "cuda"
+        device: str = "cuda",
+        keep_formats: list = None
     ) -> tuple:
         """
         Transcribe YouTube URL for use by other tabs.
@@ -276,13 +427,17 @@ class TranscriberController:
         Args:
             youtube_url: YouTube video URL
             device: Device to use
+            keep_formats: Formats to keep (default: ['.txt', '.srt'])
         
         Returns:
             Tuple: (success, transcript_content, error_msg, metadata)
         """
+        if keep_formats is None:
+            keep_formats = ['.txt', '.srt']
+        
         logger.info(f"Transcribing YouTube for tab: {youtube_url}")
         return self.transcribe_model.transcribe_youtube(
             youtube_url=youtube_url,
             device=device,
-            keep_formats=['.txt', '.srt']
+            keep_formats=keep_formats
         )
