@@ -16,12 +16,15 @@ New in v3.1:
     - Export .docx instead of .srt
     - Forward transcript to Transcriber tab output folder
     - Show notification when transcription is available
+    - Smart filename with "-Summarized" suffix
+    - Keep transcript in memory (solve temp file deletion)
 
 Controller is THIN - just coordinates, doesn't contain business logic.
 
-Version: 3.1
+Version: 3.1.1
 Created: 2025-12-07 (v3.0)
 Updated: 2025-12-07 (v3.1 - Summarize button, .docx export, Transcriber tab integration)
+Fixed: 2025-12-07 (v3.1.1 - Smart filenames, transcript persistence)
 """
 import os
 import threading
@@ -50,11 +53,12 @@ class YouTubeSummarizerController:
     2. Controller validates URL
     3. Calls TranscribeModel to transcribe YouTube video
     4. Saves transcript to disk (Transcriber output folder)
-    5. Sends transcript to N8NModel for summarization
-    6. N8NModel calls n8n webhook
-    7. Displays summary in UI
-    8. Forwards transcript to Transcriber tab
-    9. User can export summary or copy
+    5. Stores transcript in memory (persists even if temp files deleted)
+    6. Sends transcript to N8NModel for summarization
+    7. N8NModel calls n8n webhook
+    8. Displays summary in UI
+    9. Forwards transcript to Transcriber tab
+    10. User can export summary with smart filename
     """
     
     def __init__(self, view, transcriber_tab=None):
@@ -82,7 +86,7 @@ class YouTubeSummarizerController:
         self.current_youtube_title = None
         self.current_transcript_format = None
         
-        logger.info("YouTubeSummarizerController initialized (v3.1)")
+        logger.info("YouTubeSummarizerController initialized (v3.1.1)")
     
     def handle_summarize_clicked(self):
         """
@@ -159,7 +163,7 @@ class YouTubeSummarizerController:
             
             logger.info(f"Transcription successful: {len(transcript_content)} characters")
             
-            # Store transcript for later
+            # Store transcript in memory (NEW in v3.1.1 - persists even if temp deleted)
             self.current_transcript = transcript_content
             self.current_youtube_title = metadata.get('base_name', 'youtube_video') if metadata else 'youtube_video'
             
@@ -340,13 +344,15 @@ class YouTubeSummarizerController:
     def handle_export_txt(self):
         """
         Export summary as .txt file.
+        
+        Uses smart filename: "Title - Summarized.txt" (NEW in v3.1.1)
         """
         if not self.current_summary:
             self.view.show_error("No summary to export. Please summarize a YouTube video first.")
             return
         
-        # Determine filename
-        default_filename = f"{self.current_youtube_title or 'youtube_summary'}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        # Smart filename with "-Summarized.txt" suffix (NEW in v3.1.1)
+        default_filename = f"{self.current_youtube_title or 'youtube_summary'} - Summarized.txt"
         
         # Show file dialog
         file_path = filedialog.asksaveasfilename(
@@ -377,6 +383,7 @@ class YouTubeSummarizerController:
         """
         Export summary as .docx file (new in v3.1).
         
+        Uses smart filename: "Title - Summarized.docx" (NEW in v3.1.1)
         Uses python-docx library to create a professional Word document.
         """
         if not self.current_summary:
@@ -393,8 +400,8 @@ class YouTubeSummarizerController:
             )
             return
         
-        # Determine filename
-        default_filename = f"{self.current_youtube_title or 'youtube_summary'}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+        # Smart filename with "-Summarized.docx" suffix (NEW in v3.1.1)
+        default_filename = f"{self.current_youtube_title or 'youtube_summary'} - Summarized.docx"
         
         # Show file dialog
         file_path = filedialog.asksaveasfilename(
