@@ -18,6 +18,7 @@ Events (callbacks set by controller):
 
 Version: 3.0
 Created: 2025-12-07
+Fixed: 2025-12-07 - Implement abstract method get_content()
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -45,16 +46,31 @@ class YouTubeSummarizerTab(BaseTab):
         Args:
             notebook: Parent ttk.Notebook widget
         """
-        super().__init__(notebook)
+        # Note: Don't call super().__init__ with notebook directly
+        # BaseTab expects parent and tab_name, but we're using ttk.Frame style
+        ttk.Frame.__init__(self, notebook, padding="10")
+        
+        self.tab_name = "YouTube Summarization"
+        self.root = self._get_root(notebook)
         
         # Callbacks (set by controller)
         self.on_transcribe_clicked = None
         self.on_export_txt_clicked = None
         self.on_export_srt_clicked = None
         self.on_copy_clipboard_clicked = None
+        self.on_clear_clicked = None
         
         # Setup UI
         self._setup_ui()
+    
+    def _get_root(self, widget):
+        """Get root window from any widget"""
+        current = widget
+        while current is not None:
+            if isinstance(current, tk.Tk):
+                return current
+            current = current.master
+        return None
     
     def _setup_ui(self):
         """
@@ -213,6 +229,36 @@ class YouTubeSummarizerTab(BaseTab):
         if self.on_copy_clipboard_clicked:
             self.on_copy_clipboard_clicked()
     
+    # Abstract method implementations (required by BaseTab)
+    
+    def get_content(self) -> str:
+        """
+        Get current tab content (summary text).
+        
+        Required by BaseTab abstract class.
+        
+        Returns:
+            Summary text content
+        """
+        return self.summary_text.get("1.0", tk.END).strip()
+    
+    def clear_all(self):
+        """
+        Clear all fields and reset to initial state.
+        
+        Required by BaseTab abstract class.
+        """
+        self.url_var.set("https://")
+        self.format_var.set(".txt")
+        self.summary_text.config(state=tk.NORMAL)
+        self.summary_text.delete("1.0", tk.END)
+        self.summary_text.insert(tk.END, "Enter a YouTube URL and click Transcribe to get started...")
+        self.summary_text.config(state=tk.DISABLED)
+        self.set_input_status("Ready", "green")
+        self.set_output_status("", "blue")
+        self.set_export_buttons_enabled(False)
+        self.set_transcribe_button_enabled(True)
+    
     # Getters
     
     def get_youtube_url(self) -> str:
@@ -328,18 +374,3 @@ class YouTubeSummarizerTab(BaseTab):
             message: Success message
         """
         messagebox.showinfo("Success", message)
-    
-    def clear_all(self):
-        """
-        Clear all fields and reset to initial state.
-        """
-        self.url_var.set("https://")
-        self.format_var.set(".txt")
-        self.summary_text.config(state=tk.NORMAL)
-        self.summary_text.delete("1.0", tk.END)
-        self.summary_text.insert(tk.END, "Enter a YouTube URL and click Transcribe to get started...")
-        self.summary_text.config(state=tk.DISABLED)
-        self.set_input_status("Ready", "green")
-        self.set_output_status("", "blue")
-        self.set_export_buttons_enabled(False)
-        self.set_transcribe_button_enabled(True)
