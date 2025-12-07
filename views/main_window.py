@@ -1,11 +1,12 @@
 """
-Main Window GUI v3.0 - YouTube Summarization tab added
+Main Window GUI v3.1.2 - Font size control added
 
 This window manages:
-- Header (title + theme toggle)
+- Header (title + font size + theme toggle)
 - Tab container (notebook)
 - Tab initialization (FileTab, YouTubeSummarizerTab, TranscriberTab)
 - Theme management
+- Font size management (NEW in v3.1.2)
 - Status bar
 
 All tab-specific UI code moved to individual tab files.
@@ -17,7 +18,8 @@ Updated: 2025-12-07 (v2.3 - Transcriber tab integration)
 Enhanced: 2025-12-07 (v2.4 - UI improvements and output options)
 Fixed: 2025-12-07 (v2.5 - Removed duplicate transcribe_tab.py)
 New: 2025-12-07 (v3.0 - YouTube Summarization tab)
-Version: 3.0
+Improved: 2025-12-07 (v3.1.2 - Font size controls)
+Version: 3.1.2
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -36,6 +38,7 @@ class MainWindow:
     
     Manages:
     - Header and navigation
+    - Font size control (NEW in v3.1.2)
     - Tab container (notebook)
     - Tab initialization
     - Theme management
@@ -47,6 +50,10 @@ class MainWindow:
     3. Transcriber
     """
     
+    # Font sizes (NEW in v3.1.2)
+    FONT_SIZES = [8, 10, 12, 14, 16, 18, 20]
+    DEFAULT_FONT_SIZE = 10
+    
     def __init__(self, root):
         """
         Initialize main window.
@@ -55,13 +62,16 @@ class MainWindow:
             root: Tkinter root window
         """
         self.root = root
-        self.root.title(f"{APP_TITLE} v3.0")
+        self.root.title(f"{APP_TITLE} v3.1.2")
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
         
         # Theme state
         self.current_theme = DEFAULT_THEME
         self.theme_colors = LIGHT_THEME if self.current_theme == 'light' else DARK_THEME
+        
+        # Font size state (NEW in v3.1.2)
+        self.current_font_size = self.DEFAULT_FONT_SIZE
         
         # Theme callback
         self.on_theme_toggle = None
@@ -70,7 +80,7 @@ class MainWindow:
         self._setup_ui()
         self._apply_theme()
         
-        logger.info(f"MainWindow initialized (v3.0 - {self.current_theme} theme)")
+        logger.info(f"MainWindow initialized (v3.1.2 - {self.current_theme} theme, {self.current_font_size}px font)")
     
     def _setup_ui(self):
         """
@@ -78,7 +88,7 @@ class MainWindow:
         
         Creates:
         - Main frame
-        - Header (title + theme toggle)
+        - Header (title + font size + theme toggle)
         - Tab notebook with FileTab, YouTubeSummarizerTab, and TranscriberTab
         - Status bar
         """
@@ -90,7 +100,7 @@ class MainWindow:
         main_frame.columnconfigure(0, weight=1)
         main_frame.rowconfigure(1, weight=1)  # Tab area expands
         
-        # Header with Title + Theme Toggle
+        # Header with Title + Font Size + Theme Toggle
         self._setup_header(main_frame)
         
         # Notebook with tabs
@@ -101,7 +111,7 @@ class MainWindow:
     
     def _setup_header(self, parent):
         """
-        Setup header with title and theme toggle.
+        Setup header with title, font size controls, and theme toggle.
         
         Args:
             parent: Parent frame
@@ -112,18 +122,52 @@ class MainWindow:
         
         self.title_label = ttk.Label(
             header_frame,
-            text=f"{APP_TITLE} v3.0",
+            text=f"{APP_TITLE} v3.1.2",
             font=("Segoe UI", 14, "bold")
         )
         self.title_label.grid(row=0, column=0, sticky=tk.W)
         
+        # Font size controls (NEW in v3.1.2)
+        controls_frame = ttk.Frame(header_frame)
+        controls_frame.grid(row=0, column=1, sticky=tk.E, padx=(10, 0))
+        
+        ttk.Label(controls_frame, text="Font:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Decrease font button
+        self.font_decrease_btn = ttk.Button(
+            controls_frame,
+            text="🔍-",
+            width=3,
+            command=self._decrease_font_size
+        )
+        self.font_decrease_btn.pack(side=tk.LEFT, padx=(0, 2))
+        
+        # Font size display
+        self.font_size_var = tk.StringVar(value=f"{self.current_font_size}px")
+        self.font_size_label = ttk.Label(
+            controls_frame,
+            textvariable=self.font_size_var,
+            width=6,
+            anchor=tk.CENTER
+        )
+        self.font_size_label.pack(side=tk.LEFT, padx=2)
+        
+        # Increase font button
+        self.font_increase_btn = ttk.Button(
+            controls_frame,
+            text="🔍+",
+            width=3,
+            command=self._increase_font_size
+        )
+        self.font_increase_btn.pack(side=tk.LEFT, padx=(2, 15))
+        
         # Theme toggle button
         self.theme_btn = ttk.Button(
-            header_frame,
+            controls_frame,
             text="🌙 Dark Mode" if self.current_theme == 'light' else "☀️ Light Mode",
             command=self._toggle_theme
         )
-        self.theme_btn.grid(row=0, column=1, sticky=tk.E, padx=(10, 0))
+        self.theme_btn.pack(side=tk.LEFT)
     
     def _setup_tabs(self, parent):
         """
@@ -152,12 +196,12 @@ class MainWindow:
         # Tab 3: Transcriber
         # Note: Using transcriber_tab.py (supports local files + YouTube URLs)
         self.transcriber_tab = TranscriberTab(self.notebook)
-        self.notebook.add(self.transcriber_tab, text="📹 Transcriber")
+        self.notebook.add(self.transcriber_tab, text="🗡 Transcriber")
         
         # NOTE: To add new tabs in future:
         # 1. Create new tab class inheriting from BaseTab in views/
         # 2. Initialize here: self.my_tab = MyTab(self.notebook)
-        # 3. Add to notebook: self.notebook.add(self.my_tab, text="📌 Tab Name")
+        # 3. Add to notebook: self.notebook.add(self.my_tab, text="📈 Tab Name")
         # 4. That's it! The pattern is consistent.
     
     def _setup_status_bar(self, parent):
@@ -247,6 +291,52 @@ class MainWindow:
         # Call callback if set
         if self.on_theme_toggle:
             self.on_theme_toggle(self.current_theme)
+    
+    def _increase_font_size(self):
+        """
+        Increase font size of all text widgets.
+        NEW in v3.1.2
+        """
+        # Find next size
+        current_index = self.FONT_SIZES.index(self.current_font_size)
+        if current_index < len(self.FONT_SIZES) - 1:
+            self.current_font_size = self.FONT_SIZES[current_index + 1]
+            self._apply_font_size()
+            logger.info(f"Font size increased to {self.current_font_size}px")
+    
+    def _decrease_font_size(self):
+        """
+        Decrease font size of all text widgets.
+        NEW in v3.1.2
+        """
+        # Find previous size
+        current_index = self.FONT_SIZES.index(self.current_font_size)
+        if current_index > 0:
+            self.current_font_size = self.FONT_SIZES[current_index - 1]
+            self._apply_font_size()
+            logger.info(f"Font size decreased to {self.current_font_size}px")
+    
+    def _apply_font_size(self):
+        """
+        Apply current font size to all text widgets.
+        NEW in v3.1.2
+        """
+        # Update display
+        self.font_size_var.set(f"{self.current_font_size}px")
+        
+        # Apply to File tab
+        if hasattr(self, 'file_tab'):
+            self.file_tab.content_text.configure(font=("Segoe UI", self.current_font_size))
+            self.file_tab.response_text.configure(font=("Segoe UI", self.current_font_size))
+            self.file_tab.info_text.configure(font=("Segoe UI", self.current_font_size - 1))
+        
+        # Apply to YouTube Summarizer tab
+        if hasattr(self, 'youtube_summarizer_tab'):
+            self.youtube_summarizer_tab.summary_text.configure(font=("Segoe UI", self.current_font_size))
+        
+        # Apply to Transcriber tab
+        if hasattr(self, 'transcriber_tab'):
+            self.transcriber_tab.transcript_text.configure(font=("Segoe UI", self.current_font_size))
     
     # Status bar methods
     
