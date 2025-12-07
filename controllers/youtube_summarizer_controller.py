@@ -1,5 +1,5 @@
 """
-YouTube Summarizer Controller v3.1 - Coordinates YouTube tab + models
+YouTube Summarizer Controller v3.1.2 - Coordinates YouTube tab + models
 
 Responsibilities:
     - Listen to YouTubeSummarizerTab UI events
@@ -11,20 +11,18 @@ Responsibilities:
     - Manage threading for blocking operations
     - Error handling and user feedback
 
-New in v3.1:
-    - "Summarize" button instead of "Transcribe"
-    - Export .docx instead of .srt
-    - Forward transcript to Transcriber tab output folder
-    - Show notification when transcription is available
-    - Smart filename with "-Summarized" suffix
-    - Keep transcript in memory (solve temp file deletion)
+New in v3.1.2:
+    - Call Transcriber controller to store transcript (not just UI)
+    - Enables export in Transcriber tab
+    - Proper transcript sharing between tabs
 
 Controller is THIN - just coordinates, doesn't contain business logic.
 
-Version: 3.1.1
+Version: 3.1.2
 Created: 2025-12-07 (v3.0)
 Updated: 2025-12-07 (v3.1 - Summarize button, .docx export, Transcriber tab integration)
 Fixed: 2025-12-07 (v3.1.1 - Smart filenames, transcript persistence)
+Fixed: 2025-12-07 (v3.1.2 - Transcriber controller integration)
 """
 import os
 import threading
@@ -57,20 +55,22 @@ class YouTubeSummarizerController:
     6. Sends transcript to N8NModel for summarization
     7. N8NModel calls n8n webhook
     8. Displays summary in UI
-    9. Forwards transcript to Transcriber tab
+    9. Forwards transcript to Transcriber tab (BOTH UI and controller)
     10. User can export summary with smart filename
     """
     
-    def __init__(self, view, transcriber_tab=None):
+    def __init__(self, view, transcriber_tab=None, transcriber_controller=None):
         """
         Initialize controller with view reference.
         
         Args:
             view: YouTubeSummarizerTab instance
             transcriber_tab: TranscriberTab instance (for forwarding transcript)
+            transcriber_controller: TranscriberController instance (NEW v3.1.2 - for storing transcript)
         """
         self.view = view
         self.transcriber_tab = transcriber_tab  # Reference to Transcriber tab (set by main)
+        self.transcriber_controller = transcriber_controller  # NEW v3.1.2 - Controller reference
         self.transcribe_model = TranscribeModel()
         self.n8n_model = N8NModel()
         
@@ -86,7 +86,7 @@ class YouTubeSummarizerController:
         self.current_youtube_title = None
         self.current_transcript_format = None
         
-        logger.info("YouTubeSummarizerController initialized (v3.1.1)")
+        logger.info("YouTubeSummarizerController initialized (v3.1.2)")
     
     def handle_summarize_clicked(self):
         """
@@ -286,7 +286,16 @@ class YouTubeSummarizerController:
         # Forward transcript to Transcriber tab (if available)
         if self.transcriber_tab and self.current_transcript:
             try:
-                self._forward_transcript_to_transcriber()
+                # Forward to UI (view)
+                self._forward_transcript_to_transcriber_view()
+                
+                # NEW v3.1.2: Also call controller to store in memory
+                if self.transcriber_controller:
+                    self.transcriber_controller.set_transcript_from_youtube(
+                        self.current_transcript,
+                        self.current_transcript_format
+                    )
+                    logger.info("Transcript stored in Transcriber controller")
                 
                 # Show notification to user
                 self.view.show_info(
@@ -315,9 +324,9 @@ class YouTubeSummarizerController:
         self.view.set_output_status(f"Error: {error_msg}", "red")
         self.view.set_summarize_button_enabled(True)
     
-    def _forward_transcript_to_transcriber(self):
+    def _forward_transcript_to_transcriber_view(self):
         """
-        Forward the transcript to Transcriber tab output area.
+        Forward the transcript to Transcriber tab view (UI).
         
         This allows users to see the full transcript in the Transcriber tab.
         """
@@ -335,11 +344,11 @@ class YouTubeSummarizerController:
                 transcript_text_widget.insert(tk.END, self.current_transcript)
                 transcript_text_widget.config(state=tk.DISABLED)
                 
-                logger.info("Transcript forwarded to Transcriber tab")
+                logger.info("Transcript forwarded to Transcriber tab view")
             else:
                 logger.warning("Transcriber tab does not have transcript_text widget")
         except Exception as e:
-            logger.error(f"Error forwarding transcript to Transcriber tab: {str(e)}")
+            logger.error(f"Error forwarding transcript to Transcriber tab view: {str(e)}")
     
     def handle_export_txt(self):
         """
