@@ -1,9 +1,12 @@
 """
-Main entry point for n8n Summarizer application (v2.3)
+Main entry point for n8n Summarizer application (v2.4)
 
 Wires up views and controllers:
 - FileTab ↔ FileController
 - TranscriberTab ↔ TranscriberController
+
+Version: 2.4
+Enhanced: 2025-12-07 - UI improvements and output options
 """
 import tkinter as tk
 from views.main_window import MainWindow
@@ -23,7 +26,7 @@ def main():
     - TranscriberController (coordinates TranscriberTab + models)
     """
     logger.info("=" * 50)
-    logger.info(f"Starting {APP_TITLE} v2.3")
+    logger.info(f"Starting {APP_TITLE} v2.4")
     logger.info("=" * 50)
     
     try:
