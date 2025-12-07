@@ -14,16 +14,24 @@ Controller is THIN - just coordinates, doesn't contain business logic.
 
 Version: 3.0
 Created: 2025-12-07
+Fixed: 2025-12-07 - Make pyperclip optional
 """
 import os
 import threading
-import pyperclip
 from datetime import datetime
 from tkinter import filedialog
 from models.transcribe_model import TranscribeModel
 from models.n8n_model import N8NModel
 from utils.logger import logger
 from config import EXPORT_DIR
+
+# Try to import pyperclip, fallback to tkinter if not available
+try:
+    import pyperclip
+    PYPERCLIP_AVAILABLE = True
+except ImportError:
+    PYPERCLIP_AVAILABLE = False
+    logger.warning("pyperclip not installed. Clipboard functionality will use tkinter fallback.")
 
 
 class YouTubeSummarizerController:
@@ -413,14 +421,25 @@ class YouTubeSummarizerController:
     def handle_copy_clipboard(self):
         """
         Copy summary to clipboard.
+        
+        Uses pyperclip if available, otherwise uses tkinter clipboard.
         """
         if not self.current_summary:
             self.view.show_error("No summary to copy. Please transcribe a YouTube video first.")
             return
         
         try:
-            pyperclip.copy(self.current_summary)
-            logger.info("Summary copied to clipboard")
+            if PYPERCLIP_AVAILABLE:
+                # Use pyperclip
+                pyperclip.copy(self.current_summary)
+                logger.info("Summary copied to clipboard (pyperclip)")
+            else:
+                # Fallback to tkinter clipboard
+                self.view.root.clipboard_clear()
+                self.view.root.clipboard_append(self.current_summary)
+                self.view.root.update()  # Required to update clipboard
+                logger.info("Summary copied to clipboard (tkinter fallback)")
+            
             self.view.show_success(f"Summary copied to clipboard ({len(self.current_summary)} characters)")
             self.view.set_output_status("Copied to clipboard", "green")
         
