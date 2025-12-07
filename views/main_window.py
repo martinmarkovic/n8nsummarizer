@@ -1,5 +1,5 @@
 """
-Main Window GUI v2.3 - With New Transcriber Tab
+Main Window GUI v2.4 - Enhanced UI with Output Options
 
 This window manages:
 - Header (title + theme toggle)
@@ -14,7 +14,8 @@ Easy to add new tabs by creating new tab classes and initializing them here.
 Created: 2025-11-30
 Refactored: 2025-12-07 (v2.2 - Views refactoring)
 Updated: 2025-12-07 (v2.3 - Transcriber tab integration)
-Version: 2.3
+Enhanced: 2025-12-07 (v2.4 - UI improvements and output options)
+Version: 2.4
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -46,7 +47,7 @@ class MainWindow:
             root: Tkinter root window
         """
         self.root = root
-        self.root.title(f"{APP_TITLE} v2.3")
+        self.root.title(f"{APP_TITLE} v2.4")
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
         
@@ -61,7 +62,7 @@ class MainWindow:
         self._setup_ui()
         self._apply_theme()
         
-        logger.info(f"MainWindow initialized (v2.3 - {self.current_theme} theme)")
+        logger.info(f"MainWindow initialized (v2.4 - {self.current_theme} theme)")
     
     def _setup_ui(self):
         """
@@ -103,7 +104,7 @@ class MainWindow:
         
         self.title_label = ttk.Label(
             header_frame,
-            text=f"{APP_TITLE} v2.3",
+            text=f"{APP_TITLE} v2.4",
             font=("Segoe UI", 14, "bold")
         )
         self.title_label.grid(row=0, column=0, sticky=tk.W)
