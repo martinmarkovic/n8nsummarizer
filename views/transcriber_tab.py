@@ -37,17 +37,21 @@ class TranscriberTab(BaseTab):
         Args:
             parent: Parent widget (ttk.Notebook)
         """
+        # Initialize variables BEFORE calling super().__init__()
+        # because super().__init__() calls _setup_ui() which uses these
+        self.mode_var = tk.StringVar(value="local")
+        self.device_var = tk.StringVar(value="cuda")
+        self.file_path_var = tk.StringVar()
+        self.url_var = tk.StringVar()
+        
+        # Now call parent init (which calls _setup_ui())
         super().__init__(parent, "Transcriber")
         
-        # Callbacks for controller
+        # Callbacks for controller (set after UI is created)
         self.on_file_selected = None
         self.on_transcribe_clicked = None
         self.on_copy_clicked = None
         self.on_clear_clicked = None
-        
-        # Mode variable
-        self.mode_var = tk.StringVar(value="local")
-        self.device_var = tk.StringVar(value="cuda")
         
     def _setup_ui(self):
         """Setup transcriber tab UI"""
@@ -103,7 +107,6 @@ class TranscriberTab(BaseTab):
         self.local_frame.columnconfigure(1, weight=1)
         
         ttk.Label(self.local_frame, text="File:").grid(row=0, column=0, sticky=tk.W)
-        self.file_path_var = tk.StringVar()
         self.file_entry = ttk.Entry(self.local_frame, textvariable=self.file_path_var)
         self.file_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
         
@@ -119,7 +122,6 @@ class TranscriberTab(BaseTab):
         # Don't grid it yet - will show/hide based on mode
         
         ttk.Label(self.youtube_frame, text="URL:").grid(row=0, column=0, sticky=tk.W)
-        self.url_var = tk.StringVar()
         self.url_entry = ttk.Entry(self.youtube_frame, textvariable=self.url_var)
         self.url_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
         self.youtube_frame.columnconfigure(1, weight=1)
