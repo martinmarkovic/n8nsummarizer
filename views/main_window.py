@@ -1,10 +1,10 @@
 """
-Main Window GUI v2.2 - Refactored with Modular Tabs
+Main Window GUI v2.3 - With New Transcriber Tab
 
 This window manages:
 - Header (title + theme toggle)
 - Tab container (notebook)
-- Tab initialization (FileTab, TranscribeTab)
+- Tab initialization (FileTab, TranscriberTab)
 - Theme management
 - Status bar
 
@@ -13,7 +13,8 @@ Easy to add new tabs by creating new tab classes and initializing them here.
 
 Created: 2025-11-30
 Refactored: 2025-12-07 (v2.2 - Views refactoring)
-Version: 2.2
+Updated: 2025-12-07 (v2.3 - Transcriber tab integration)
+Version: 2.3
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -22,7 +23,7 @@ from config import (
 )
 from utils.logger import logger
 from views.file_tab import FileTab
-from views.transcribe_tab import TranscribeTab
+from views.transcriber_tab import TranscriberTab
 
 
 class MainWindow:
@@ -45,7 +46,7 @@ class MainWindow:
             root: Tkinter root window
         """
         self.root = root
-        self.root.title(f"{APP_TITLE} v2.2")
+        self.root.title(f"{APP_TITLE} v2.3")
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
         
@@ -60,7 +61,7 @@ class MainWindow:
         self._setup_ui()
         self._apply_theme()
         
-        logger.info(f"MainWindow initialized (v2.2 - {self.current_theme} theme)")
+        logger.info(f"MainWindow initialized (v2.3 - {self.current_theme} theme)")
     
     def _setup_ui(self):
         """
@@ -69,7 +70,7 @@ class MainWindow:
         Creates:
         - Main frame
         - Header (title + theme toggle)
-        - Tab notebook with FileTab and TranscribeTab
+        - Tab notebook with FileTab and TranscriberTab
         - Status bar
         """
         # Main frame
@@ -102,7 +103,7 @@ class MainWindow:
         
         self.title_label = ttk.Label(
             header_frame,
-            text=f"{APP_TITLE} v2.2",
+            text=f"{APP_TITLE} v2.3",
             font=("Segoe UI", 14, "bold")
         )
         self.title_label.grid(row=0, column=0, sticky=tk.W)
@@ -117,7 +118,7 @@ class MainWindow:
     
     def _setup_tabs(self, parent):
         """
-        Setup tab notebook with FileTab and TranscribeTab.
+        Setup tab notebook with FileTab and TranscriberTab.
         
         Args:
             parent: Parent frame
@@ -130,9 +131,9 @@ class MainWindow:
         self.file_tab = FileTab(self.notebook)
         self.notebook.add(self.file_tab, text="📄 File Summarizer")
         
-        # YouTube Transcriber Tab
-        self.transcribe_tab = TranscribeTab(self.notebook)
-        self.notebook.add(self.transcribe_tab, text="🎥 YouTube Transcriber")
+        # Transcriber Tab (Local Files + YouTube URLs)
+        self.transcriber_tab = TranscriberTab(self.notebook)
+        self.notebook.add(self.transcriber_tab, text="🎬 Transcriber")
         
         # NOTE: To add new tabs in future:
         # 1. Create new tab class inheriting from BaseTab in views/
@@ -195,11 +196,9 @@ class MainWindow:
             self.file_tab.info_text.configure(bg=text_bg, fg=text_fg)
             self.file_tab.path_label.configure(foreground=colors['text_secondary'])
         
-        # Transcribe tab
-        if hasattr(self, 'transcribe_tab'):
-            self.transcribe_tab.transcript_text.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
-            self.transcribe_tab.response_text.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
-            self.transcribe_tab.info_text.configure(bg=text_bg, fg=text_fg)
+        # Transcriber tab
+        if hasattr(self, 'transcriber_tab'):
+            self.transcriber_tab.transcript_text.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
         
         # Title label
         if hasattr(self, 'title_label'):
@@ -245,11 +244,11 @@ class MainWindow:
         Get currently active tab.
         
         Returns:
-            Current tab widget (FileTab or TranscribeTab)
+            Current tab widget (FileTab or TranscriberTab)
         """
         tab_index = self.notebook.index(self.notebook.select())
         if tab_index == 0:
             return self.file_tab
         elif tab_index == 1:
-            return self.transcribe_tab
+            return self.transcriber_tab
         return None
