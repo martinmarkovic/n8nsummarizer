@@ -1,16 +1,18 @@
 """
-Main entry point for n8n Summarizer application (v2.5)
+Main entry point for n8n Summarizer application (v3.0)
 
 Wires up views and controllers:
 - FileTab ↔ FileController
+- YouTubeSummarizerTab ↔ YouTubeSummarizerController (NEW in v3.0)
 - TranscriberTab ↔ TranscriberController
 
-Version: 2.5
-Fixed: 2025-12-07 - Removed duplicate transcribe_tab, fixed transcript loading
+Version: 3.0
+Updated: 2025-12-07 - YouTube Summarization tab integration
 """
 import tkinter as tk
 from views.main_window import MainWindow
 from controllers.file_controller import FileController
+from controllers.youtube_summarizer_controller import YouTubeSummarizerController
 from controllers.transcriber_controller import TranscriberController
 from utils.logger import logger
 from config import APP_TITLE
@@ -23,10 +25,11 @@ def main():
     Creates:
     - MainWindow (views layer)
     - FileController (coordinates FileTab + models)
+    - YouTubeSummarizerController (coordinates YouTubeSummarizerTab + models) [NEW]
     - TranscriberController (coordinates TranscriberTab + models)
     """
     logger.info("=" * 50)
-    logger.info(f"Starting {APP_TITLE} v2.5")
+    logger.info(f"Starting {APP_TITLE} v3.0")
     logger.info("=" * 50)
     
     try:
@@ -40,6 +43,11 @@ def main():
         # Wires: FileTab UI ↔ FileController ↔ FileModel + N8NModel
         file_controller = FileController(window.file_tab)
         logger.info("FileController initialized")
+        
+        # Initialize YouTube Summarizer tab controller (NEW in v3.0)
+        # Wires: YouTubeSummarizerTab UI ↔ YouTubeSummarizerController ↔ TranscribeModel + N8NModel
+        youtube_summarizer_controller = YouTubeSummarizerController(window.youtube_summarizer_tab)
+        logger.info("YouTubeSummarizerController initialized")
         
         # Initialize Transcriber tab controller (Local Files + YouTube URLs)
         # Wires: TranscriberTab UI ↔ TranscriberController ↔ TranscribeModel + N8NModel
