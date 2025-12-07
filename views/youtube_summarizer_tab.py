@@ -1,24 +1,25 @@
 """
-YouTube Summarizer Tab v3.0 - YouTube transcription + n8n summarization
+YouTube Summarizer Tab v3.1 - YouTube transcription + n8n summarization
 
 Responsibilities:
     - Accept YouTube URL input
     - Select transcription format
     - Display transcription status
     - Display summarized content
-    - Export summary (txt, srt)
+    - Export summary (txt, docx)
     - Copy to clipboard
     - Show loading states
+    - Forward transcript to Transcriber tab
 
 Events (callbacks set by controller):
-    - on_transcribe_clicked: User clicked Transcribe button
+    - on_summarize_clicked: User clicked Summarize button
     - on_export_txt_clicked: User clicked Export .txt
-    - on_export_srt_clicked: User clicked Export .srt
+    - on_export_docx_clicked: User clicked Export .docx (NEW in v3.1)
     - on_copy_clipboard_clicked: User clicked Copy to Clipboard
 
-Version: 3.0
-Created: 2025-12-07
-Fixed: 2025-12-07 - Implement abstract method get_content()
+Version: 3.1
+Created: 2025-12-07 (v3.0)
+Updated: 2025-12-07 (v3.1 - .srt to .docx, Transcribe to Summarize)
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -34,9 +35,11 @@ class YouTubeSummarizerTab(BaseTab):
     - Transcription format selection
     - Transcript + summarization processing
     - Summary display
-    - Three export options (.txt, .srt, clipboard)
+    - Two export options (.txt, .docx)
+    - Copy to clipboard
     - Real-time status updates
     - Loading indicators
+    - Forwards transcript to Transcriber tab
     """
     
     def __init__(self, notebook):
@@ -46,17 +49,15 @@ class YouTubeSummarizerTab(BaseTab):
         Args:
             notebook: Parent ttk.Notebook widget
         """
-        # Note: Don't call super().__init__ with notebook directly
-        # BaseTab expects parent and tab_name, but we're using ttk.Frame style
         ttk.Frame.__init__(self, notebook, padding="10")
         
         self.tab_name = "YouTube Summarization"
         self.root = self._get_root(notebook)
         
         # Callbacks (set by controller)
-        self.on_transcribe_clicked = None
+        self.on_summarize_clicked = None
         self.on_export_txt_clicked = None
-        self.on_export_srt_clicked = None
+        self.on_export_docx_clicked = None
         self.on_copy_clipboard_clicked = None
         self.on_clear_clicked = None
         
@@ -76,7 +77,6 @@ class YouTubeSummarizerTab(BaseTab):
         """
         Setup the tab UI with input and output sections.
         """
-        # Main container
         main_frame = ttk.Frame(self)
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=10)
         self.columnconfigure(0, weight=1)
@@ -92,7 +92,7 @@ class YouTubeSummarizerTab(BaseTab):
     
     def _setup_input_section(self, parent):
         """
-        Setup input section (URL + format selection + transcribe button).
+        Setup input section (URL + format selection + summarize button).
         """
         input_frame = ttk.LabelFrame(parent, text="YouTube URL", padding="10")
         input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
@@ -117,13 +117,13 @@ class YouTubeSummarizerTab(BaseTab):
         )
         format_combo.grid(row=0, column=3, sticky=tk.W, padx=(0, 10))
         
-        # Transcribe button
-        self.transcribe_btn = ttk.Button(
+        # Summarize button (changed from Transcribe in v3.1)
+        self.summarize_btn = ttk.Button(
             input_frame,
-            text="🎬 Transcribe",
-            command=self._on_transcribe_btn_clicked
+            text="✨ Summarize",
+            command=self._on_summarize_btn_clicked
         )
-        self.transcribe_btn.grid(row=0, column=4, sticky=tk.W)
+        self.summarize_btn.grid(row=0, column=4, sticky=tk.W)
         
         # Status label
         self.input_status_var = tk.StringVar(value="Ready")
@@ -164,7 +164,7 @@ class YouTubeSummarizerTab(BaseTab):
         scrollbar.config(command=self.summary_text.yview)
         
         # Display placeholder
-        self.summary_text.insert(tk.END, "Enter a YouTube URL and click Transcribe to get started...")
+        self.summary_text.insert(tk.END, "Enter a YouTube URL and click Summarize to get started...")
         self.summary_text.config(state=tk.DISABLED)
         
         # Button frame
@@ -172,7 +172,7 @@ class YouTubeSummarizerTab(BaseTab):
         button_frame.grid(row=1, column=0, sticky=(tk.W, tk.E))
         button_frame.columnconfigure(0, weight=1)
         
-        # Export buttons
+        # Export buttons (changed in v3.1: .srt -> .docx)
         self.export_txt_btn = ttk.Button(
             button_frame,
             text="💾 Export .txt",
@@ -181,13 +181,13 @@ class YouTubeSummarizerTab(BaseTab):
         )
         self.export_txt_btn.grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
         
-        self.export_srt_btn = ttk.Button(
+        self.export_docx_btn = ttk.Button(
             button_frame,
-            text="📝 Export .srt",
-            command=self._on_export_srt_clicked,
+            text="📄 Export .docx",
+            command=self._on_export_docx_clicked,
             state=tk.DISABLED
         )
-        self.export_srt_btn.grid(row=0, column=1, sticky=tk.W, padx=(0, 5))
+        self.export_docx_btn.grid(row=0, column=1, sticky=tk.W, padx=(0, 5))
         
         self.copy_btn = ttk.Button(
             button_frame,
@@ -209,20 +209,20 @@ class YouTubeSummarizerTab(BaseTab):
     
     # User event callbacks
     
-    def _on_transcribe_btn_clicked(self):
-        """Handle transcribe button click."""
-        if self.on_transcribe_clicked:
-            self.on_transcribe_clicked()
+    def _on_summarize_btn_clicked(self):
+        """Handle summarize button click (renamed from transcribe in v3.1)."""
+        if self.on_summarize_clicked:
+            self.on_summarize_clicked()
     
     def _on_export_txt_clicked(self):
         """Handle export .txt button click."""
         if self.on_export_txt_clicked:
             self.on_export_txt_clicked()
     
-    def _on_export_srt_clicked(self):
-        """Handle export .srt button click."""
-        if self.on_export_srt_clicked:
-            self.on_export_srt_clicked()
+    def _on_export_docx_clicked(self):
+        """Handle export .docx button click (new in v3.1)."""
+        if self.on_export_docx_clicked:
+            self.on_export_docx_clicked()
     
     def _on_copy_clicked(self):
         """Handle copy to clipboard button click."""
@@ -234,30 +234,25 @@ class YouTubeSummarizerTab(BaseTab):
     def get_content(self) -> str:
         """
         Get current tab content (summary text).
-        
         Required by BaseTab abstract class.
-        
-        Returns:
-            Summary text content
         """
         return self.summary_text.get("1.0", tk.END).strip()
     
     def clear_all(self):
         """
         Clear all fields and reset to initial state.
-        
         Required by BaseTab abstract class.
         """
         self.url_var.set("https://")
         self.format_var.set(".txt")
         self.summary_text.config(state=tk.NORMAL)
         self.summary_text.delete("1.0", tk.END)
-        self.summary_text.insert(tk.END, "Enter a YouTube URL and click Transcribe to get started...")
+        self.summary_text.insert(tk.END, "Enter a YouTube URL and click Summarize to get started...")
         self.summary_text.config(state=tk.DISABLED)
         self.set_input_status("Ready", "green")
         self.set_output_status("", "blue")
         self.set_export_buttons_enabled(False)
-        self.set_transcribe_button_enabled(True)
+        self.set_summarize_button_enabled(True)
     
     # Getters
     
@@ -324,15 +319,15 @@ class YouTubeSummarizerTab(BaseTab):
         self.output_status_var.set(message)
         self.output_status_label.config(foreground=color)
     
-    def set_transcribe_button_enabled(self, enabled: bool):
+    def set_summarize_button_enabled(self, enabled: bool):
         """
-        Enable/disable transcribe button.
+        Enable/disable summarize button (renamed in v3.1).
         
         Args:
             enabled: True to enable, False to disable
         """
         state = tk.NORMAL if enabled else tk.DISABLED
-        self.transcribe_btn.config(state=state)
+        self.summarize_btn.config(state=state)
     
     def set_export_buttons_enabled(self, enabled: bool):
         """
@@ -343,18 +338,8 @@ class YouTubeSummarizerTab(BaseTab):
         """
         state = tk.NORMAL if enabled else tk.DISABLED
         self.export_txt_btn.config(state=state)
-        self.export_srt_btn.config(state=state)
+        self.export_docx_btn.config(state=state)
         self.copy_btn.config(state=state)
-    
-    def set_format_enabled(self, enabled: bool):
-        """
-        Enable/disable format selection during processing.
-        
-        Args:
-            enabled: True to enable, False to disable
-        """
-        # Note: Combobox state management happens via widget reference
-        pass
     
     def show_error(self, message: str):
         """
@@ -374,3 +359,13 @@ class YouTubeSummarizerTab(BaseTab):
             message: Success message
         """
         messagebox.showinfo("Success", message)
+    
+    def show_info(self, title: str, message: str):
+        """
+        Show info message to user.
+        
+        Args:
+            title: Message title
+            message: Message text
+        """
+        messagebox.showinfo(title, message)
