@@ -5,12 +5,11 @@ Wires up views and controllers:
 - FileTab ↔ FileController
 - YouTubeSummarizerTab ↔ YouTubeSummarizerController (with Transcriber references)
 - TranscriberTab ↔ TranscriberController
-- BulkSummarizerTab ↔ BulkSummarizerController (NEW - v4.0, Phase 4.1)
+- BulkSummarizerTab ↔ BulkSummarizerController (to be added in v4.1)
 
 New in v4.0:
-    - BulkSummarizerTab UI for bulk file processing
-    - BulkSummarizerController for orchestrating bulk operations
-    - Support for .txt and .docx file processing
+    - BulkSummarizerTab UI for bulk file processing (Phase 4.1 UI)
+    - Ready for controller in v4.1
 
 Version: 4.0
 Updated: 2025-12-10 - Bulk Summarizer tab integration (Phase 4.1 UI)
@@ -20,7 +19,6 @@ from views.main_window import MainWindow
 from controllers.file_controller import FileController
 from controllers.youtube_summarizer_controller import YouTubeSummarizerController
 from controllers.transcriber_controller import TranscriberController
-from controllers.bulk_summarizer_controller import BulkSummarizerController
 from utils.logger import logger
 from config import APP_TITLE
 
@@ -34,7 +32,8 @@ def main():
     - FileController (coordinates FileTab + models)
     - TranscriberController (coordinates TranscriberTab + models)
     - YouTubeSummarizerController (coordinates YouTubeSummarizerTab + models, with Transcriber references)
-    - BulkSummarizerController (NEW v4.0 - coordinates BulkSummarizerTab + models)
+    
+    Note: BulkSummarizerController will be added in v4.1
     """
     logger.info("=" * 50)
     logger.info(f"Starting {APP_TITLE} v4.0")
@@ -67,12 +66,8 @@ def main():
         )
         logger.info("YouTubeSummarizerController initialized")
         
-        # Initialize Bulk Summarizer tab controller (NEW v4.0)
-        # Wires: BulkSummarizerTab UI ↔ BulkSummarizerController ↔ N8NModel
-        bulk_summarizer_controller = BulkSummarizerController(window.bulk_summarizer_tab)
-        logger.info("BulkSummarizerController initialized")
-        
         logger.info("Application ready")
+        logger.info("Note: Bulk Summarizer tab UI ready (controller coming in v4.1)")
         
         # Run GUI loop
         root.mainloop()
