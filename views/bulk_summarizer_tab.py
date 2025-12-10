@@ -23,16 +23,16 @@ class BulkSummarizerTab(BaseTab):
     """UI for bulk file summarization (Phase 4.1)"""
     
     def __init__(self, notebook):
-        super().__init__(notebook, "Bulk Summarizer")
+        # CRITICAL: Initialize variables BEFORE calling super().__init__()
+        # super().__init__() calls _setup_ui() which needs these variables
         self.notebook = notebook
-        
-        # Variables
         self.source_folder_var = tk.StringVar(value="[No folder selected]")
         self.file_type_var = tk.StringVar(value="txt")
-        
-        # Callback registration
         self.on_start_requested = None
         self.on_cancel_requested = None
+        
+        # NOW call parent init (which calls _setup_ui())
+        super().__init__(notebook, "Bulk Summarizer")
         
         logger.info("BulkSummarizerTab initialized")
     
