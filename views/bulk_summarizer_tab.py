@@ -24,14 +24,10 @@ class BulkSummarizerTab(BaseTab):
     
     def __init__(self, notebook):
         # CRITICAL: Initialize variables BEFORE calling super().__init__()
-        # because super().__init__() calls _setup_ui() which needs these variables
+        # super().__init__() calls _setup_ui() which needs these variables
         self.notebook = notebook
-        
-        # Variables - MUST be set BEFORE super().__init__()
         self.source_folder_var = tk.StringVar(value="[No folder selected]")
         self.file_type_var = tk.StringVar(value="txt")
-        
-        # Callback registration
         self.on_start_requested = None
         self.on_cancel_requested = None
         
