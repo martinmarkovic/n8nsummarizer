@@ -1,19 +1,22 @@
 """
-Main entry point for n8n Summarizer application (v4.0)
+Main entry point for n8n Summarizer application (v4.1)
 
 Wires up views and controllers:
 - FileTab ↔ FileController
 - YouTubeSummarizerTab ↔ YouTubeSummarizerController (with Transcriber references)
 - TranscriberTab ↔ TranscriberController
-- BulkSummarizerTab ↔ BulkSummarizerController (NEW - v4.0, Phase 4.1)
+- BulkSummarizerTab ↔ BulkSummarizerController (Phase 4.1)
 
-New in v4.0:
-    - BulkSummarizerTab UI for bulk file processing
-    - BulkSummarizerController for orchestrating bulk operations
-    - Support for .txt and .docx file processing
+New in v4.1:
+    - Full BulkSummarizerController implementation
+    - Sequential file processing with threading
+    - Progress tracking and real-time updates
+    - Error handling with recovery
+    - Output folder and file management
+    - Support for .txt and .docx files
 
-Version: 4.0
-Updated: 2025-12-10 - Bulk Summarizer tab integration (Phase 4.1 UI)
+Version: 4.1
+Updated: 2025-12-10 - Bulk Summarizer Phase 4.1 complete logic
 """
 import tkinter as tk
 from views.main_window import MainWindow
@@ -30,21 +33,21 @@ def main():
     Initialize and run the application.
     
     Creates:
-    - MainWindow (views layer with all tabs including Bulk Summarizer)
+    - MainWindow (views layer with all tabs)
     - FileController (coordinates FileTab + models)
     - TranscriberController (coordinates TranscriberTab + models)
-    - YouTubeSummarizerController (coordinates YouTubeSummarizerTab + models, with Transcriber references)
-    - BulkSummarizerController (NEW v4.0 - coordinates BulkSummarizerTab + models)
+    - YouTubeSummarizerController (coordinates YouTubeSummarizerTab + models)
+    - BulkSummarizerController (Phase 4.1 - full bulk processing implementation)
     """
     logger.info("=" * 50)
-    logger.info(f"Starting {APP_TITLE} v4.0")
+    logger.info(f"Starting {APP_TITLE} v4.1")
     logger.info("=" * 50)
     
     try:
         # Create Tkinter root window
         root = tk.Tk()
         
-        # Initialize main window (creates all tabs including Bulk Summarizer)
+        # Initialize main window (creates all tabs)
         window = MainWindow(root)
         
         # Initialize File Summarizer tab controller
@@ -57,7 +60,7 @@ def main():
         transcriber_controller = TranscriberController(window.transcriber_tab)
         logger.info("TranscriberController initialized")
         
-        # Initialize YouTube Summarizer tab controller (v3.1)
+        # Initialize YouTube Summarizer tab controller
         # Wires: YouTubeSummarizerTab UI ↔ YouTubeSummarizerController ↔ TranscribeModel + N8NModel
         # Pass BOTH transcriber_tab reference (for UI) AND transcriber_controller
         youtube_summarizer_controller = YouTubeSummarizerController(
@@ -67,10 +70,17 @@ def main():
         )
         logger.info("YouTubeSummarizerController initialized")
         
-        # Initialize Bulk Summarizer tab controller (NEW v4.0)
+        # Initialize Bulk Summarizer tab controller (Phase 4.1)
         # Wires: BulkSummarizerTab UI ↔ BulkSummarizerController ↔ N8NModel
+        # Full implementation with:
+        # - File discovery and validation
+        # - Background threading
+        # - Sequential processing
+        # - Progress tracking
+        # - Error handling
+        # - Output management
         bulk_summarizer_controller = BulkSummarizerController(window.bulk_summarizer_tab)
-        logger.info("BulkSummarizerController initialized")
+        logger.info("BulkSummarizerController initialized (Phase 4.1 complete)")
         
         logger.info("Application ready")
         
