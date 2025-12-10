@@ -1,10 +1,10 @@
 """
-Main Window GUI v4.0 - Bulk Summarizer tab added
+Main Window GUI v4.1 - Bulk Summarizer Phase 4.1 complete
 
 This window manages:
 - Header (title + font size + theme toggle)
 - Tab container (notebook)
-- Tab initialization (FileTab, YouTubeSummarizerTab, TranscriberTab, BulkSummarizerTab - NEW)
+- Tab initialization (FileTab, YouTubeSummarizerTab, TranscriberTab, BulkSummarizerTab)
 - Theme management
 - Font size management
 - Status bar
@@ -20,7 +20,8 @@ Fixed: 2025-12-07 (v2.5 - Removed duplicate transcribe_tab.py)
 New: 2025-12-07 (v3.0 - YouTube Summarization tab)
 Improved: 2025-12-07 (v3.1.2 - Font size controls)
 Added: 2025-12-10 (v4.0 - Bulk Summarizer tab - Phase 4.1 UI)
-Version: 4.0
+Complete: 2025-12-10 (v4.1 - Phase 4.1 full controller implementation)
+Version: 4.1
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -46,11 +47,11 @@ class MainWindow:
     - Theme management
     - Status bar
     
-    Tab order (v4.0):
+    Tab order (v4.1):
     1. File Summarizer
     2. YouTube Summarization (v3.0)
     3. Transcriber
-    4. Bulk Summarizer (NEW - v4.0)
+    4. Bulk Summarizer (Phase 4.1 - Complete implementation)
     """
     
     # Font sizes
@@ -65,7 +66,7 @@ class MainWindow:
             root: Tkinter root window
         """
         self.root = root
-        self.root.title(f"{APP_TITLE} v4.0")
+        self.root.title(f"{APP_TITLE} v4.1")
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
         
@@ -83,7 +84,7 @@ class MainWindow:
         self._setup_ui()
         self._apply_theme()
         
-        logger.info(f"MainWindow initialized (v4.0 - {self.current_theme} theme, {self.current_font_size}px font)")
+        logger.info(f"MainWindow initialized (v4.1 - {self.current_theme} theme, {self.current_font_size}px font)")
     
     def _setup_ui(self):
         """
@@ -125,7 +126,7 @@ class MainWindow:
         
         self.title_label = ttk.Label(
             header_frame,
-            text=f"{APP_TITLE} v4.0",
+            text=f"{APP_TITLE} v4.1",
             font=("Segoe UI", 14, "bold")
         )
         self.title_label.grid(row=0, column=0, sticky=tk.W)
@@ -176,11 +177,11 @@ class MainWindow:
         """
         Setup tab notebook with FileTab, YouTubeSummarizerTab, TranscriberTab, and BulkSummarizerTab.
         
-        Tab order (v4.0):
+        Tab order (v4.1):
         1. File Summarizer
         2. YouTube Summarization (v3.0)
         3. Transcriber
-        4. Bulk Summarizer (NEW - v4.0)
+        4. Bulk Summarizer (Phase 4.1 - Complete)
         
         Args:
             parent: Parent frame
@@ -201,11 +202,11 @@ class MainWindow:
         self.transcriber_tab = TranscriberTab(self.notebook)
         self.notebook.add(self.transcriber_tab, text="🗡 Transcriber")
         
-        # Tab 4: Bulk Summarizer (NEW in v4.0)
+        # Tab 4: Bulk Summarizer (Phase 4.1)
         self.bulk_summarizer_tab = BulkSummarizerTab(self.notebook)
         self.notebook.add(self.bulk_summarizer_tab, text="📦 Bulk Summarizer")
         
-        logger.info("All tabs initialized (including Bulk Summarizer - v4.0)")
+        logger.info("All tabs initialized (Phase 4.1 Bulk Summarizer complete)")
     
     def _setup_status_bar(self, parent):
         """
