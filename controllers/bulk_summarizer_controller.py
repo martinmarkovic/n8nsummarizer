@@ -1,17 +1,18 @@
 """
-Bulk Summarizer Controller - Phase 4.1 Implementation
+Bulk Summarizer Controller - Phase 4.2 Advanced Options
 
 Orchestrates bulk file summarization:
-- Folder and file type validation
-- Background file discovery
+- Folder and file type validation (txt, srt, docx, pdf)
+- Background file discovery with multiple types
 - Sequential file processing
 - N8N webhook communication
 - Progress tracking and UI updates
 - Error handling and logging
 - Output folder and file management
+- Output format handling (separate/combined)
 
-Version: 4.1
-Created: 2025-12-10
+Version: 4.2
+Updated: 2025-12-11
 """
 
 from pathlib import Path
@@ -31,12 +32,13 @@ class BulkSummarizerController:
     
     Handles:
     - Validation of source folder and file types
-    - Discovery of matching files
+    - Discovery of matching files (txt, srt, docx, pdf)
     - Background processing with threading
     - N8N integration for summarization
     - Output folder and file management
     - Real-time progress updates
     - Error handling and recovery
+    - Separate and combined output formats
     """
     
     def __init__(self, view):
@@ -54,7 +56,7 @@ class BulkSummarizerController:
         self.view.set_on_start_requested(self.handle_start_processing)
         self.view.set_on_cancel_requested(self.handle_cancel_processing)
         
-        logger.info("BulkSummarizerController initialized")
+        logger.info("BulkSummarizerController initialized (v4.2)")
     
     def handle_start_processing(self):
         """
@@ -63,6 +65,7 @@ class BulkSummarizerController:
         Validation:
         - Folder exists and is accessible
         - At least one file of selected type exists
+        - At least one output format selected
         - User hasn't already started processing
         """
         
@@ -76,23 +79,43 @@ class BulkSummarizerController:
             self.view.append_log(f"Error: Folder not found: {source_folder}", "error")
             return
         
+        # Get file types
+        file_types = self.view.get_file_types()
+        if not file_types:
+            self.view.append_log("Error: At least one file type must be selected", "error")
+            return
+        
+        # Get output formats
+        output_formats = self.view.get_output_formats()
+        if not output_formats['separate'] and not output_formats['combined']:
+            self.view.append_log("Error: At least one output format must be selected", "error")
+            return
+        
         # Discover files
-        files = self._discover_files(source_folder)
+        files = self._discover_files(source_folder, file_types)
         if not files:
-            self.view.append_log("Error: No matching files found in folder", "error")
+            self.view.append_log(f"Error: No files found matching selected types: {', '.join(file_types)}", "error")
+            return
+        
+        # Validate output location
+        output_folder = self.view.get_output_folder()
+        if not output_folder:
+            self.view.append_log("Error: Invalid output folder", "error")
             return
         
         # Update UI and launch background thread
         self.view.append_log(f"Found {len(files)} files to process", "info")
+        self.view.append_log(f"Output formats: {'separate' if output_formats['separate'] else ''} {'combined' if output_formats['combined'] else ''}", "info")
         self.view.set_processing_enabled(False)
         self.is_processing = True
         
-        logger.info(f"Starting bulk processing: {len(files)} files")
+        logger.info(f"Starting bulk processing: {len(files)} files, output: {output_folder}")
+        logger.info(f"File types: {file_types}, Output formats: separate={output_formats['separate']}, combined={output_formats['combined']}")
         
         # Launch background worker thread
         thread = Thread(
             target=self._process_folder_background,
-            args=(source_folder, files),
+            args=(source_folder, files, output_folder, output_formats),
             daemon=True
         )
         thread.start()
@@ -107,25 +130,40 @@ class BulkSummarizerController:
     
     # File Discovery
     
-    def _discover_files(self, folder: str) -> List[Path]:
+    def _discover_files(self, folder: str, file_types: List[str]) -> List[Path]:
         """
         Discover all matching files in folder.
         
+        Args:
+            folder: Path to folder
+            file_types: List of file types to search for ('txt', 'srt', 'docx', 'pdf')
+        
         Returns:
-            Sorted list of Path objects matching selected file type
+            Sorted list of Path objects matching selected file types
         """
         folder_path = Path(folder)
-        file_type = self.view.get_file_type()
+        files = []
         
         try:
-            if file_type == "txt":
-                files = sorted(folder_path.glob("*.txt"))
-            elif file_type == "docx":
-                files = sorted(folder_path.glob("*.docx"))
-            else:  # both
-                files = sorted(folder_path.glob("*.txt")) + sorted(folder_path.glob("*.docx"))
+            # Map file type to glob pattern
+            patterns = {
+                'txt': '*.txt',
+                'srt': '*.srt',
+                'docx': '*.docx',
+                'pdf': '*.pdf'
+            }
             
-            logger.info(f"Discovered {len(files)} files in {folder}")
+            # Discover files for each selected type
+            for file_type in file_types:
+                if file_type in patterns:
+                    matching = list(folder_path.glob(patterns[file_type]))
+                    files.extend(matching)
+                    logger.debug(f"Found {len(matching)} {file_type} files")
+            
+            # Sort and remove duplicates
+            files = sorted(set(files))
+            
+            logger.info(f"Discovered {len(files)} total files matching types: {file_types}")
             return files
         
         except Exception as e:
@@ -134,33 +172,38 @@ class BulkSummarizerController:
     
     # Background Processing
     
-    def _process_folder_background(self, source_folder: str, files: List[Path]):
+    def _process_folder_background(self, source_folder: str, files: List[Path], 
+                                   output_folder: str, output_formats: dict):
         """
         Background worker thread for bulk processing.
         
         Executes:
-        1. Create output folder
+        1. Create output folder structure
         2. For each file:
            - Update UI with current file
            - Read file content
            - Send to N8N for summarization
-           - Save summary to output folder
+           - Save summary (separate and/or combined)
            - Log result (success/error)
-        3. Show completion summary
+        3. Generate combined file if selected
+        4. Show completion summary
         
         Args:
             source_folder: Path to source folder
             files: List of file paths to process
+            output_folder: Path to output folder
+            output_formats: Dict with 'separate' and 'combined' flags
         """
         try:
             total = len(files)
-            output_folder = self._create_output_folder(source_folder)
+            output_path = self._create_output_folder(output_folder)
             
             successful = 0
             failed = 0
             failed_files = []
+            combined_content = []  # For combined output
             
-            logger.info(f"Background processing started: {total} files, output: {output_folder}")
+            logger.info(f"Background processing started: {total} files, output: {output_path}")
             
             for idx, file_path in enumerate(files, 1):
                 # Check if user cancelled
@@ -195,8 +238,16 @@ class BulkSummarizerController:
                     )
                     
                     if success and summary:
-                        # Save summary to output folder
-                        self._save_summary(output_folder, file_path, summary)
+                        # Save separate file if selected
+                        if output_formats['separate']:
+                            self._save_summary(output_path, file_path, summary)
+                        
+                        # Add to combined content if selected
+                        if output_formats['combined']:
+                            combined_content.append({
+                                'filename': file_path.name,
+                                'summary': summary
+                            })
                         
                         # Log success
                         self.view.root.after(
@@ -235,6 +286,25 @@ class BulkSummarizerController:
                         idx,
                         total
                     )
+            
+            # Generate combined file if selected and there's content
+            if output_formats['combined'] and combined_content:
+                try:
+                    self._save_combined_summary(output_path, combined_content)
+                    self.view.root.after(
+                        0,
+                        self.view.append_log,
+                        "Combined summary file created",
+                        "success"
+                    )
+                except Exception as e:
+                    logger.error(f"Error creating combined summary: {str(e)}")
+                    self.view.root.after(
+                        0,
+                        self.view.append_log,
+                        f"Error creating combined file: {str(e)}",
+                        "error"
+                    )
         
         finally:
             # Show completion summary
@@ -249,24 +319,30 @@ class BulkSummarizerController:
     
     # File Operations
     
-    def _create_output_folder(self, source_folder: str) -> Path:
+    def _create_output_folder(self, output_location: str) -> Path:
         """
-        Create output folder: "[SourceFolderName] - Summarized"
+        Create output folder structure.
         
-        Located at same level as source folder.
+        If output_location is default (parent folder), creates:
+        "[SourceFolderName] - Summarized"
+        
+        If custom location, uses that directly.
         
         Args:
-            source_folder: Path to source folder
+            output_location: Output folder path
         
         Returns:
             Path object of created output folder
         """
-        source_path = Path(source_folder)
-        output_name = f"{source_path.name} - Summarized"
-        output_path = source_path.parent / output_name
-        
         try:
-            output_path.mkdir(exist_ok=True)
+            output_path = Path(output_location)
+            
+            # Check if this is a parent folder (we need to create subfolder)
+            # This happens when user selected default location
+            if not str(output_path).endswith("Summarized"):
+                output_path = output_path / "Summaries"
+            
+            output_path.mkdir(parents=True, exist_ok=True)
             logger.info(f"Created output folder: {output_path}")
             return output_path
         
@@ -276,7 +352,9 @@ class BulkSummarizerController:
     
     def _read_file(self, file_path: Path) -> str:
         """
-        Read content from .txt or .docx file.
+        Read content from supported file types.
+        
+        Supported: .txt, .srt, .docx, .pdf
         
         Args:
             file_path: Path to file
@@ -288,20 +366,36 @@ class BulkSummarizerController:
             ValueError: If file type not supported
         """
         try:
-            if file_path.suffix.lower() == ".txt":
+            suffix = file_path.suffix.lower()
+            
+            if suffix == ".txt":
                 with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                     content = f.read()
                     logger.debug(f"Read {file_path.name}: {len(content)} chars")
                     return content
             
-            elif file_path.suffix.lower() == ".docx":
+            elif suffix == ".srt":
+                # SRT files are text-based subtitle format
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+                    logger.debug(f"Read {file_path.name} (SRT): {len(content)} chars")
+                    return content
+            
+            elif suffix == ".docx":
                 doc = Document(file_path)
                 content = "\n".join([para.text for para in doc.paragraphs])
-                logger.debug(f"Read {file_path.name}: {len(content)} chars")
+                logger.debug(f"Read {file_path.name} (DOCX): {len(content)} chars")
                 return content
             
+            elif suffix == ".pdf":
+                # PDF support requires PyPDF2 or pdfplumber
+                # For now, return placeholder
+                # TODO: Implement PDF text extraction
+                logger.warning(f"PDF support not yet implemented: {file_path.name}")
+                return f"[PDF file: {file_path.name} - extraction not yet supported]"
+            
             else:
-                raise ValueError(f"Unsupported file type: {file_path.suffix}")
+                raise ValueError(f"Unsupported file type: {suffix}")
         
         except Exception as e:
             logger.error(f"Error reading {file_path.name}: {str(e)}")
@@ -309,7 +403,7 @@ class BulkSummarizerController:
     
     def _save_summary(self, output_folder: Path, source_file: Path, summary: str) -> Path:
         """
-        Save summary to output folder.
+        Save individual summary file.
         
         Filename: "[OriginalFilename]_summary.txt"
         
@@ -332,6 +426,44 @@ class BulkSummarizerController:
         
         except Exception as e:
             logger.error(f"Error saving summary for {source_file.name}: {str(e)}")
+            raise
+    
+    def _save_combined_summary(self, output_folder: Path, summaries: List[dict]) -> Path:
+        """
+        Save combined summary file with all summaries.
+        
+        Filename: "COMBINED_SUMMARY.txt"
+        Format:
+            ===== [filename1] =====
+            [summary1]
+            
+            ===== [filename2] =====
+            [summary2]
+        
+        Args:
+            output_folder: Path to output folder
+            summaries: List of dicts with 'filename' and 'summary'
+        
+        Returns:
+            Path object of saved combined file
+        """
+        try:
+            output_path = output_folder / "COMBINED_SUMMARY.txt"
+            
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(f"Combined Summary - Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("=" * 60 + "\n\n")
+                
+                for item in summaries:
+                    f.write(f"===== {item['filename']} =====\n")
+                    f.write(item['summary'])
+                    f.write("\n\n")
+            
+            logger.info(f"Saved combined summary: {output_path}")
+            return output_path
+        
+        except Exception as e:
+            logger.error(f"Error saving combined summary: {str(e)}")
             raise
     
     # Completion Handling
