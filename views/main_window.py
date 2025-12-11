@@ -1,5 +1,5 @@
 """
-Main Window GUI v4.1 - Bulk Summarizer Phase 4.1 complete
+Main Window GUI v4.2 - Advanced Bulk Options
 
 This window manages:
 - Header (title + font size + theme toggle)
@@ -21,7 +21,8 @@ New: 2025-12-07 (v3.0 - YouTube Summarization tab)
 Improved: 2025-12-07 (v3.1.2 - Font size controls)
 Added: 2025-12-10 (v4.0 - Bulk Summarizer tab - Phase 4.1 UI)
 Complete: 2025-12-10 (v4.1 - Phase 4.1 full controller implementation)
-Version: 4.1
+Advanced: 2025-12-11 (v4.2 - Advanced Bulk Options - Phase 4.2)
+Version: 4.2
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -47,11 +48,11 @@ class MainWindow:
     - Theme management
     - Status bar
     
-    Tab order (v4.1):
+    Tab order (v4.2):
     1. File Summarizer
     2. YouTube Summarization (v3.0)
     3. Transcriber
-    4. Bulk Summarizer (Phase 4.1 - Complete implementation)
+    4. Bulk Summarizer (Phase 4.2 - Advanced Options)
     """
     
     # Font sizes
@@ -66,7 +67,7 @@ class MainWindow:
             root: Tkinter root window
         """
         self.root = root
-        self.root.title(f"{APP_TITLE} v4.1")
+        self.root.title(f"{APP_TITLE} v4.2")
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
         
@@ -84,7 +85,7 @@ class MainWindow:
         self._setup_ui()
         self._apply_theme()
         
-        logger.info(f"MainWindow initialized (v4.1 - {self.current_theme} theme, {self.current_font_size}px font)")
+        logger.info(f"MainWindow initialized (v4.2 - {self.current_theme} theme, {self.current_font_size}px font)")
     
     def _setup_ui(self):
         """
@@ -126,7 +127,7 @@ class MainWindow:
         
         self.title_label = ttk.Label(
             header_frame,
-            text=f"{APP_TITLE} v4.1",
+            text=f"{APP_TITLE} v4.2",
             font=("Segoe UI", 14, "bold")
         )
         self.title_label.grid(row=0, column=0, sticky=tk.W)
@@ -177,11 +178,11 @@ class MainWindow:
         """
         Setup tab notebook with FileTab, YouTubeSummarizerTab, TranscriberTab, and BulkSummarizerTab.
         
-        Tab order (v4.1):
+        Tab order (v4.2):
         1. File Summarizer
         2. YouTube Summarization (v3.0)
         3. Transcriber
-        4. Bulk Summarizer (Phase 4.1 - Complete)
+        4. Bulk Summarizer (Phase 4.2 - Advanced Options)
         
         Args:
             parent: Parent frame
@@ -196,17 +197,17 @@ class MainWindow:
         
         # Tab 2: YouTube Summarization (v3.0)
         self.youtube_summarizer_tab = YouTubeSummarizerTab(self.notebook)
-        self.notebook.add(self.youtube_summarizer_tab, text="🎬 YouTube Summarization")
+        self.notebook.add(self.youtube_summarizer_tab, text="🎜 YouTube Summarization")
         
         # Tab 3: Transcriber
         self.transcriber_tab = TranscriberTab(self.notebook)
         self.notebook.add(self.transcriber_tab, text="🗡 Transcriber")
         
-        # Tab 4: Bulk Summarizer (Phase 4.1)
+        # Tab 4: Bulk Summarizer (Phase 4.2)
         self.bulk_summarizer_tab = BulkSummarizerTab(self.notebook)
         self.notebook.add(self.bulk_summarizer_tab, text="📦 Bulk Summarizer")
         
-        logger.info("All tabs initialized (Phase 4.1 Bulk Summarizer complete)")
+        logger.info("All tabs initialized (Phase 4.2 Advanced Bulk Options)")
     
     def _setup_status_bar(self, parent):
         """
@@ -244,6 +245,7 @@ class MainWindow:
         style.configure('TButton', font=('Segoe UI', 10), background=colors['button_bg'], foreground=colors['text_primary'])
         style.map('TButton', background=[('active', colors['button_hover'])])
         style.configure('TCheckbutton', background=colors['bg_primary'], foreground=colors['text_primary'])
+        style.configure('TRadiobutton', background=colors['bg_primary'], foreground=colors['text_primary'])
         style.configure('TEntry', fieldbackground=colors['bg_secondary'], foreground=colors['text_primary'])
         style.configure('TNotebook', background=colors['bg_primary'])
         style.configure('TNotebook.Tab', background=colors['bg_secondary'], foreground=colors['text_primary'])
