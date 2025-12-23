@@ -1,5 +1,5 @@
 """
-Bulk Summarizer Controller - Phase 4.2 Advanced Options
+Bulk Summarizer Controller - Phase 4.3 Enhanced Output Naming
 
 Orchestrates bulk file summarization:
 - Folder and file type validation (txt, srt, docx, pdf)
@@ -8,11 +8,14 @@ Orchestrates bulk file summarization:
 - N8N webhook communication
 - Progress tracking and UI updates
 - Error handling and logging
-- Output folder and file management
+- Output folder and file management with improved naming
 - Output format handling (separate/combined)
 
-Version: 4.2
-Updated: 2025-12-11
+Version: 4.3
+Updated: 2025-12-23
+Changes:
+- Fixed output folder naming: now uses original folder name + '- Summarized' instead of hardcoded 'Summaries'
+- Added font size preference persistence to .env
 """
 
 from pathlib import Path
@@ -56,7 +59,7 @@ class BulkSummarizerController:
         self.view.set_on_start_requested(self.handle_start_processing)
         self.view.set_on_cancel_requested(self.handle_cancel_processing)
         
-        logger.info("BulkSummarizerController initialized (v4.2)")
+        logger.info("BulkSummarizerController initialized (v4.3)")
     
     def handle_start_processing(self):
         """
@@ -196,7 +199,7 @@ class BulkSummarizerController:
         """
         try:
             total = len(files)
-            output_path = self._create_output_folder(output_folder)
+            output_path = self._create_output_folder(source_folder, output_folder)
             
             successful = 0
             failed = 0
@@ -319,9 +322,12 @@ class BulkSummarizerController:
     
     # File Operations
     
-    def _create_output_folder(self, output_location: str) -> Path:
+    def _create_output_folder(self, source_folder: str, output_location: str) -> Path:
         """
         Create output folder structure.
+        
+        v4.3 Change: Output folder naming now uses original folder name + '- Summarized'
+        Example: If source folder is 'Documents', output will be 'Documents - Summarized'
         
         If output_location is default (parent folder), creates:
         "[SourceFolderName] - Summarized"
@@ -329,6 +335,7 @@ class BulkSummarizerController:
         If custom location, uses that directly.
         
         Args:
+            source_folder: Path to source folder
             output_location: Output folder path
         
         Returns:
@@ -336,11 +343,17 @@ class BulkSummarizerController:
         """
         try:
             output_path = Path(output_location)
+            source_path = Path(source_folder)
             
-            # Check if this is a parent folder (we need to create subfolder)
-            # This happens when user selected default location
-            if not str(output_path).endswith("Summarized"):
-                output_path = output_path / "Summaries"
+            # Get the source folder name
+            source_folder_name = source_path.name
+            
+            # Check if this is the default location (parent folder)
+            # If output_location equals the parent of source_folder, create subfolder with proper naming
+            if str(output_path) == str(source_path.parent):
+                # Create subfolder with original name + "- Summarized"
+                output_path = output_path / f"{source_folder_name} - Summarized"
+                logger.info(f"Using default output location: {source_folder_name} - Summarized")
             
             output_path.mkdir(parents=True, exist_ok=True)
             logger.info(f"Created output folder: {output_path}")
