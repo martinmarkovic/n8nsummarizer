@@ -20,6 +20,12 @@ New in v4.4.1:
     - Better error reporting for debugging
     - Improved exception handling details
 
+New in v4.4.2:
+    - CRITICAL FIX: Handle empty/None responses from N8N
+    - Debug logging for response content
+    - Treat empty responses as success (N8N may return empty on success)
+    - Distinguish between "no response" vs "empty response"
+
 This is PURE business logic - NO UI dependencies.
 Reusable by any controller (File tab, Transcribe tab, etc.)
 """
@@ -184,6 +190,8 @@ class N8NModel:
         """
         Send a single chunk to n8n.
         
+        v4.4.2: Handle empty responses correctly - empty doesn't mean failure!
+        
         Args:
             file_name (str): Name of file
             content (str): Chunk content
@@ -235,17 +243,30 @@ class N8NModel:
                 logger.error(error)
                 return False, None, error
             
-            # Try to parse JSON response
+            # Try to parse response (JSON or text)
             try:
                 response_data = response.json()
-                logger.debug(f"Response: {str(response_data)[:200]}...")
-                summary = self.extract_summary(response_data)
-                logger.info(f"Successfully received response from n8n (Status: {response.status_code})")
-                return True, summary, None
+                logger.debug(f"Response JSON: {str(response_data)[:200]}...")
             except json.JSONDecodeError:
-                summary = response.text
-                logger.info(f"Successfully received text response from n8n")
+                # Not JSON, use raw text
+                response_data = response.text
+                logger.debug(f"Response text: {response_data[:200]}...")
+            
+            # Extract summary from response
+            summary = self.extract_summary(response_data)
+            
+            # v4.4.2: Handle empty responses
+            # Empty response might mean N8N processed successfully but returned nothing
+            # This is OK - it still means success
+            if summary is None or summary == "":
+                logger.info(f"N8N returned 200 with empty response (treating as success)")
+                # Return empty string instead of None - this counts as success
+                summary = "[N8N processed successfully but returned no content]"
+                logger.info(f"Successfully received response from n8n (Status: {response.status_code}, empty response)")
                 return True, summary, None
+            
+            logger.info(f"Successfully received response from n8n (Status: {response.status_code})")
+            return True, summary, None
         
         except requests.exceptions.Timeout:
             error = f"Request timeout (>{self.timeout}s)"
@@ -270,6 +291,7 @@ class N8NModel:
         Send multiple chunks and combine results.
         
         v4.4.1: Improved error capture and reporting
+        v4.4.2: Better handling of success vs failure
         
         Args:
             file_name (str): Name of file
@@ -299,15 +321,20 @@ class N8NModel:
                 total_chunks=len(chunks)
             )
             
-            if success and summary:
-                summaries.append(summary)
+            # v4.4.2: Check success flag, not just whether summary is non-empty
+            if success:
+                # Success! Even if summary is empty (N8N might do that)
+                if summary:
+                    summaries.append(summary)
+                else:
+                    # Empty summary but successful - add placeholder
+                    summaries.append("[Processing successful - empty result]")
                 logger.info(f"Chunk {idx} completed successfully")
             else:
-                # Capture actual error message, not just "Unknown error"
+                # Actual failure
                 if error:
                     error_msg = error
                 elif summary:
-                    # Summary might contain error info
                     error_msg = f"Got response but marked as failed: {str(summary)[:100]}"
                 else:
                     error_msg = "No summary or error message received"
@@ -392,34 +419,57 @@ class N8NModel:
         Extract summary from n8n response.
         Tries multiple common keys: summary, summarization, result, output, text, content
         
+        v4.4.2: Also handles None responses gracefully
+        
         Args:
             response_data: Response from n8n (dict, str, etc.)
             
         Returns:
-            str: Extracted summary or stringified response
+            str: Extracted summary or stringified response. None if truly empty.
         """
         if response_data is None:
+            logger.debug("Response is None")
             return None
         
         if isinstance(response_data, str):
+            # Check if it's an empty string
+            if response_data.strip() == "":
+                logger.debug("Response is empty string")
+                return None
             return response_data
         
         if isinstance(response_data, dict):
-            # Try common keys
+            # Try common keys first
             for key in ['summary', 'summarization', 'result', 'output', 'text', 'content']:
                 if key in response_data:
                     value = response_data[key]
                     if isinstance(value, str):
-                        return value
+                        if value.strip():
+                            logger.debug(f"Found summary in key '{key}'")
+                            return value
                     elif isinstance(value, dict):
+                        logger.debug(f"Found dict summary in key '{key}'")
                         return json.dumps(value, indent=2)
                     else:
+                        logger.debug(f"Found value in key '{key}': {type(value)}")
                         return str(value)
             
-            # If no common keys, return pretty-printed JSON
+            # If no common keys, check if dict is empty
+            if not response_data:
+                logger.debug("Response dict is empty")
+                return None
+            
+            # Return pretty-printed JSON if not empty
+            logger.debug("Returning full response as JSON")
             return json.dumps(response_data, indent=2)
         
-        return str(response_data)
+        # For other types, stringify
+        str_response = str(response_data)
+        if str_response.strip():
+            return str_response
+        else:
+            logger.debug(f"Response is empty after stringification")
+            return None
     
     def save_webhook_to_env(self, webhook_url: str) -> bool:
         """
