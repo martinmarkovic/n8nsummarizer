@@ -31,7 +31,7 @@ class N8NModel:
     """Handles n8n webhook communication with large file support via chunking"""
     
     # Configuration
-    DEFAULT_CHUNK_SIZE = 50000  # 50KB per chunk (safe for most webhook implementations)
+    DEFAULT_CHUNK_SIZE = 45000  # 45KB per chunk (safe for most webhook implementations)
     MAX_CHUNK_SIZE = 100000     # 100KB absolute maximum
     MIN_CHUNK_SIZE = 5000       # 5KB minimum to avoid too many requests
     
