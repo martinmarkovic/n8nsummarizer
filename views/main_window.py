@@ -16,6 +16,11 @@ v4.3 Changes:
 - Font size preferences are now saved to .env and remembered across sessions
 - Font increase/decrease actions persist user choice in ENV file
 
+v4.4.1 Changes:
+- Font size is now properly loaded from .env and applied on startup
+- Fixed: Font size label shows correct value on app load
+- Fixed: Text widgets use loaded font size from initialization
+
 Created: 2025-11-30
 Refactored: 2025-12-07 (v2.2 - Views refactoring)
 Updated: 2025-12-07 (v2.3 - Transcriber tab integration)
@@ -27,7 +32,8 @@ Added: 2025-12-10 (v4.0 - Bulk Summarizer tab - Phase 4.1 UI)
 Complete: 2025-12-10 (v4.1 - Phase 4.1 full controller implementation)
 Advanced: 2025-12-11 (v4.2 - Advanced Bulk Options - Phase 4.2)
 Enhanced: 2025-12-23 (v4.3 - Font size .env persistence)
-Version: 4.3
+Fixed: 2025-12-27 (v4.4.1 - Font size loading on startup)
+Version: 4.4.1
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -97,6 +103,11 @@ class MainWindow:
         
         # Setup UI
         self._setup_ui()
+        
+        # IMPORTANT: Apply loaded font size AFTER tabs are created
+        # This ensures all text widgets exist before we try to configure them
+        self._apply_font_size()
+        
         self._apply_theme()
         
         logger.info(f"MainWindow initialized (v4.3 - {self.current_theme} theme, {self.current_font_size}px font)")
@@ -229,7 +240,7 @@ class MainWindow:
         )
         self.font_decrease_btn.pack(side=tk.LEFT, padx=(0, 2))
         
-        # Font size display
+        # Font size display - Initialize with current font size
         self.font_size_var = tk.StringVar(value=f"{self.current_font_size}px")
         self.font_size_label = ttk.Label(
             controls_frame,
@@ -413,8 +424,10 @@ class MainWindow:
     def _apply_font_size(self):
         """
         Apply current font size to all text widgets.
+        
+        v4.4.1: Now called during initialization to apply loaded font size
         """
-        # Update display
+        # Update display label
         self.font_size_var.set(f"{self.current_font_size}px")
         
         # Apply to File tab
@@ -434,6 +447,8 @@ class MainWindow:
         # Apply to Bulk Summarizer tab
         if hasattr(self, 'bulk_summarizer_tab'):
             self.bulk_summarizer_tab.status_log.configure(font=("Segoe UI", self.current_font_size))
+        
+        logger.debug(f"Applied font size {self.current_font_size}px to all text widgets")
     
     # Status bar methods
     
