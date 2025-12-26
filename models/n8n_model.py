@@ -15,6 +15,11 @@ New in v4.4:
     - Intelligent chunk boundary detection (paragraph-aware)
     - Progress tracking for multi-chunk operations
 
+New in v4.4.1:
+    - Fixed error message capture for failed chunks
+    - Better error reporting for debugging
+    - Improved exception handling details
+
 This is PURE business logic - NO UI dependencies.
 Reusable by any controller (File tab, Transcribe tab, etc.)
 """
@@ -264,6 +269,8 @@ class N8NModel:
         """
         Send multiple chunks and combine results.
         
+        v4.4.1: Improved error capture and reporting
+        
         Args:
             file_name (str): Name of file
             chunks (List[str]): List of content chunks
@@ -296,7 +303,15 @@ class N8NModel:
                 summaries.append(summary)
                 logger.info(f"Chunk {idx} completed successfully")
             else:
-                error_msg = error or "Unknown error"
+                # Capture actual error message, not just "Unknown error"
+                if error:
+                    error_msg = error
+                elif summary:
+                    # Summary might contain error info
+                    error_msg = f"Got response but marked as failed: {str(summary)[:100]}"
+                else:
+                    error_msg = "No summary or error message received"
+                
                 logger.error(f"Chunk {idx} failed: {error_msg}")
                 failed_chunks.append((idx, error_msg))
         
@@ -307,7 +322,8 @@ class N8NModel:
             return False, None, error
         
         if failed_chunks:
-            logger.warning(f"{len(failed_chunks)} of {len(chunks)} chunks failed, using successful chunks")
+            error_summary = ", ".join([f"Chunk {idx}: {msg}" for idx, msg in failed_chunks])
+            logger.warning(f"{len(failed_chunks)} of {len(chunks)} chunks failed - {error_summary}")
         
         # Combine summaries
         combined = self._combine_summaries(file_name, summaries, len(chunks))
