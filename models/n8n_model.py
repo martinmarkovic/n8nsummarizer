@@ -26,6 +26,12 @@ New in v4.4.2:
     - Treat empty responses as success (N8N may return empty on success)
     - Distinguish between "no response" vs "empty response"
 
+New in v4.4.3:
+    - Skip empty placeholders in output (N8N async pattern)
+    - Only include actual content in summaries
+    - Clean multi-chunk summaries with only real results
+    - Better handling of async N8N workflows
+
 This is PURE business logic - NO UI dependencies.
 Reusable by any controller (File tab, Transcribe tab, etc.)
 """
@@ -191,6 +197,7 @@ class N8NModel:
         Send a single chunk to n8n.
         
         v4.4.2: Handle empty responses correctly - empty doesn't mean failure!
+        v4.4.3: Mark empty responses for filtering later
         
         Args:
             file_name (str): Name of file
@@ -256,14 +263,12 @@ class N8NModel:
             summary = self.extract_summary(response_data)
             
             # v4.4.2: Handle empty responses
-            # Empty response might mean N8N processed successfully but returned nothing
-            # This is OK - it still means success
+            # v4.4.3: Return empty marker for filtering in _send_chunked_content
             if summary is None or summary == "":
-                logger.info(f"N8N returned 200 with empty response (treating as success)")
-                # Return empty string instead of None - this counts as success
-                summary = "[N8N processed successfully but returned no content]"
-                logger.info(f"Successfully received response from n8n (Status: {response.status_code}, empty response)")
-                return True, summary, None
+                logger.info(f"N8N returned 200 with empty response (async processing)")
+                # Return special marker for empty responses - will be filtered out later
+                logger.info(f"Successfully received response from n8n (Status: {response.status_code}, empty)")
+                return True, None, None  # Return None to mark as "empty but successful"
             
             logger.info(f"Successfully received response from n8n (Status: {response.status_code})")
             return True, summary, None
@@ -292,6 +297,7 @@ class N8NModel:
         
         v4.4.1: Improved error capture and reporting
         v4.4.2: Better handling of success vs failure
+        v4.4.3: Filter out empty responses from async processing
         
         Args:
             file_name (str): Name of file
@@ -302,6 +308,7 @@ class N8NModel:
             tuple: (success, combined_summary, error_msg)
         """
         summaries = []
+        empty_chunks = []
         failed_chunks = []
         
         for idx, chunk in enumerate(chunks, 1):
@@ -321,40 +328,52 @@ class N8NModel:
                 total_chunks=len(chunks)
             )
             
-            # v4.4.2: Check success flag, not just whether summary is non-empty
+            # v4.4.3: Distinguish between empty and failed
             if success:
-                # Success! Even if summary is empty (N8N might do that)
-                if summary:
-                    summaries.append(summary)
+                if summary is None:
+                    # Empty response - N8N is processing asynchronously
+                    logger.info(f"Chunk {idx} returned empty (async N8N pattern)")
+                    empty_chunks.append(idx)
                 else:
-                    # Empty summary but successful - add placeholder
-                    summaries.append("[Processing successful - empty result]")
-                logger.info(f"Chunk {idx} completed successfully")
+                    # Actual content received
+                    summaries.append(summary)
+                    logger.info(f"Chunk {idx} completed successfully with content")
             else:
                 # Actual failure
                 if error:
                     error_msg = error
-                elif summary:
-                    error_msg = f"Got response but marked as failed: {str(summary)[:100]}"
                 else:
-                    error_msg = "No summary or error message received"
+                    error_msg = "Unknown error"
                 
                 logger.error(f"Chunk {idx} failed: {error_msg}")
                 failed_chunks.append((idx, error_msg))
         
-        # Check results
-        if not summaries:
-            error = f"All {len(chunks)} chunks failed: {failed_chunks}"
-            logger.error(error)
-            return False, None, error
+        # Log empty chunks info
+        if empty_chunks:
+            logger.info(f"Chunks with empty responses (async pattern): {empty_chunks}")
         
+        # Check results - we care about actual content, not empty responses
+        if not summaries:
+            # No actual content received
+            if empty_chunks and not failed_chunks:
+                # Only empty responses - probably still processing
+                warning = f"All {len(chunks)} chunks returned empty (N8N still processing?)"
+                logger.warning(warning)
+                return True, "[All chunks processed but no content returned - N8N may still be processing]", None
+            else:
+                # Actual failures
+                error = f"Failed to get content from chunks: {len(failed_chunks)} failed, {len(empty_chunks)} empty"
+                logger.error(error)
+                return False, None, error
+        
+        # Log failures for context
         if failed_chunks:
             error_summary = ", ".join([f"Chunk {idx}: {msg}" for idx, msg in failed_chunks])
             logger.warning(f"{len(failed_chunks)} of {len(chunks)} chunks failed - {error_summary}")
         
-        # Combine summaries
+        # Combine only non-empty summaries
         combined = self._combine_summaries(file_name, summaries, len(chunks))
-        logger.info(f"Successfully processed {len(summaries)}/{len(chunks)} chunks")
+        logger.info(f"Successfully extracted content from {len(summaries)}/{len(chunks)} chunks")
         
         return True, combined, None
     
@@ -363,10 +382,11 @@ class N8NModel:
         Combine partial summaries into single output.
         
         Intelligently merges summaries with proper formatting and context.
+        v4.4.3: Only combines actual content (empty responses filtered out)
         
         Args:
             file_name (str): Original file name
-            summaries (List[str]): List of partial summaries
+            summaries (List[str]): List of partial summaries (non-empty)
             total_chunks (int): Total number of chunks
             
         Returns:
@@ -375,8 +395,8 @@ class N8NModel:
         if len(summaries) == 1:
             return summaries[0]
         
-        # Build combined output
-        combined = f"[Multi-chunk Summary: {len(summaries)}/{total_chunks} chunks processed]\n"
+        # Build combined output - only with actual content
+        combined = f"[Multi-chunk Summary: {len(summaries)}/{total_chunks} chunks with content]\n"
         combined += "=" * 70 + "\n\n"
         
         for idx, summary in enumerate(summaries, 1):
@@ -420,6 +440,7 @@ class N8NModel:
         Tries multiple common keys: summary, summarization, result, output, text, content
         
         v4.4.2: Also handles None responses gracefully
+        v4.4.3: Returns None for truly empty responses (to be filtered)
         
         Args:
             response_data: Response from n8n (dict, str, etc.)
