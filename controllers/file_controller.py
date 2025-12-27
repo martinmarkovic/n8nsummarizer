@@ -116,22 +116,27 @@ class FileController:
         # Send in background thread
         thread = threading.Thread(
             target=self._send_to_n8n_thread,
-            args=(file_info, content, gui_webhook_url, webhook_override['override']),
+            args=(file_path, file_info, content, gui_webhook_url, webhook_override['override']),
             daemon=True
         )
         thread.start()
     
-    def _send_to_n8n_thread(self, file_info: dict, content: str, webhook_url: str, saved_to_env: bool):
+    def _send_to_n8n_thread(self, file_path: str, file_info: dict, content: str, webhook_url: str, saved_to_env: bool):
         """Background thread function to send request to n8n"""
         try:
             # Override webhook in model
             self.n8n_model.webhook_url = webhook_url
             logger.info(f"Using webhook from GUI: {webhook_url}")
             
-            # Send to n8n
+            # Get actual file size in bytes
+            file_size_bytes = os.path.getsize(file_path)
+            logger.debug(f"File size: {file_size_bytes} bytes ({file_size_bytes/1024:.1f} KB)")
+            
+            # Send to n8n with FILE SIZE IN BYTES (v4.4.4 CRITICAL FIX!)
             success, response_data, error = self.n8n_model.send_content(
                 file_name=file_info['name'],
                 content=content,
+                file_size_bytes=file_size_bytes,  # v4.4.4: PASS FILE SIZE IN BYTES!
                 metadata={
                     'size_bytes': file_info['size'],
                     'lines': file_info['lines']
