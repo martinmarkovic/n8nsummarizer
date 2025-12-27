@@ -33,9 +33,10 @@ New in v4.4.3:
     - Better handling of async N8N workflows
 
 New in v4.4.4:
-    - DYNAMIC CHUNK SIZE: Auto-calculate optimal chunk size based on file
-    - For 185KB files: Creates 5-6 chunks instead of 2
-    - Ensures each chunk is 30-40KB for reliability
+    - FIXED CHUNKING: 1 chunk per 50 KB (50 + 50 + 50 + remainder)
+    - For 181KB files: Now creates 4 chunks (50+50+50+31) instead of 3
+    - For 193KB files: Now creates 4 chunks (50+50+50+43) instead of 3-4
+    - Consistent chunk count for same-sized files
     - DEBUG LOGGING: Comprehensive N8N response logging
     - Better detection of test mode webhook issues
 
@@ -54,11 +55,11 @@ from utils.logger import logger
 class N8NModel:
     """Handles n8n webhook communication with large file support via chunking"""
     
-    # Configuration
-    DEFAULT_CHUNK_SIZE = 50000  # 50KB per chunk (safe for most webhook implementations)
-    MAX_CHUNK_SIZE = 100000     # 100KB absolute maximum
+    # Configuration - v4.4.4 FIXED CHUNKING
+    CHUNK_SIZE_KB = 50  # 50 KB per chunk (new fixed strategy)
+    DEFAULT_CHUNK_SIZE = CHUNK_SIZE_KB * 1024  # Convert to characters/bytes
+    MAX_CHUNK_SIZE = 100000     # 100KB absolute maximum (safety limit)
     MIN_CHUNK_SIZE = 5000       # 5KB minimum to avoid too many requests
-    OPTIMAL_CHUNK_SIZE = 35000  # v4.4.4: Optimal for large files (multiple smaller chunks)
     
     def __init__(self, webhook_url: str = None, timeout: int = None, chunk_size: int = None):
         """
@@ -67,15 +68,15 @@ class N8NModel:
         Args:
             webhook_url (str): Override default webhook URL from config
             timeout (int): Request timeout in seconds
-            chunk_size (int): Characters per chunk (default: 50KB, max: 100KB)
+            chunk_size (int): Characters per chunk (default: 50KB)
         """
         self.webhook_url = webhook_url or N8N_WEBHOOK_URL
         self.timeout = timeout or N8N_TIMEOUT
-        # v4.4.4: Don't set chunk_size yet - let it calculate dynamically
+        # v4.4.4: Use fixed 50KB chunk size (1 chunk per 50 KB)
         self.chunk_size = self._validate_chunk_size(chunk_size or self.DEFAULT_CHUNK_SIZE)
         self.last_response = None
         
-        logger.info(f"N8NModel initialized with chunk_size={self.chunk_size} characters")
+        logger.info(f"N8NModel initialized with chunk_size={self.chunk_size} characters ({self.CHUNK_SIZE_KB}KB strategy)")
     
     def _validate_chunk_size(self, size: int) -> int:
         """
@@ -97,62 +98,51 @@ class N8NModel:
     
     def calculate_optimal_chunk_size(self, content_length: int) -> int:
         """
-        v4.4.4: Dynamically calculate optimal chunk size based on file size.
+        v4.4.4 FIXED: Calculate chunk size using 50KB rule.
         
-        Strategy:
-        - Small files (<50KB): Single chunk (no split)
-        - Medium files (50-150KB): 3-4 chunks
-        - Large files (>150KB): 5-6 chunks
-        - Each chunk: 30-40KB max for safety
-        
-        Examples:
-        - 50KB file → 1 chunk (no split)
-        - 100KB file → 3-4 chunks (~25-35KB each)
-        - 185KB file → 5-6 chunks (~30-35KB each) ← v4.4.4 fix!
-        - 250KB file → 7-8 chunks (~30-35KB each)
+        Strategy: 1 chunk per 50 KB
+        - 50 KB file → 1 chunk (50 KB)
+        - 100 KB file → 2 chunks (50 + 50)
+        - 150 KB file → 3 chunks (50 + 50 + 50)
+        - 181 KB file → 4 chunks (50 + 50 + 50 + 31) ← v4.4.4 fix!
+        - 193 KB file → 4 chunks (50 + 50 + 50 + 43) ← v4.4.4 fix!
+        - 250 KB file → 5 chunks (50 + 50 + 50 + 50 + 50)
         
         Args:
             content_length (int): Length of content in characters
             
         Returns:
-            int: Optimal chunk size for this content
+            int: Chunk size (50KB in characters)
         """
-        # Small files - no split needed
-        if content_length <= 50000:
-            logger.debug(f"Content {content_length} chars: Single chunk (no split)")
-            return content_length
+        # Fixed 50KB chunks - this is the "1 chunk per 50KB" rule
+        chunk_size = self.CHUNK_SIZE_KB * 1024  # 50 KB in characters
+        chunk_size = self._validate_chunk_size(chunk_size)
         
-        # Medium/Large files - calculate optimal size
-        # Target: 5-6 chunks for better reliability
-        target_chunks = 5
-        optimal_size = content_length // target_chunks
+        # Calculate number of chunks
+        num_chunks = (content_length + chunk_size - 1) // chunk_size  # Ceiling division
+        size_kb = content_length / 1024
         
-        # Keep between 30KB-40KB per chunk (safe for N8N)
-        optimal_size = max(30000, optimal_size)  # Min 30KB
-        optimal_size = min(40000, optimal_size)  # Max 40KB
+        logger.debug(f"Content {content_length} chars ({size_kb:.1f} KB): {num_chunks} chunks × {self.CHUNK_SIZE_KB}KB")
         
-        actual_chunks = (content_length + optimal_size - 1) // optimal_size  # Ceiling division
-        logger.debug(f"Content {content_length} chars: Optimal {optimal_size} chars/chunk = {actual_chunks} chunks")
-        
-        return optimal_size
+        return chunk_size
     
     def _split_into_chunks(self, content: str, chunk_size: int = None, overlap: int = 500) -> List[str]:
         """
         Split content into chunks with overlap for context preservation.
         
-        v4.4.4: Accept dynamic chunk_size parameter
+        v4.4.4: Fixed to use 50KB chunks
         Tries to split on paragraph boundaries (double newlines) when possible
         to maintain semantic structure.
         
         Args:
             content (str): Text to split
-            chunk_size (int): Size of chunks (uses calculated if None)
+            chunk_size (int): Size of chunks (uses 50KB if None)
             overlap (int): Characters to overlap between chunks (for context)
             
         Returns:
             List[str]: List of content chunks
         """
-        # v4.4.4: Use provided chunk_size or instance chunk_size
+        # v4.4.4: Use fixed 50KB chunk size
         if chunk_size is None:
             chunk_size = self.chunk_size
         
@@ -169,6 +159,7 @@ class N8NModel:
             if end >= len(content):
                 # Last chunk - take everything remaining
                 chunks.append(content[start:])
+                logger.debug(f"Last chunk: {len(content) - start} chars (from {start} to end)")
                 break
             
             # Try to find paragraph boundary (double newline) before end
@@ -191,14 +182,18 @@ class N8NModel:
                         end = space_end + 1
                         logger.debug(f"Chunk split at space (pos {end})")
             
-            # Add overlap from end of this chunk to start of next
+            # Add chunk (no overlap on first chunk)
             if start > 0:
+                # Add overlap from end of this chunk to start of next
                 overlap_start = max(0, start - overlap)
-                chunks.append(content[overlap_start:end])
+                chunk_content = content[overlap_start:end]
             else:
-                chunks.append(content[start:end])
+                chunk_content = content[start:end]
             
-            start = end - overlap  # Move start position considering overlap
+            chunks.append(chunk_content)
+            logger.debug(f"Added chunk {len(chunks)}: {len(chunk_content)} chars")
+            
+            start = end - overlap if start > 0 else end  # Move start position considering overlap
         
         return chunks
     
@@ -207,12 +202,11 @@ class N8NModel:
         """
         Send content to n8n for processing, with automatic chunking for large files.
         
-        v4.4.4: Dynamic chunk size calculation
-        For files larger than chunk_size:
-        1. Automatically calculates optimal chunk size based on file
-        2. Splits into chunks
-        3. Sends each chunk separately with position info
-        4. Combines partial summaries into final output
+        v4.4.4: Fixed chunking - 1 chunk per 50 KB
+        For files larger than 50KB:
+        1. Splits into 50KB chunks (50 + 50 + 50 + remainder)
+        2. Sends each chunk separately with position info
+        3. Combines partial summaries into final output
         
         Args:
             file_name (str): Name of file
@@ -224,28 +218,26 @@ class N8NModel:
             
         Example:
             >>> model = N8NModel()
-            >>> # Large file is automatically chunked
+            >>> # Large file is automatically chunked (1 per 50 KB)
             >>> success, summary, error = model.send_content(
             ...     'large_document.txt',
             ...     'Very long content...',
             ... )
         """
         content_size = len(content)
-        
-        # Log file size
         size_kb = content_size / 1024
         
-        # v4.4.4: Calculate optimal chunk size dynamically
+        # v4.4.4: Calculate chunk size (fixed 50KB)
         optimal_chunk_size = self.calculate_optimal_chunk_size(content_size)
         logger.info(f"Processing: {file_name} ({size_kb:.1f} KB, optimal_chunk_size={optimal_chunk_size} chars)")
         
         # Check if chunking is needed
         if content_size <= optimal_chunk_size:
-            # Small file - send as is
+            # Small file (≤50KB) - send as is
             logger.debug(f"File size ({content_size}) within chunk limit, sending as single chunk")
             return self._send_single_chunk(file_name, content, metadata, chunk_number=None, total_chunks=None)
         
-        # Large file - chunk and process
+        # Large file (>50KB) - chunk and process
         logger.info(f"File exceeds chunk size, splitting into multiple chunks...")
         chunks = self._split_into_chunks(content, chunk_size=optimal_chunk_size)
         logger.info(f"Split into {len(chunks)} chunks")
