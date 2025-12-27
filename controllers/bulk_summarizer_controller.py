@@ -59,7 +59,7 @@ class BulkSummarizerController:
         self.view.set_on_start_requested(self.handle_start_processing)
         self.view.set_on_cancel_requested(self.handle_cancel_processing)
         
-        logger.info("BulkSummarizerController initialized (v4.3)")
+        logger.info("BulkSummarizerController initialized")
     
     def handle_start_processing(self):
         """
