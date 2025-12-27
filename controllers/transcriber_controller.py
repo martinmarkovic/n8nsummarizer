@@ -78,7 +78,7 @@ class TranscriberController:
         self.view.on_export_srt_clicked = self._handle_export_srt_clicked
         self.view.on_clear_clicked = self._handle_clear_clicked
         
-        logger.info("TranscriberController initialized (v3.1.2)")
+        logger.info("TranscriberController initialized")
     
     def set_transcript_from_youtube(self, transcript_content: str, format_ext: str):
         """
