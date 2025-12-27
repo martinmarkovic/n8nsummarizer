@@ -33,11 +33,11 @@ New in v4.4.3:
     - Better handling of async N8N workflows
 
 New in v4.4.4 FINAL:
-    - DYNAMIC CHUNKING: Calculates based on actual content length
-    - For 181KB file (90.5K chars): Creates 2 chunks (50+40.5K chars)
-    - Uses ceiling division: (content_length + chunk_size - 1) // chunk_size
-    - Flexible 50KB per chunk with remainder in last chunk
-    - Works with UTF-16 encoded files correctly
+    - FIXED: Uses FILE SIZE IN BYTES (not characters!) for chunking
+    - For 181.99 KB file: 181990 bytes ÷ 50000 = 3.64 → 4 chunks ✓
+    - For 193.00 KB file: 193000 bytes ÷ 50000 = 3.86 → 4 chunks ✓
+    - Uses ceiling division to ensure all content is chunked
+    - Splits content proportionally by character count
     - DEBUG LOGGING: Comprehensive N8N response logging
     - Better detection of test mode webhook issues
 
@@ -56,10 +56,10 @@ from utils.logger import logger
 class N8NModel:
     """Handles n8n webhook communication with large file support via chunking"""
     
-    # Configuration - v4.4.4 FINAL: Dynamic 50KB chunks
-    CHUNK_SIZE_CHARS = 50000  # 50KB = ~50,000 characters (approximate)
-    MAX_CHUNK_SIZE = 100000     # 100KB absolute maximum (safety limit)
-    MIN_CHUNK_SIZE = 5000       # 5KB minimum to avoid too many requests
+    # Configuration - v4.4.4 FINAL: 50 KB per chunk (based on FILE SIZE IN BYTES)
+    CHUNK_SIZE_BYTES = 50 * 1024  # 50 KB = 51,200 bytes
+    MAX_CHUNK_SIZE_BYTES = 100 * 1024  # 100 KB absolute maximum
+    MIN_CHUNK_SIZE_BYTES = 5 * 1024     # 5 KB minimum
     
     def __init__(self, webhook_url: str = None, timeout: int = None, chunk_size: int = None):
         """
@@ -68,151 +68,153 @@ class N8NModel:
         Args:
             webhook_url (str): Override default webhook URL from config
             timeout (int): Request timeout in seconds
-            chunk_size (int): Characters per chunk (default: 50KB)
+            chunk_size (int): Chunk size in bytes (default: 50 KB)
         """
         self.webhook_url = webhook_url or N8N_WEBHOOK_URL
         self.timeout = timeout or N8N_TIMEOUT
-        # v4.4.4 FINAL: Use 50K characters per chunk (dynamic sizing)
-        self.chunk_size = self._validate_chunk_size(chunk_size or self.CHUNK_SIZE_CHARS)
+        # v4.4.4 FINAL: Use 50 KB chunks (measured in bytes, not characters)
+        self.chunk_size_bytes = self._validate_chunk_size_bytes(chunk_size or self.CHUNK_SIZE_BYTES)
         self.last_response = None
         
-        logger.info(f"N8NModel initialized with chunk_size={self.chunk_size} characters (~50KB strategy)")
+        kb_size = self.chunk_size_bytes / 1024
+        logger.info(f"N8NModel initialized with chunk_size={self.chunk_size_bytes} bytes ({kb_size:.0f}KB)")
     
-    def _validate_chunk_size(self, size: int) -> int:
+    def _validate_chunk_size_bytes(self, size: int) -> int:
         """
         Validate chunk size is within acceptable range.
         
         Args:
-            size (int): Requested chunk size
+            size (int): Requested chunk size in bytes
             
         Returns:
-            int: Validated chunk size
+            int: Validated chunk size in bytes
         """
-        if size < self.MIN_CHUNK_SIZE:
-            logger.warning(f"Chunk size {size} too small, using minimum {self.MIN_CHUNK_SIZE}")
-            return self.MIN_CHUNK_SIZE
-        if size > self.MAX_CHUNK_SIZE:
-            logger.warning(f"Chunk size {size} too large, using maximum {self.MAX_CHUNK_SIZE}")
-            return self.MAX_CHUNK_SIZE
+        if size < self.MIN_CHUNK_SIZE_BYTES:
+            logger.warning(f"Chunk size {size} too small, using minimum {self.MIN_CHUNK_SIZE_BYTES}")
+            return self.MIN_CHUNK_SIZE_BYTES
+        if size > self.MAX_CHUNK_SIZE_BYTES:
+            logger.warning(f"Chunk size {size} too large, using maximum {self.MAX_CHUNK_SIZE_BYTES}")
+            return self.MAX_CHUNK_SIZE_BYTES
         return size
     
-    def calculate_num_chunks(self, content_length: int) -> int:
+    def calculate_num_chunks(self, file_size_bytes: int) -> int:
         """
-        v4.4.4 FINAL: Calculate number of chunks needed.
+        v4.4.4 FINAL: Calculate number of chunks based on FILE SIZE IN BYTES.
         
         Uses ceiling division to ensure no content is lost.
-        Strategy: 50KB (~50K characters) per chunk with dynamic remainder
+        Strategy: 50 KB per chunk (measured in actual file bytes)
         
-        Examples with ACTUAL character counts:
-        - 80,000 chars → (80000 + 50000 - 1) // 50000 = 2 chunks (40K + 40K)
-        - 90,500 chars → (90500 + 50000 - 1) // 50000 = 2 chunks (50K + 40.5K) ← 181KB file!
-        - 100,000 chars → (100000 + 50000 - 1) // 50000 = 3 chunks (50K + 50K)
-        - 150,000 chars → (150000 + 50000 - 1) // 50000 = 4 chunks (4 × 50K)
-        - 180,000 chars → (180000 + 50000 - 1) // 50000 = 4 chunks (50K + 50K + 50K + 30K)
+        Examples:
+        - 50,000 bytes (50 KB) → 1 chunk
+        - 100,000 bytes (100 KB) → 2 chunks (50 + 50)
+        - 181,990 bytes (181.99 KB) → 4 chunks (50 + 50 + 50 + 31.99) ✓
+        - 193,000 bytes (193 KB) → 4 chunks (50 + 50 + 50 + 43) ✓
+        - 250,000 bytes (250 KB) → 5 chunks
         
         Args:
-            content_length (int): Length of content in characters
+            file_size_bytes (int): File size in bytes
             
         Returns:
             int: Number of chunks needed
         """
         # Ceiling division: round UP to ensure all content fits
-        num_chunks = (content_length + self.chunk_size - 1) // self.chunk_size
+        num_chunks = (file_size_bytes + self.chunk_size_bytes - 1) // self.chunk_size_bytes
         num_chunks = max(1, num_chunks)  # At least 1 chunk
         
-        logger.debug(f"Content {content_length} chars: {num_chunks} chunks × {self.chunk_size} chars/chunk")
+        file_kb = file_size_bytes / 1024
+        chunk_kb = self.chunk_size_bytes / 1024
+        logger.debug(f"File {file_size_bytes} bytes ({file_kb:.1f} KB): {num_chunks} chunks × {chunk_kb:.0f}KB")
         return num_chunks
     
-    def _split_into_chunks(self, content: str, chunk_size: int = None, overlap: int = 500) -> List[str]:
+    def _split_into_chunks(self, content: str, file_size_bytes: int) -> List[str]:
         """
-        Split content into dynamic chunks (50KB per chunk).
+        Split content into chunks based on FILE SIZE IN BYTES.
         
-        v4.4.4 FINAL: Dynamic sizing - calculates actual number of chunks needed
+        v4.4.4 FINAL: Calculates chunk count from file size, then splits content proportionally
         Tries to split on paragraph boundaries (double newlines) when possible
         to maintain semantic structure.
         
         Args:
-            content (str): Text to split
-            chunk_size (int): Size of chunks (uses 50K if None)
-            overlap (int): Characters to overlap between chunks (for context)
+            content (str): Text content (already read from file)
+            file_size_bytes (int): Original file size in bytes
             
         Returns:
             List[str]: List of content chunks
         """
-        # Use provided chunk_size or instance chunk_size
-        if chunk_size is None:
-            chunk_size = self.chunk_size
-        
         content_len = len(content)
         
-        # Calculate number of chunks
-        num_chunks = self.calculate_num_chunks(content_len)
-        logger.info(f"Splitting {content_len} chars into {num_chunks} chunks")
+        # Calculate number of chunks based on FILE SIZE (not character count)
+        num_chunks = self.calculate_num_chunks(file_size_bytes)
+        logger.info(f"Splitting content ({content_len} chars from {file_size_bytes} bytes) into {num_chunks} chunks")
         
         if num_chunks == 1:
             # Content fits in single chunk
-            logger.debug(f"Content ({content_len} chars) fits in single chunk")
+            logger.debug(f"Content fits in single chunk")
             return [content]
         
         chunks = []
-        chunk_length = (content_len + num_chunks - 1) // num_chunks  # Ceiling division for even distribution
-        logger.debug(f"Dynamic chunk size: {chunk_length} chars per chunk")
+        # Divide content proportionally by number of chunks
+        chars_per_chunk = (content_len + num_chunks - 1) // num_chunks  # Ceiling division
+        logger.debug(f"Target: {chars_per_chunk} chars per chunk (total {content_len} chars)")
         
         start = 0
         for chunk_num in range(num_chunks):
             if chunk_num == num_chunks - 1:
                 # Last chunk - take everything remaining
                 end = content_len
-                logger.debug(f"Chunk {chunk_num + 1}: Last chunk from {start} to {end} ({end - start} chars)")
+                logger.debug(f"Chunk {chunk_num + 1}/{num_chunks}: Last chunk from {start} to {end} ({end - start} chars)")
             else:
                 # Calculate end position for this chunk
-                end = start + chunk_length
+                end = start + chars_per_chunk
                 
                 # Try to find paragraph boundary (double newline) near end
-                paragraph_end = content.rfind('\n\n', max(start, end - chunk_length // 2), end + chunk_length // 4)
+                search_start = max(start, end - chars_per_chunk // 4)
+                search_end = min(content_len, end + chars_per_chunk // 4)
+                paragraph_end = content.rfind('\n\n', search_start, search_end)
                 
                 if paragraph_end != -1 and paragraph_end > start:
                     end = paragraph_end + 2
-                    logger.debug(f"Chunk {chunk_num + 1}: Split at paragraph (pos {end})")
+                    logger.debug(f"Chunk {chunk_num + 1}/{num_chunks}: Split at paragraph")
                 else:
                     # Try sentence boundary
-                    sentence_end = content.rfind('\n', max(start, end - chunk_length // 2), end + chunk_length // 4)
+                    sentence_end = content.rfind('\n', search_start, search_end)
                     if sentence_end != -1 and sentence_end > start:
                         end = sentence_end + 1
-                        logger.debug(f"Chunk {chunk_num + 1}: Split at sentence (pos {end})")
+                        logger.debug(f"Chunk {chunk_num + 1}/{num_chunks}: Split at sentence")
                     else:
                         # Try word boundary
-                        space_end = content.rfind(' ', max(start, end - chunk_length // 2), end + chunk_length // 4)
+                        space_end = content.rfind(' ', search_start, search_end)
                         if space_end != -1 and space_end > start:
                             end = space_end + 1
-                            logger.debug(f"Chunk {chunk_num + 1}: Split at word (pos {end})")
+                            logger.debug(f"Chunk {chunk_num + 1}/{num_chunks}: Split at word")
                         else:
-                            logger.debug(f"Chunk {chunk_num + 1}: No boundary found, hard split at {end}")
+                            logger.debug(f"Chunk {chunk_num + 1}/{num_chunks}: Hard split (no boundary)")
             
             chunk_text = content[start:end]
             chunks.append(chunk_text)
-            logger.debug(f"Added chunk {chunk_num + 1}/{num_chunks}: {len(chunk_text)} chars")
+            logger.info(f"Chunk {chunk_num + 1}/{num_chunks}: {len(chunk_text)} chars")
             
             start = end
         
-        logger.info(f"Created {len(chunks)} chunks from {content_len} chars")
+        logger.info(f"Created {len(chunks)} chunks")
         return chunks
     
-    def send_content(self, file_name: str, content: str, 
+    def send_content(self, file_name: str, content: str, file_size_bytes: int = None,
                     metadata: dict = None) -> Tuple[bool, str, str]:
         """
         Send content to n8n for processing, with automatic chunking for large files.
         
-        v4.4.4 FINAL: Dynamic chunking based on actual character count
-        For files larger than 50KB (50K characters):
-        1. Calculates exact number of chunks needed via ceiling division
-        2. Splits content into roughly equal chunks
-        3. Sends each chunk separately with position info
+        v4.4.4 FINAL: Chunks based on FILE SIZE IN BYTES (not character count)
+        For files larger than 50 KB:
+        1. Calculates chunk count from actual file size in bytes
+        2. Splits content proportionally into that many chunks
+        3. Sends each chunk separately
         4. Combines partial summaries into final output
         
         Args:
             file_name (str): Name of file
             content (str): Content to send
+            file_size_bytes (int): Original file size in bytes (IMPORTANT for correct chunking!)
             metadata (dict): Optional metadata
             
         Returns:
@@ -220,29 +222,40 @@ class N8NModel:
             
         Example:
             >>> model = N8NModel()
-            >>> # 181KB file (90.5K chars) → 2 chunks dynamically
+            >>> file_size = os.path.getsize('document.srt')  # 181990 bytes
             >>> success, summary, error = model.send_content(
-            ...     'investments.srt',
+            ...     'document.srt',
             ...     content,
+            ...     file_size_bytes=file_size  # PASS THE ACTUAL FILE SIZE!
             ... )
         """
-        content_size = len(content)
-        size_kb = content_size / 1024
+        content_len = len(content)
         
-        # v4.4.4 FINAL: Log actual character count
-        logger.info(f"Processing: {file_name} ({content_size} chars, ~{size_kb:.1f} KB)")
-        logger.debug(f"Chunk strategy: {self.chunk_size} chars per chunk (~{self.chunk_size/1024:.0f}KB)")
+        # v4.4.4 FINAL: If file_size_bytes not provided, estimate from content
+        if file_size_bytes is None:
+            # Fallback: estimate file size from content
+            # Assume average 2 bytes per character (UTF-16 consideration)
+            file_size_bytes = content_len * 2
+            logger.warning(f"file_size_bytes not provided, estimating as {file_size_bytes} bytes ({file_size_bytes/1024:.1f}KB)")
+        
+        file_kb = file_size_bytes / 1024
+        chunk_kb = self.chunk_size_bytes / 1024
+        
+        logger.info(f"Processing: {file_name}")
+        logger.info(f"  File size: {file_size_bytes} bytes ({file_kb:.1f}KB)")
+        logger.info(f"  Content: {content_len} characters")
+        logger.info(f"  Chunk strategy: {self.chunk_size_bytes} bytes ({chunk_kb:.0f}KB) per chunk")
         
         # Check if chunking is needed
-        if content_size <= self.chunk_size:
-            # Small file (≤50K chars) - send as is
-            logger.info(f"File size ({content_size} chars) within chunk limit, sending as single chunk")
+        if file_size_bytes <= self.chunk_size_bytes:
+            # Small file (≤50KB) - send as is
+            logger.info(f"File size ({file_kb:.1f}KB) within chunk limit, sending as single chunk")
             return self._send_single_chunk(file_name, content, metadata, chunk_number=None, total_chunks=None)
         
-        # Large file (>50K chars) - chunk and process
-        num_chunks = self.calculate_num_chunks(content_size)
+        # Large file (>50KB) - chunk and process
+        num_chunks = self.calculate_num_chunks(file_size_bytes)
         logger.info(f"File exceeds chunk size, splitting into {num_chunks} chunks...")
-        chunks = self._split_into_chunks(content, chunk_size=self.chunk_size)
+        chunks = self._split_into_chunks(content, file_size_bytes)
         logger.info(f"Split into {len(chunks)} chunks")
         
         return self._send_chunked_content(file_name, chunks, metadata)
@@ -639,16 +652,16 @@ class N8NModel:
             logger.error(f"Failed to save webhook to .env: {e}")
             return False
     
-    def set_chunk_size(self, size: int):
+    def set_chunk_size(self, size_bytes: int):
         """
         Change chunk size at runtime.
         
         Args:
-            size (int): New chunk size (will be validated)
+            size_bytes (int): New chunk size in bytes (will be validated)
         """
-        old_size = self.chunk_size
-        self.chunk_size = self._validate_chunk_size(size)
-        logger.info(f"Chunk size changed: {old_size} -> {self.chunk_size}")
+        old_size = self.chunk_size_bytes
+        self.chunk_size_bytes = self._validate_chunk_size_bytes(size_bytes)
+        logger.info(f"Chunk size changed: {old_size} -> {self.chunk_size_bytes} bytes")
     
     def get_last_response(self):
         """Get last HTTP response object (for debugging)"""
