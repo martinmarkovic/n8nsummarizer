@@ -86,7 +86,7 @@ class YouTubeSummarizerController:
         self.current_youtube_title = None
         self.current_transcript_format = None
         
-        logger.info("YouTubeSummarizerController initialized (v3.1.2)")
+        logger.info("YouTubeSummarizerController initialized")
     
     def handle_summarize_clicked(self):
         """
