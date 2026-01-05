@@ -41,6 +41,11 @@ New in v4.4.4 FINAL:
     - DEBUG LOGGING: Comprehensive N8N response logging
     - Better detection of test mode webhook issues
 
+New in v4.6:
+    - REMOVED: Multi-chunk wrapper text (headers, section labels, footers)
+    - OUTPUT: Only raw N8N/LM Studio content, no app-generated labels
+    - User-facing change: Cleaner output for both single and multi-chunk processing
+
 This is PURE business logic - NO UI dependencies.
 Reusable by any controller (File tab, Transcribe tab, etc.)
 """
@@ -462,9 +467,9 @@ class N8NModel:
     def _combine_summaries(self, file_name: str, summaries: List[str], total_chunks: int) -> str:
         """
         Combine partial summaries into single output.
-        
-        Intelligently merges summaries with proper formatting and context.
-        v4.4.3: Only combines actual content (empty responses filtered out)
+
+        v4.6: user-facing change – return only the raw N8N/LM Studio content
+        without any wrapper headers/footers or section labels.
         
         Args:
             file_name (str): Original file name
@@ -472,24 +477,19 @@ class N8NModel:
             total_chunks (int): Total number of chunks
             
         Returns:
-            str: Combined summary
+            str: Combined summary (raw content only)
         """
+        if not summaries:
+            return ""
+        
+        # If there is only one summary, just return it
         if len(summaries) == 1:
             return summaries[0]
         
-        # Build combined output - only with actual content
-        combined = f"[Multi-chunk Summary: {len(summaries)}/{total_chunks} chunks with content]\n"
-        combined += "=" * 70 + "\n\n"
+        # Just join all summaries with a blank line between them
+        combined = "\n\n".join(summaries)
         
-        for idx, summary in enumerate(summaries, 1):
-            combined += f"--- Section {idx} ---\n"
-            combined += summary
-            combined += "\n\n"
-        
-        combined += "=" * 70 + "\n"
-        combined += f"[End of Multi-chunk Summary]\n"
-        
-        logger.info(f"Combined {len(summaries)} partial summaries into final output")
+        logger.info(f"Combined {len(summaries)} partial summaries into final output (no wrapper text)")
         return combined
     
     def test_connection(self) -> bool:
