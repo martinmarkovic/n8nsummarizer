@@ -1,5 +1,5 @@
 """
-Transcribe Model v2.6 - Business logic for transcribe-anything wrapper
+Transcribe Model v2.7 - Business logic for transcribe-anything wrapper
 
 Responsibilities:
     - Call transcribe-anything CLI for local files and YouTube URLs
@@ -12,15 +12,16 @@ Responsibilities:
     - Cleanup temporary files
     - Load ANY available format if preferred not available
     - Handle Unicode filenames (Japanese, Korean, etc.)
+    - Sanitize output filenames for Windows filesystem
 
 Reusable by:
     - TranscriberTab (primary)
     - FileTab (secondary - transcribe files first)
     - Future tabs (bulk transcriber, translation, etc.)
 
-Version: 2.6
+Version: 2.7
 Updated: 2026-01-06
-Fixed: Unicode encoding with non-ASCII filenames
+Fixed: Output file path handling and error logging
 """
 import subprocess
 import tempfile
@@ -42,6 +43,7 @@ class TranscribeModel:
     - Multiple device types (CPU, CUDA, Insane Mode, MPS)
     - User-selected output formats
     - Unicode filenames (Japanese, Korean, Chinese, Cyrillic, etc.)
+    - Automatic filename sanitization for Windows filesystem
     
     Output handling:
     - Generates multiple formats (.txt, .srt, .vtt, .json, .tsv)
@@ -50,6 +52,7 @@ class TranscribeModel:
     - Loads ANY available format for display (fallback strategy)
     - Returns transcript content for processing
     - Cleans up temporary files
+    - Sanitizes output filenames to work on all filesystems
     """
     
     def __init__(self, transcribe_path: str = None):
@@ -69,7 +72,42 @@ class TranscribeModel:
             # Audio
             '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.aiff', '.au'
         }
-        logger.info("TranscribeModel initialized (transcribe-anything wrapper v2.6 - Unicode support)")
+        logger.info("TranscribeModel initialized (transcribe-anything wrapper v2.7 - Unicode + filename sanitization)")
+    
+    @staticmethod
+    def _sanitize_filename(filename: str) -> str:
+        """
+        Sanitize filename for Windows filesystem.
+        
+        Removes/replaces problematic characters:
+        - < > : " / \\ | ? *  (Windows reserved)
+        - Trims excessive whitespace
+        - Handles Unicode by converting problematic chars to underscore
+        
+        Args:
+            filename: Original filename
+            
+        Returns:
+            Sanitized filename safe for filesystem
+        """
+        # Replace Windows-forbidden characters
+        forbidden = r'[<>:"/\|?*]'
+        sanitized = re.sub(forbidden, '_', filename)
+        
+        # Replace multiple underscores with single
+        sanitized = re.sub(r'_+', '_', sanitized)
+        
+        # Remove trailing dots and spaces (Windows doesn't allow)
+        sanitized = sanitized.rstrip('. ')
+        
+        # Limit length to 200 chars (safe for most filesystems)
+        if len(sanitized) > 200:
+            # Keep extension, trim middle
+            name, ext = sanitized.rsplit('.', 1) if '.' in sanitized else (sanitized, '')
+            name = name[:190]
+            sanitized = f"{name}.{ext}" if ext else name
+        
+        return sanitized
     
     def transcribe_file(
         self,
@@ -113,7 +151,11 @@ class TranscribeModel:
                 output_dir = Path(output_dir)
             
             output_dir.mkdir(parents=True, exist_ok=True)
-            base_name = file_path.stem
+            
+            # v2.7: Sanitize base_name for filesystem compatibility
+            base_name = self._sanitize_filename(file_path.stem)
+            logger.info(f"Original filename: {file_path.stem}")
+            logger.info(f"Sanitized filename: {base_name}")
             
             # Use temp directory for transcription
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -190,6 +232,9 @@ class TranscribeModel:
                 video_id = self._extract_youtube_id(youtube_url)
                 base_name = video_id if video_id else "youtube_video"
             
+            # v2.7: Sanitize base_name
+            base_name = self._sanitize_filename(base_name)
+            
             logger.info(f"Transcribing YouTube video: {base_name}")
             
             # Use temp directory for transcription
@@ -241,6 +286,8 @@ class TranscribeModel:
         - Passing arguments as list (not shell string)
         - Setting proper encoding for subprocess
         
+        v2.7: Better error message logging
+        
         Returns:
             Tuple: (success, error_msg)
         """
@@ -285,8 +332,14 @@ class TranscribeModel:
                     logger.error(f"Details: {error_output[:200]}")
                     return False, error
                 
-                error = f"Transcription failed: {error_output[:500]}"  # Truncate long errors
-                logger.error(error)
+                # v2.7: Log full error for debugging
+                logger.error(f"Transcription process returned non-zero exit code: {result.returncode}")
+                logger.error(f"STDERR: {error_output[:500]}")
+                logger.error(f"STDOUT: {result.stdout[:500] if result.stdout else '(empty)'}")
+                
+                # Truncate for user display (just show first meaningful part)
+                display_error = error_output.split('\n')[0] if error_output else "Unknown error"
+                error = f"Transcription failed: {display_error}"
                 return False, error
             
             logger.debug(f"Transcription succeeded, stdout: {result.stdout[:100]}")
@@ -317,6 +370,7 @@ class TranscribeModel:
         - Deletes unwanted formats
         - Returns transcript content (loads ANY available format)
         - Generates metadata
+        - v2.7: Better error handling for file operations
         
         Returns:
             Tuple: (transcript_content_str, metadata_dict)
@@ -341,13 +395,19 @@ class TranscribeModel:
             # Priority order for loading transcript (if preferred format not available)
             load_priority = ['.srt', '.txt', '.vtt', '.json', '.tsv']
             
+            logger.info(f"Processing outputs from temp dir: {temp_path}")
+            logger.info(f"Files found in temp dir: {list(temp_path.glob('*'))}")
+            
             # Find and process output files
             for temp_file in temp_path.iterdir():
                 if not temp_file.is_file():
                     continue
                 
+                logger.debug(f"Found temp file: {temp_file.name}")
+                
                 # Check if it's an output file
                 if not (temp_file.name.startswith('out.') or temp_file.suffix in output_extensions):
+                    logger.debug(f"Skipping non-output file: {temp_file.name}")
                     continue
                 
                 # Determine final filename
@@ -359,9 +419,13 @@ class TranscribeModel:
                 final_path = output_dir / new_name
                 ext = temp_file.suffix.lower()
                 
+                logger.debug(f"Processing {temp_file.name} -> {new_name} (keep={ext in keep_formats})")
+                
                 # Check if we should keep this format
                 if ext in keep_formats:
                     try:
+                        # v2.7: Better error handling for file copy
+                        logger.info(f"Copying to output: {final_path}")
                         shutil.copy2(temp_file, final_path)
                         files_created.append(new_name)
                         metadata['files_kept'].append(new_name)
@@ -373,11 +437,21 @@ class TranscribeModel:
                                 if content.strip():
                                     transcript_content = content
                                     format_loaded = ext
-                                    logger.info(f"Loaded transcript from: {ext}")
+                                    logger.info(f"Loaded transcript from: {ext} ({len(content)} chars)")
                         
                         logger.info(f"Created: {new_name}")
                     except Exception as e:
-                        logger.warning(f"Failed to copy {temp_file.name}: {str(e)}")
+                        logger.error(f"Failed to copy {temp_file.name} to {final_path}: {str(e)}", exc_info=True)
+                        # v2.7: Don't fail completely - try to load from temp anyway
+                        try:
+                            with open(temp_file, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                                if content.strip() and transcript_content is None:
+                                    transcript_content = content
+                                    format_loaded = ext
+                                    logger.warning(f"Loaded transcript from temp location instead (copy failed): {ext}")
+                        except Exception as e2:
+                            logger.error(f"Also failed to load from temp: {str(e2)}")
                 else:
                     # Delete unwanted format
                     try:
@@ -396,12 +470,13 @@ class TranscribeModel:
                     ext = temp_file.suffix.lower()
                     if ext in output_extensions:
                         try:
+                            logger.info(f"Trying fallback format: {ext}")
                             with open(temp_file, 'r', encoding='utf-8') as f:
                                 content = f.read()
                                 if content.strip():
                                     transcript_content = content
                                     format_loaded = ext
-                                    logger.info(f"Loaded transcript from fallback format: {ext}")
+                                    logger.info(f"Loaded transcript from fallback format: {ext} ({len(content)} chars)")
                                     break
                         except Exception as e:
                             logger.warning(f"Failed to load {temp_file}: {str(e)}")
