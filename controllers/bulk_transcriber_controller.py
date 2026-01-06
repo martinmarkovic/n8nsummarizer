@@ -16,6 +16,7 @@ Orchestrates bulk media file transcription:
 Version: 1.0
 Created: 2026-01-06
 Phase: v5.0 - Bulk Transcription
+Fixed: 2026-01-06 - Use send_content() with file_path metadata
 """
 
 from pathlib import Path
@@ -36,7 +37,7 @@ class BulkTranscriberController:
     - Validation of source folder and media types
     - Discovery of matching files (mp4, mp3, wav, m4a, flac, aac, wma, mov, avi, mkv, webm) with optional recursive scanning
     - Background processing with threading
-    - N8N integration for transcription
+    - N8N integration for transcription (via send_content with file_path metadata)
     - Output folder and file management
     - Subfolder structure preservation
     - Real-time progress updates
@@ -219,7 +220,7 @@ class BulkTranscriberController:
         1. Create output folder structure
         2. For each file:
            - Update UI with current file
-           - Send to N8N for transcription
+           - Send file path to N8N for transcription (using send_content with metadata)
            - Save transcript in selected formats
            - Preserve subfolder structure in output
            - Log result (success/error)
@@ -263,10 +264,21 @@ class BulkTranscriberController:
                     
                     logger.info(f"Processing {idx}/{total}: {file_path.name}")
                     
+                    # Get file size for chunking reference
+                    file_size = file_path.stat().st_size
+                    
                     # Send to N8N for transcription
-                    # Note: N8N model should handle media files differently from text
-                    success, transcript, error = self.n8n_model.transcribe_media(
-                        file_path=str(file_path)
+                    # Use send_content() with metadata containing file_path
+                    # N8N workflow should extract file_path from metadata and use it for transcription
+                    success, transcript, error = self.n8n_model.send_content(
+                        file_name=file_path.name,
+                        content=str(file_path),  # Pass file path as content
+                        file_size_bytes=file_size,  # For reference
+                        metadata={
+                            'file_path': str(file_path),
+                            'media_file': True,
+                            'operation': 'transcription'
+                        }
                     )
                     
                     if success and transcript:
