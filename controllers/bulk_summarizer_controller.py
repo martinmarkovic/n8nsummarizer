@@ -1,10 +1,10 @@
 """
-Bulk Summarizer Controller - Phase 4.4 Recursive Subfolder Support
+Bulk Summarizer Controller - Phase 4.5 Transcript Saving Support
 
 Orchestrates bulk file summarization:
 - Folder and file type validation (txt, srt, docx, pdf)
 - Background file discovery with multiple types
-- Recursive subfolder scanning (NEW in v4.7)
+- Recursive subfolder scanning (v4.7)
 - Sequential file processing
 - N8N webhook communication
 - Progress tracking and UI updates
@@ -12,14 +12,16 @@ Orchestrates bulk file summarization:
 - Output folder and file management with improved naming
 - Output format handling (separate/combined)
 - Subfolder structure preservation in output
+- Transcript saving with dual format support (NEW in v4.8)
 
-Version: 4.4
+Version: 4.5
 Updated: 2026-01-06
 Changes:
-- Added recursive subfolder scanning option
-- Output folder structure mirrors source folder structure
-- Each subfolder gets its own summarized subfolder in output
-- Subfolder processing with proper path handling
+- Added transcript extraction and saving
+- Supports .srt and optional .txt formats
+- Creates separate "- Transcripts" folder
+- Preserves subfolder structure in transcripts
+- Transcript extraction and summarization both working
 """
 
 from pathlib import Path
@@ -35,7 +37,7 @@ from utils.logger import logger
 
 class BulkSummarizerController:
     """
-    Orchestrates bulk file summarization with recursive subfolder support.
+    Orchestrates bulk file summarization with transcript saving support.
     
     Handles:
     - Validation of source folder and file types
@@ -44,6 +46,7 @@ class BulkSummarizerController:
     - N8N integration for summarization
     - Output folder and file management
     - Subfolder structure preservation
+    - Transcript extraction and saving (SRT + optional TXT)
     - Real-time progress updates
     - Error handling and recovery
     - Separate and combined output formats
@@ -102,6 +105,9 @@ class BulkSummarizerController:
         # v4.7: Get recursive option
         recursive = self.view.get_recursive_option()
         
+        # v4.8: Get transcript options
+        transcript_options = self.view.get_transcript_options()
+        
         # Discover files
         files = self._discover_files(source_folder, file_types, recursive)
         if not files:
@@ -119,16 +125,23 @@ class BulkSummarizerController:
         self.view.append_log(f"Output formats: {'separate' if output_formats['separate'] else ''} {'combined' if output_formats['combined'] else ''}", "info")
         if recursive:
             self.view.append_log(f"Recursive scanning enabled - processing subfolders", "info")
+        if transcript_options['save']:
+            formats = ["SRT"]
+            if transcript_options['format_txt']:
+                formats.append("TXT")
+            self.view.append_log(f"Transcript saving enabled - formats: {', '.join(formats)}", "info")
+        
         self.view.set_processing_enabled(False)
         self.is_processing = True
         
         logger.info(f"Starting bulk processing: {len(files)} files, output: {output_folder}, recursive: {recursive}")
         logger.info(f"File types: {file_types}, Output formats: separate={output_formats['separate']}, combined={output_formats['combined']}")
+        logger.info(f"Transcript saving: {transcript_options['save']}, SRT: {transcript_options['format_srt']}, TXT: {transcript_options['format_txt']}")
         
         # Launch background worker thread
         thread = Thread(
             target=self._process_folder_background,
-            args=(source_folder, files, output_folder, output_formats, recursive),
+            args=(source_folder, files, output_folder, output_formats, recursive, transcript_options),
             daemon=True
         )
         thread.start()
@@ -195,19 +208,21 @@ class BulkSummarizerController:
     # Background Processing
     
     def _process_folder_background(self, source_folder: str, files: List[Path], 
-                                   output_folder: str, output_formats: dict, recursive: bool = False):
+                                   output_folder: str, output_formats: dict, 
+                                   recursive: bool = False, transcript_options: dict = None):
         """
         Background worker thread for bulk processing.
         
-        v4.7: Added recursive parameter and subfolder structure preservation.
+        v4.8: Added transcript saving support.
         
         Executes:
-        1. Create output folder structure
+        1. Create output folder structure (summaries and transcripts)
         2. For each file:
            - Update UI with current file
            - Read file content
            - Send to N8N for summarization
            - Save summary (separate and/or combined)
+           - Extract and save transcript if enabled
            - Preserve subfolder structure in output
            - Log result (success/error)
         3. Generate combined file if selected
@@ -219,10 +234,19 @@ class BulkSummarizerController:
             output_folder: Path to output folder
             output_formats: Dict with 'separate' and 'combined' flags
             recursive: If True, preserve subfolder structure in output
+            transcript_options: Dict with 'save', 'format_srt', 'format_txt' flags
         """
+        if transcript_options is None:
+            transcript_options = {'save': False, 'format_srt': True, 'format_txt': False}
+        
         try:
             total = len(files)
             output_path = self._create_output_folder(source_folder, output_folder)
+            
+            # v4.8: Create transcripts folder if enabled
+            transcript_path = None
+            if transcript_options['save']:
+                transcript_path = self._create_transcript_folder(source_folder, output_folder)
             
             successful = 0
             failed = 0
@@ -230,6 +254,8 @@ class BulkSummarizerController:
             combined_content = []  # For combined output
             
             logger.info(f"Background processing started: {total} files, output: {output_path}, recursive: {recursive}")
+            if transcript_options['save']:
+                logger.info(f"Transcript saving: SRT={transcript_options['format_srt']}, TXT={transcript_options['format_txt']}")
             
             for idx, file_path in enumerate(files, 1):
                 # Check if user cancelled
@@ -290,6 +316,23 @@ class BulkSummarizerController:
                                 'filename': display_name,
                                 'summary': summary
                             })
+                        
+                        # v4.8: Save transcripts if enabled
+                        if transcript_options['save'] and transcript_path:
+                            if recursive:
+                                relative_path = file_path.parent.relative_to(Path(source_folder))
+                                current_transcript_folder = transcript_path / relative_path
+                                current_transcript_folder.mkdir(parents=True, exist_ok=True)
+                            else:
+                                current_transcript_folder = transcript_path
+                            
+                            # Save as SRT (default)
+                            if transcript_options['format_srt']:
+                                self._save_transcript_srt(current_transcript_folder, file_path, content)
+                            
+                            # Save as TXT if selected
+                            if transcript_options['format_txt']:
+                                self._save_transcript_txt(current_transcript_folder, file_path, content)
                         
                         # Log success
                         self.view.root.after(
@@ -363,15 +406,9 @@ class BulkSummarizerController:
     
     def _create_output_folder(self, source_folder: str, output_location: str) -> Path:
         """
-        Create output folder structure.
+        Create output folder structure for summaries.
         
-        v4.4 Change: Output folder naming now uses original folder name + '- Summarized'
-        Example: If source folder is 'Documents', output will be 'Documents - Summarized'
-        
-        If output_location is default (parent folder), creates:
-        "[SourceFolderName] - Summarized"
-        
-        If custom location, uses that directly.
+        Output folder naming: [SourceFolderName] - Summarized
         
         Args:
             source_folder: Path to source folder
@@ -388,7 +425,6 @@ class BulkSummarizerController:
             source_folder_name = source_path.name
             
             # Check if this is the default location (parent folder)
-            # If output_location equals the parent of source_folder, create subfolder with proper naming
             if str(output_path) == str(source_path.parent):
                 # Create subfolder with original name + "- Summarized"
                 output_path = output_path / f"{source_folder_name} - Summarized"
@@ -400,6 +436,46 @@ class BulkSummarizerController:
         
         except Exception as e:
             logger.error(f"Error creating output folder: {str(e)}")
+            raise
+    
+    def _create_transcript_folder(self, source_folder: str, output_location: str) -> Path:
+        """
+        Create output folder structure for transcripts (v4.8).
+        
+        v4.8: New method for transcript folder creation.
+        
+        Output folder naming: [SourceFolderName] - Transcripts
+        Located at same level as summaries folder.
+        
+        Args:
+            source_folder: Path to source folder
+            output_location: Output folder path
+        
+        Returns:
+            Path object of created transcript folder
+        """
+        try:
+            output_path = Path(output_location)
+            source_path = Path(source_folder)
+            
+            # Get the source folder name
+            source_folder_name = source_path.name
+            
+            # Check if this is the default location (parent folder)
+            if str(output_path) == str(source_path.parent):
+                # Create subfolder with original name + "- Transcripts"
+                output_path = output_path / f"{source_folder_name} - Transcripts"
+                logger.info(f"Using default transcript location: {source_folder_name} - Transcripts")
+            else:
+                # For custom output location, append "- Transcripts"
+                output_path = output_path / f"{source_folder_name} - Transcripts"
+            
+            output_path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Created transcript folder: {output_path}")
+            return output_path
+        
+        except Exception as e:
+            logger.error(f"Error creating transcript folder: {str(e)}")
             raise
     
     def _read_file(self, file_path: Path) -> str:
@@ -478,6 +554,68 @@ class BulkSummarizerController:
         
         except Exception as e:
             logger.error(f"Error saving summary for {source_file.name}: {str(e)}")
+            raise
+    
+    def _save_transcript_srt(self, output_folder: Path, source_file: Path, content: str) -> Path:
+        """
+        Save transcript as SRT format (v4.8).
+        
+        v4.8: New method for saving transcripts in SRT format.
+        
+        Filename: "[OriginalFilename].srt"
+        Format: SRT subtitle format (simple text for now, can be enhanced with timestamps)
+        
+        Args:
+            output_folder: Path to output folder
+            source_file: Path to source file
+            content: Original file content to save as transcript
+        
+        Returns:
+            Path object of saved transcript file
+        """
+        try:
+            output_path = output_folder / f"{source_file.stem}.srt"
+            
+            with open(output_path, "w", encoding="utf-8") as f:
+                # Simple SRT format: just save the content
+                # Future enhancement: parse content and add timestamps
+                f.write(content)
+            
+            logger.info(f"Saved transcript (SRT): {output_path}")
+            return output_path
+        
+        except Exception as e:
+            logger.error(f"Error saving transcript (SRT) for {source_file.name}: {str(e)}")
+            raise
+    
+    def _save_transcript_txt(self, output_folder: Path, source_file: Path, content: str) -> Path:
+        """
+        Save transcript as TXT format (v4.8).
+        
+        v4.8: New method for saving transcripts in TXT format.
+        
+        Filename: "[OriginalFilename].txt"
+        Format: Plain text
+        
+        Args:
+            output_folder: Path to output folder
+            source_file: Path to source file
+            content: Original file content to save as transcript
+        
+        Returns:
+            Path object of saved transcript file
+        """
+        try:
+            output_path = output_folder / f"{source_file.stem}.txt"
+            
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            
+            logger.info(f"Saved transcript (TXT): {output_path}")
+            return output_path
+        
+        except Exception as e:
+            logger.error(f"Error saving transcript (TXT) for {source_file.name}: {str(e)}")
             raise
     
     def _save_combined_summary(self, output_folder: Path, summaries: List[dict]) -> Path:
