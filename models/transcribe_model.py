@@ -1,5 +1,5 @@
 """
-Transcribe Model v2.5 - Business logic for transcribe-anything wrapper
+Transcribe Model v2.6 - Business logic for transcribe-anything wrapper
 
 Responsibilities:
     - Call transcribe-anything CLI for local files and YouTube URLs
@@ -11,19 +11,22 @@ Responsibilities:
     - Return SRT transcript for processing
     - Cleanup temporary files
     - Load ANY available format if preferred not available
+    - Handle Unicode filenames (Japanese, Korean, etc.)
 
 Reusable by:
     - TranscriberTab (primary)
     - FileTab (secondary - transcribe files first)
     - Future tabs (bulk transcriber, translation, etc.)
 
-Version: 2.5
-Updated: 2025-12-07
+Version: 2.6
+Updated: 2026-01-06
+Fixed: Unicode encoding with non-ASCII filenames
 """
 import subprocess
 import tempfile
 import shutil
 import re
+import os
 from pathlib import Path
 from typing import Tuple, Optional, Dict, List
 from utils.logger import logger
@@ -38,6 +41,7 @@ class TranscribeModel:
     - YouTube videos and playlists
     - Multiple device types (CPU, CUDA, Insane Mode, MPS)
     - User-selected output formats
+    - Unicode filenames (Japanese, Korean, Chinese, Cyrillic, etc.)
     
     Output handling:
     - Generates multiple formats (.txt, .srt, .vtt, .json, .tsv)
@@ -65,7 +69,7 @@ class TranscribeModel:
             # Audio
             '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.aiff', '.au'
         }
-        logger.info("TranscribeModel initialized (transcribe-anything wrapper v2.5)")
+        logger.info("TranscribeModel initialized (transcribe-anything wrapper v2.6 - Unicode support)")
     
     def transcribe_file(
         self,
@@ -78,7 +82,7 @@ class TranscribeModel:
         Transcribe a local media file.
         
         Args:
-            file_path: Path to local media file
+            file_path: Path to local media file (supports Unicode filenames)
             device: "cpu", "cuda", "insane", or "mps"
             output_dir: Where to save transcripts (None = same as input file)
             keep_formats: File formats to keep ['.txt', '.srt']
@@ -232,35 +236,60 @@ class TranscribeModel:
         """
         Execute transcribe-anything CLI command.
         
+        v2.6: Handle Unicode filenames by:
+        - Using UTF-8 encoding environment variable
+        - Passing arguments as list (not shell string)
+        - Setting proper encoding for subprocess
+        
         Returns:
             Tuple: (success, error_msg)
         """
         try:
-            # Build command
+            # Build command as list (safer for Unicode handling)
             cmd = [
                 'transcribe-anything',
-                f'"{input_path}"',
-                f'--device {device}',
-                f'--output_dir "{output_dir}"'
+                input_path,
+                '--device', device,
+                '--output_dir', output_dir
             ]
             
-            cmd_str = ' '.join(cmd)
-            logger.info(f"Running: {cmd_str}")
+            logger.info(f"Running: {' '.join(cmd[:2])} ... --device {device}")
+            logger.debug(f"Full command: {' '.join(cmd)}")
             
-            # Execute command
+            # Set up environment to handle Unicode
+            env = os.environ.copy()
+            # Force UTF-8 encoding for subprocess
+            env['PYTHONIOENCODING'] = 'utf-8'
+            env['PYTHONLEGACYWINDOWSSTDIO'] = '0'
+            
+            # Execute command with proper encoding
+            # Use shell=False when passing list (more secure, handles Unicode better)
             result = subprocess.run(
-                cmd_str,
-                shell=True,
+                cmd,
                 capture_output=True,
                 text=True,
-                timeout=1800  # 30 minutes
+                timeout=1800,  # 30 minutes
+                env=env,
+                encoding='utf-8',  # Explicitly set UTF-8 encoding
+                errors='replace'   # Replace encoding errors instead of failing
             )
             
             if result.returncode != 0:
-                error = f"Transcription failed: {result.stderr or result.stdout}"
+                # Extract meaningful error from stderr/stdout
+                error_output = result.stderr or result.stdout
+                
+                # v2.6: Handle Unicode encoding errors gracefully
+                if 'UnicodeEncodeError' in error_output or 'charmap' in error_output:
+                    error = f"Unicode filename error: filename contains characters not supported by system encoding. Try renaming file to ASCII characters only."
+                    logger.error(f"Transcription failed with Unicode error for: {input_path}")
+                    logger.error(f"Details: {error_output[:200]}")
+                    return False, error
+                
+                error = f"Transcription failed: {error_output[:500]}"  # Truncate long errors
                 logger.error(error)
                 return False, error
             
+            logger.debug(f"Transcription succeeded, stdout: {result.stdout[:100]}")
             return True, None
         
         except subprocess.TimeoutExpired:
