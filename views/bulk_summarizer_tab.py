@@ -1,18 +1,22 @@
 """
-Bulk Summarizer Tab - Phase 4.3 Recursive Subfolder Support
+Bulk Summarizer Tab - Phase 4.4 Transcript Saving Support
 
 Manages the bulk file summarization interface:
 - File type selection with multiple checkboxes (txt, srt, docx, pdf)
 - Output format options (separate files, combined file)
-- Output location selection (default or custom)
-- Recursive subfolder scanning option (NEW in v4.7)
+- Transcript saving options (NEW in v4.8)
+  * Save transcripts in separate folder
+  * Default: Save as .srt files
+  * Optional: Keep both .srt and .txt transcripts
+- Output location selection
+- Recursive subfolder scanning option
 - Progress tracking
 - Status logging
 - Remember last choice in .env
 
-Version: 4.3
+Version: 4.4
 Created: 2025-12-10
-Updated: 2026-01-06 (v4.7 - Added recursive subfolder support)
+Updated: 2026-01-06 (v4.8 - Added transcript saving with dual format support)
 """
 
 import tkinter as tk
@@ -25,7 +29,7 @@ from utils.logger import logger
 
 
 class BulkSummarizerTab(BaseTab):
-    """UI for bulk file summarization (Phase 4.3 - with recursive subfolders)"""
+    """UI for bulk file summarization (Phase 4.4 - with transcript saving)"""
     
     def __init__(self, notebook):
         # CRITICAL: Initialize variables BEFORE calling super().__init__()
@@ -43,6 +47,11 @@ class BulkSummarizerTab(BaseTab):
         # Output format options (multiple checkboxes)
         self.output_separate = tk.BooleanVar(value=True)
         self.output_combined = tk.BooleanVar(value=False)
+        
+        # v4.8: Transcript saving options
+        self.save_transcripts = tk.BooleanVar(value=False)
+        self.transcript_format_srt = tk.BooleanVar(value=True)  # Default: SRT
+        self.transcript_format_txt = tk.BooleanVar(value=False)  # Optional: Also save TXT
         
         # v4.7: Recursive subfolder scanning
         self.recursive_subfolders = tk.BooleanVar(value=False)
@@ -71,19 +80,21 @@ class BulkSummarizerTab(BaseTab):
         2. File Type Selection (Checkboxes)
         3. Recursive Subfolder Option (NEW v4.7)
         4. Output Format Options (Checkboxes)
-        5. Output Location Selection
-        6. Processing Controls
-        7. Progress Tracking
-        8. Status Log
+        5. Transcript Saving Options (NEW v4.8)
+        6. Output Location Selection
+        7. Processing Controls
+        8. Progress Tracking
+        9. Status Log
         """
         # Make tab expand
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(7, weight=1)
+        self.rowconfigure(8, weight=1)
         
         self._setup_folder_selection()
         self._setup_file_type()
         self._setup_recursive_option()  # NEW in v4.7
         self._setup_output_format()
+        self._setup_transcript_options()  # NEW in v4.8
         self._setup_output_location()
         self._setup_processing_section()
         self._setup_progress_section()
@@ -268,10 +279,68 @@ class BulkSummarizerTab(BaseTab):
         )
         info_label.pack(anchor=tk.W, padx=10, pady=(10, 5))
     
+    def _setup_transcript_options(self):
+        """
+        v4.8: Checkboxes for transcript saving options.
+        
+        Features:
+        - Save transcripts in separate folder next to summaries
+        - Folder name: Original name + " - Transcripts"
+        - Default: Save as .srt files
+        - Optional: Also keep .txt format
+        - Works with all file types
+        """
+        trans_frame = ttk.LabelFrame(self, text="Transcript Options (NEW)")
+        trans_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
+        
+        # Main checkbox
+        ttk.Checkbutton(
+            trans_frame,
+            text="Save transcripts as well",
+            variable=self.save_transcripts,
+            command=self._on_transcript_option_changed
+        ).pack(anchor=tk.W, padx=10, pady=5)
+        
+        # Format options (indented)
+        format_frame = ttk.Frame(trans_frame)
+        format_frame.pack(anchor=tk.W, padx=30, pady=5)
+        
+        ttk.Checkbutton(
+            format_frame,
+            text="Save as .srt (Default)",
+            variable=self.transcript_format_srt,
+            state=tk.DISABLED
+        ).pack(anchor=tk.W, pady=3)
+        
+        ttk.Checkbutton(
+            format_frame,
+            text="Also keep .txt transcripts",
+            variable=self.transcript_format_txt,
+            command=self._save_preferences
+        ).pack(anchor=tk.W, pady=3)
+        
+        # Info text
+        info_label = ttk.Label(
+            trans_frame,
+            text="Saves in: [FolderName - Transcripts] next to [FolderName - Summarized]",
+            foreground="gray",
+            font=("TkDefaultFont", 9)
+        )
+        info_label.pack(anchor=tk.W, padx=10, pady=(10, 5))
+    
+    def _on_transcript_option_changed(self):
+        """Called when transcript saving option changes"""
+        enabled = self.save_transcripts.get()
+        self.append_log(
+            f"Transcript saving: {'Enabled' if enabled else 'Disabled'}",
+            "info"
+        )
+        self._save_preferences()
+    
     def _setup_output_location(self):
         """Radio buttons for output location"""
         loc_frame = ttk.LabelFrame(self, text="Output Location")
-        loc_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
+        loc_frame.grid(row=5, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         loc_frame.columnconfigure(1, weight=1)
         
         ttk.Radiobutton(
@@ -325,7 +394,7 @@ class BulkSummarizerTab(BaseTab):
     def _setup_processing_section(self):
         """Start/Cancel buttons"""
         proc_frame = ttk.LabelFrame(self, text="Processing")
-        proc_frame.grid(row=5, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
+        proc_frame.grid(row=6, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         proc_frame.columnconfigure(0, weight=1)
         
         info_frame = ttk.Frame(proc_frame)
@@ -360,7 +429,7 @@ class BulkSummarizerTab(BaseTab):
     def _setup_progress_section(self):
         """Progress bar and current file info"""
         prog_frame = ttk.LabelFrame(self, text="Progress")
-        prog_frame.grid(row=6, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
+        prog_frame.grid(row=7, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         prog_frame.columnconfigure(0, weight=1)
         
         self.current_file_var = tk.StringVar(value="Idle")
@@ -379,7 +448,7 @@ class BulkSummarizerTab(BaseTab):
     def _setup_status_log(self):
         """Status log with scroll"""
         log_frame = ttk.LabelFrame(self, text="Status Log")
-        log_frame.grid(row=7, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), 
+        log_frame.grid(row=8, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), 
                       padx=10, pady=10)
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
@@ -442,6 +511,23 @@ class BulkSummarizerTab(BaseTab):
             bool: True if recursive scanning is enabled
         """
         return self.recursive_subfolders.get()
+    
+    def get_transcript_options(self) -> dict:
+        """
+        v4.8: Get transcript saving options.
+        
+        Returns:
+            dict: {
+                'save': bool - Whether to save transcripts,
+                'format_srt': bool - Always True (default format),
+                'format_txt': bool - Whether to also save .txt format
+            }
+        """
+        return {
+            "save": self.save_transcripts.get(),
+            "format_srt": self.transcript_format_srt.get(),
+            "format_txt": self.transcript_format_txt.get()
+        }
     
     def set_processing_enabled(self, enabled: bool):
         """Enable/disable processing buttons"""
@@ -538,6 +624,10 @@ class BulkSummarizerTab(BaseTab):
                             self.output_combined.set(line.split("=")[1].lower() == "true")
                         elif line.startswith("BULK_RECURSIVE_SUBFOLDERS="):
                             self.recursive_subfolders.set(line.split("=")[1].lower() == "true")
+                        elif line.startswith("BULK_SAVE_TRANSCRIPTS="):
+                            self.save_transcripts.set(line.split("=")[1].lower() == "true")
+                        elif line.startswith("BULK_TRANSCRIPT_FORMAT_TXT="):
+                            self.transcript_format_txt.set(line.split("=")[1].lower() == "true")
             logger.info("Bulk Summarizer preferences loaded")
         except Exception as e:
             logger.warning(f"Could not load preferences: {str(e)}")
@@ -576,6 +666,8 @@ class BulkSummarizerTab(BaseTab):
             env_content["BULK_OUTPUT_SEPARATE"] = str(self.output_separate.get())
             env_content["BULK_OUTPUT_COMBINED"] = str(self.output_combined.get())
             env_content["BULK_RECURSIVE_SUBFOLDERS"] = str(self.recursive_subfolders.get())
+            env_content["BULK_SAVE_TRANSCRIPTS"] = str(self.save_transcripts.get())
+            env_content["BULK_TRANSCRIPT_FORMAT_TXT"] = str(self.transcript_format_txt.get())
             
             # Write back
             with open(env_path, "w") as f:
