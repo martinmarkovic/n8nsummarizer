@@ -1,10 +1,10 @@
 """
-Main Window GUI v4.3 - Enhanced Preferences Management
+Main Window GUI v5.0 - Bulk Transcriber Integration
 
 This window manages:
 - Header (title + font size + theme toggle)
 - Tab container (notebook)
-- Tab initialization (FileTab, YouTubeSummarizerTab, TranscriberTab, BulkSummarizerTab)
+- Tab initialization (FileTab, YouTubeSummarizerTab, TranscriberTab, BulkSummarizerTab, BulkTranscriberTab)
 - Theme management
 - Font size management with .env persistence
 - Status bar
@@ -21,6 +21,14 @@ v4.4.1 Changes:
 - Fixed: Font size label shows correct value on app load
 - Fixed: Text widgets use loaded font size from initialization
 
+v5.0 Changes:
+- Added 5th tab: Bulk Transcriber for folder-level transcription
+- Fixed font loading bug: font size now loads correctly on app startup
+- Added recursive subfolder scanning for transcriber
+- Media format selection with checkboxes (11 formats total)
+- Output format options (SRT, TXT, VTT, JSON)
+- Preference persistence for transcriber settings
+
 Created: 2025-11-30
 Refactored: 2025-12-07 (v2.2 - Views refactoring)
 Updated: 2025-12-07 (v2.3 - Transcriber tab integration)
@@ -33,7 +41,8 @@ Complete: 2025-12-10 (v4.1 - Phase 4.1 full controller implementation)
 Advanced: 2025-12-11 (v4.2 - Advanced Bulk Options - Phase 4.2)
 Enhanced: 2025-12-23 (v4.3 - Font size .env persistence)
 Fixed: 2025-12-27 (v4.4.1 - Font size loading on startup)
-Version: 4.4.1
+Added: 2026-01-06 (v5.0 - Bulk Transcriber tab integration, fixed font loading bug)
+Version: 5.0
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -49,6 +58,7 @@ from views.file_tab import FileTab
 from views.youtube_summarizer_tab import YouTubeSummarizerTab
 from views.transcriber_tab import TranscriberTab
 from views.bulk_summarizer_tab import BulkSummarizerTab
+from views.bulk_transcriber_tab import BulkTranscriberTab
 
 # Load environment variables
 load_dotenv()
@@ -66,11 +76,12 @@ class MainWindow:
     - Theme management
     - Status bar
     
-    Tab order (v4.3):
+    Tab order (v5.0):
     1. File Summarizer
     2. YouTube Summarization (v3.0)
     3. Transcriber
     4. Bulk Summarizer (Phase 4.2 - Advanced Options)
+    5. Bulk Transcriber (Phase 5.0 - Folder Transcription)
     """
     
     # Font sizes
@@ -87,7 +98,7 @@ class MainWindow:
             root: Tkinter root window
         """
         self.root = root
-        self.root.title(f"{APP_TITLE} v4.3")
+        self.root.title(f"{APP_TITLE} v5.0")
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
         
@@ -110,7 +121,7 @@ class MainWindow:
         
         self._apply_theme()
         
-        logger.info(f"MainWindow initialized (v4.3 - {self.current_theme} theme, {self.current_font_size}px font)")
+        logger.info(f"MainWindow initialized (v5.0 - {self.current_theme} theme, {self.current_font_size}px font)")
     
     def _load_font_size_from_env(self) -> int:
         """
@@ -187,7 +198,7 @@ class MainWindow:
         Creates:
         - Main frame
         - Header (title + font size + theme toggle)
-        - Tab notebook with FileTab, YouTubeSummarizerTab, TranscriberTab, and BulkSummarizerTab
+        - Tab notebook with FileTab, YouTubeSummarizerTab, TranscriberTab, BulkSummarizerTab, and BulkTranscriberTab
         - Status bar
         """
         # Main frame
@@ -220,7 +231,7 @@ class MainWindow:
         
         self.title_label = ttk.Label(
             header_frame,
-            text=f"{APP_TITLE} v4.3",
+            text=f"{APP_TITLE} v5.0",
             font=("Segoe UI", 14, "bold")
         )
         self.title_label.grid(row=0, column=0, sticky=tk.W)
@@ -269,13 +280,14 @@ class MainWindow:
     
     def _setup_tabs(self, parent):
         """
-        Setup tab notebook with FileTab, YouTubeSummarizerTab, TranscriberTab, and BulkSummarizerTab.
+        Setup tab notebook with FileTab, YouTubeSummarizerTab, TranscriberTab, BulkSummarizerTab, and BulkTranscriberTab.
         
-        Tab order (v4.3):
+        Tab order (v5.0):
         1. File Summarizer
         2. YouTube Summarization (v3.0)
         3. Transcriber
         4. Bulk Summarizer (Phase 4.2 - Advanced Options)
+        5. Bulk Transcriber (Phase 5.0 - Folder Transcription)
         
         Args:
             parent: Parent frame
@@ -300,7 +312,11 @@ class MainWindow:
         self.bulk_summarizer_tab = BulkSummarizerTab(self.notebook)
         self.notebook.add(self.bulk_summarizer_tab, text="📦 Bulk Summarizer")
         
-        logger.info("All tabs initialized (Phase 4.3 Enhanced Preferences)")
+        # Tab 5: Bulk Transcriber (Phase 5.0) - NEW
+        self.bulk_transcriber_tab = BulkTranscriberTab(self.notebook)
+        self.notebook.add(self.bulk_transcriber_tab, text="🎬 Bulk Transcriber")
+        
+        logger.info("All tabs initialized (Phase 5.0 - Bulk Transcriber)")
     
     def _setup_status_bar(self, parent):
         """
@@ -370,6 +386,10 @@ class MainWindow:
         if hasattr(self, 'bulk_summarizer_tab'):
             self.bulk_summarizer_tab.status_log.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
         
+        # Bulk Transcriber tab (NEW)
+        if hasattr(self, 'bulk_transcriber_tab'):
+            self.bulk_transcriber_tab.status_log.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
+        
         # Title label
         if hasattr(self, 'title_label'):
             self.title_label.configure(foreground=colors['text_primary'])
@@ -426,6 +446,7 @@ class MainWindow:
         Apply current font size to all text widgets.
         
         v4.4.1: Now called during initialization to apply loaded font size
+        v5.0: Now also applies to Bulk Transcriber tab
         """
         # Update display label
         self.font_size_var.set(f"{self.current_font_size}px")
@@ -448,6 +469,10 @@ class MainWindow:
         if hasattr(self, 'bulk_summarizer_tab'):
             self.bulk_summarizer_tab.status_log.configure(font=("Segoe UI", self.current_font_size))
         
+        # Apply to Bulk Transcriber tab (NEW)
+        if hasattr(self, 'bulk_transcriber_tab'):
+            self.bulk_transcriber_tab.status_log.configure(font=("Segoe UI", self.current_font_size))
+        
         logger.debug(f"Applied font size {self.current_font_size}px to all text widgets")
     
     # Status bar methods
@@ -469,7 +494,7 @@ class MainWindow:
         Get currently active tab.
         
         Returns:
-            Current tab widget (FileTab, YouTubeSummarizerTab, TranscriberTab, or BulkSummarizerTab)
+            Current tab widget (FileTab, YouTubeSummarizerTab, TranscriberTab, BulkSummarizerTab, or BulkTranscriberTab)
         """
         tab_index = self.notebook.index(self.notebook.select())
         if tab_index == 0:
@@ -480,4 +505,6 @@ class MainWindow:
             return self.transcriber_tab
         elif tab_index == 3:
             return self.bulk_summarizer_tab
+        elif tab_index == 4:
+            return self.bulk_transcriber_tab
         return None
