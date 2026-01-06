@@ -11,9 +11,14 @@ Manages the bulk audio/video transcription interface:
 - Status logging
 - Remember last choice in .env
 
-Version: 1.0
+Layout (v5.0.1):
+- Row 0: Browse section (100% width)
+- Rows 1-8: Left column (controls) + Right column (status log)
+
+Version: 1.1
 Created: 2026-01-06
 Phase: v5.0 - Bulk Transcription
+Updated: 2026-01-06 (v5.0.1 - Two-column layout)
 """
 
 import tkinter as tk
@@ -76,37 +81,36 @@ class BulkTranscriberTab(BaseTab):
     
     def _setup_ui(self):
         """
-        Setup bulk transcriber UI.
+        Setup bulk transcriber UI with two-column layout.
         
-        Sections:
-        1. Folder Selection
-        2. Media Type Selection (Checkboxes - Video)
-        3. Media Type Selection (Checkboxes - Audio)
-        4. Scanning Options (Recursive)
-        5. Output Format Options (Checkboxes)
-        6. Output Location Selection
-        7. Processing Controls
-        8. Progress Tracking
-        9. Status Log
+        Layout:
+        - Row 0: Browse section (spans 2 columns, 100% width)
+        - Rows 1-8: Left column (controls) + Right column (status log)
         """
-        # Make tab expand
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(8, weight=1)
+        # Configure grid to have 2 columns
+        self.columnconfigure(0, weight=0)  # Left column (controls)
+        self.columnconfigure(1, weight=1)  # Right column (status log, expands)
+        self.rowconfigure(8, weight=1)     # Status log area expands vertically
         
+        # Row 0: Browse section (full width)
         self._setup_folder_selection()
-        self._setup_media_type_video()      # NEW: Video formats
-        self._setup_media_type_audio()      # NEW: Audio formats
+        
+        # Left column (Column 0) - All control sections
+        self._setup_media_type_video()      
+        self._setup_media_type_audio()      
         self._setup_recursive_option()
         self._setup_output_format()
         self._setup_output_location()
         self._setup_processing_section()
         self._setup_progress_section()
+        
+        # Right column (Column 1, Row 0-8) - Status log
         self._setup_status_log()
     
     def _setup_folder_selection(self):
-        """Folder selection with browse button"""
+        """Folder selection with browse button - Full width at top"""
         folder_frame = ttk.LabelFrame(self, text="Select Media Folder")
-        folder_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
+        folder_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=10, pady=10)
         folder_frame.columnconfigure(1, weight=1)
         
         ttk.Button(
@@ -118,7 +122,7 @@ class BulkTranscriberTab(BaseTab):
         ttk.Label(
             folder_frame,
             textvariable=self.source_folder_var
-        ).pack(side=tk.LEFT, padx=10, pady=5)
+        ).pack(side=tk.LEFT, padx=10, pady=5, fill=tk.X, expand=True)
     
     def _browse_folder(self):
         """Open folder selection dialog"""
@@ -174,7 +178,7 @@ class BulkTranscriberTab(BaseTab):
         return count
     
     def _setup_media_type_video(self):
-        """Checkboxes for video format selection"""
+        """Checkboxes for video format selection - Left column"""
         video_frame = ttk.LabelFrame(self, text="Video Formats")
         video_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         
@@ -195,7 +199,7 @@ class BulkTranscriberTab(BaseTab):
             ).pack(anchor=tk.W, padx=10, pady=3)
     
     def _setup_media_type_audio(self):
-        """Checkboxes for audio format selection"""
+        """Checkboxes for audio format selection - Left column"""
         audio_frame = ttk.LabelFrame(self, text="Audio Formats")
         audio_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         
@@ -243,7 +247,7 @@ class BulkTranscriberTab(BaseTab):
         self._save_preferences()
     
     def _setup_recursive_option(self):
-        """Checkbox for recursive subfolder scanning"""
+        """Checkbox for recursive subfolder scanning - Left column"""
         recursive_frame = ttk.LabelFrame(self, text="Scanning Options")
         recursive_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         
@@ -280,7 +284,7 @@ class BulkTranscriberTab(BaseTab):
         self._save_preferences()
     
     def _setup_output_format(self):
-        """Checkboxes for transcript output format options"""
+        """Checkboxes for transcript output format options - Left column"""
         output_frame = ttk.LabelFrame(self, text="Output Transcript Formats")
         output_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         
@@ -308,7 +312,7 @@ class BulkTranscriberTab(BaseTab):
         info_label.pack(anchor=tk.W, padx=10, pady=(10, 5))
     
     def _setup_output_location(self):
-        """Radio buttons for output location"""
+        """Radio buttons for output location - Left column"""
         loc_frame = ttk.LabelFrame(self, text="Output Location")
         loc_frame.grid(row=5, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         loc_frame.columnconfigure(1, weight=1)
@@ -362,7 +366,7 @@ class BulkTranscriberTab(BaseTab):
             )
     
     def _setup_processing_section(self):
-        """Start/Cancel buttons"""
+        """Start/Cancel buttons - Left column"""
         proc_frame = ttk.LabelFrame(self, text="Processing")
         proc_frame.grid(row=6, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         proc_frame.columnconfigure(0, weight=1)
@@ -397,7 +401,7 @@ class BulkTranscriberTab(BaseTab):
         self.cancel_button.pack(side=tk.LEFT, padx=5)
     
     def _setup_progress_section(self):
-        """Progress bar and current file info"""
+        """Progress bar and current file info - Left column"""
         prog_frame = ttk.LabelFrame(self, text="Progress")
         prog_frame.grid(row=7, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         prog_frame.columnconfigure(0, weight=1)
@@ -416,9 +420,9 @@ class BulkTranscriberTab(BaseTab):
         ttk.Label(prog_frame, textvariable=self.progress_text_var).pack(anchor=tk.W, padx=10, pady=5)
     
     def _setup_status_log(self):
-        """Status log with scroll"""
+        """Status log with scroll - Right column (spans rows 1-8)"""
         log_frame = ttk.LabelFrame(self, text="Status Log")
-        log_frame.grid(row=8, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), 
+        log_frame.grid(row=1, column=1, rowspan=7, sticky=(tk.W, tk.E, tk.N, tk.S), 
                       padx=10, pady=10)
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
@@ -429,7 +433,7 @@ class BulkTranscriberTab(BaseTab):
         self.status_log = tk.Text(
             log_frame,
             height=10,
-            width=60,
+            width=40,
             yscrollcommand=scrollbar.set,
             state=tk.DISABLED
         )
@@ -550,8 +554,12 @@ class BulkTranscriberTab(BaseTab):
     
     def _on_start_clicked(self):
         """Called when Start button clicked"""
+        logger.debug(f"Bulk Transcriber Start button clicked. Callback registered: {self.on_start_requested is not None}")
         if self.on_start_requested:
             self.on_start_requested()
+        else:
+            logger.warning("No start callback registered for Bulk Transcriber!")
+            self.append_log("ERROR: Start callback not registered. Check main.py", "error")
     
     def _on_cancel_clicked(self):
         """Called when Cancel button clicked"""
@@ -563,6 +571,7 @@ class BulkTranscriberTab(BaseTab):
     def set_on_start_requested(self, callback):
         """Register callback for start button"""
         self.on_start_requested = callback
+        logger.info(f"Bulk Transcriber start callback registered: {callback}")
     
     def set_on_cancel_requested(self, callback):
         """Register callback for cancel button"""
