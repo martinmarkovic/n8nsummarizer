@@ -1,5 +1,5 @@
 """
-Transcribe Model v2.7 - Business logic for transcribe-anything wrapper
+Transcribe Model v2.8 - Business logic for transcribe-anything wrapper
 
 Responsibilities:
     - Call transcribe-anything CLI for local files and YouTube URLs
@@ -13,15 +13,16 @@ Responsibilities:
     - Load ANY available format if preferred not available
     - Handle Unicode filenames (Japanese, Korean, etc.)
     - Sanitize output filenames for Windows filesystem
+    - Handle Windows MAX_PATH (260 character limit)
 
 Reusable by:
     - TranscriberTab (primary)
     - FileTab (secondary - transcribe files first)
     - Future tabs (bulk transcriber, translation, etc.)
 
-Version: 2.7
+Version: 2.8
 Updated: 2026-01-06
-Fixed: Output file path handling and error logging
+Fixed: Windows MAX_PATH (260 char limit) with intelligent filename truncation
 """
 import subprocess
 import tempfile
@@ -44,6 +45,7 @@ class TranscribeModel:
     - User-selected output formats
     - Unicode filenames (Japanese, Korean, Chinese, Cyrillic, etc.)
     - Automatic filename sanitization for Windows filesystem
+    - Windows MAX_PATH compliance (260 character limit)
     
     Output handling:
     - Generates multiple formats (.txt, .srt, .vtt, .json, .tsv)
@@ -53,7 +55,13 @@ class TranscribeModel:
     - Returns transcript content for processing
     - Cleans up temporary files
     - Sanitizes output filenames to work on all filesystems
+    - Truncates filenames to stay within Windows MAX_PATH (260 chars)
     """
+    
+    # Windows MAX_PATH limit (260 characters total)
+    WINDOWS_MAX_PATH = 260
+    # Reserve 30 chars for extension, subfolder paths, etc.
+    SAFE_FILENAME_MAX = 80  # Conservative limit for filename portion
     
     def __init__(self, transcribe_path: str = None):
         """
@@ -72,23 +80,28 @@ class TranscribeModel:
             # Audio
             '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.aiff', '.au'
         }
-        logger.info("TranscribeModel initialized (transcribe-anything wrapper v2.7 - Unicode + filename sanitization)")
+        logger.info("TranscribeModel initialized (transcribe-anything wrapper v2.8 - MAX_PATH compliance)")
     
     @staticmethod
-    def _sanitize_filename(filename: str) -> str:
+    def _sanitize_filename(filename: str, output_dir: Optional[Path] = None) -> str:
         """
-        Sanitize filename for Windows filesystem.
+        Sanitize filename for Windows filesystem with MAX_PATH compliance.
+        
+        v2.8: Takes output_dir into account and truncates intelligently
+        to ensure final path stays under Windows MAX_PATH (260 chars)
         
         Removes/replaces problematic characters:
         - < > : " / \\ | ? *  (Windows reserved)
         - Trims excessive whitespace
         - Handles Unicode by converting problematic chars to underscore
+        - Truncates to fit within MAX_PATH when necessary
         
         Args:
             filename: Original filename
+            output_dir: Output directory path (to calculate remaining space)
             
         Returns:
-            Sanitized filename safe for filesystem
+            Sanitized filename safe for filesystem and path length
         """
         # Replace Windows-forbidden characters
         forbidden = r'[<>:"/\|?*]'
@@ -100,12 +113,32 @@ class TranscribeModel:
         # Remove trailing dots and spaces (Windows doesn't allow)
         sanitized = sanitized.rstrip('. ')
         
-        # Limit length to 200 chars (safe for most filesystems)
-        if len(sanitized) > 200:
-            # Keep extension, trim middle
-            name, ext = sanitized.rsplit('.', 1) if '.' in sanitized else (sanitized, '')
-            name = name[:190]
-            sanitized = f"{name}.{ext}" if ext else name
+        # v2.8: Intelligent truncation based on output_dir path length
+        if output_dir:
+            # Account for: output_dir + separator + filename + .srt
+            dir_path_len = len(str(output_dir))
+            # Reserve space: separator (1) + extension (4) + safety margin (20)
+            available_for_filename = TranscribeModel.WINDOWS_MAX_PATH - dir_path_len - 25
+            
+            logger.info(f"Path length budget: total={TranscribeModel.WINDOWS_MAX_PATH}, dir={dir_path_len}, available={available_for_filename}")
+            
+            if available_for_filename < 20:
+                # Even directory path is too long - use very short filename
+                logger.warning(f"Output directory path is very long ({dir_path_len} chars), using minimal filename")
+                max_len = 20
+            else:
+                max_len = min(available_for_filename, 200)
+        else:
+            # No output_dir specified, use conservative limit
+            max_len = TranscribeModel.SAFE_FILENAME_MAX
+        
+        # Truncate if necessary
+        if len(sanitized) > max_len:
+            logger.info(f"Filename too long ({len(sanitized)} > {max_len}), truncating")
+            sanitized = sanitized[:max_len]
+            # Remove trailing underscore if truncation created one
+            sanitized = sanitized.rstrip('_')
+            logger.info(f"Truncated to: {sanitized}")
         
         return sanitized
     
@@ -152,8 +185,8 @@ class TranscribeModel:
             
             output_dir.mkdir(parents=True, exist_ok=True)
             
-            # v2.7: Sanitize base_name for filesystem compatibility
-            base_name = self._sanitize_filename(file_path.stem)
+            # v2.8: Sanitize base_name with MAX_PATH awareness
+            base_name = self._sanitize_filename(file_path.stem, output_dir)
             logger.info(f"Original filename: {file_path.stem}")
             logger.info(f"Sanitized filename: {base_name}")
             
@@ -232,8 +265,8 @@ class TranscribeModel:
                 video_id = self._extract_youtube_id(youtube_url)
                 base_name = video_id if video_id else "youtube_video"
             
-            # v2.7: Sanitize base_name
-            base_name = self._sanitize_filename(base_name)
+            # v2.8: Sanitize base_name with MAX_PATH awareness
+            base_name = self._sanitize_filename(base_name, output_dir)
             
             logger.info(f"Transcribing YouTube video: {base_name}")
             
@@ -287,6 +320,7 @@ class TranscribeModel:
         - Setting proper encoding for subprocess
         
         v2.7: Better error message logging
+        v2.8: Path length aware
         
         Returns:
             Tuple: (success, error_msg)
@@ -371,6 +405,7 @@ class TranscribeModel:
         - Returns transcript content (loads ANY available format)
         - Generates metadata
         - v2.7: Better error handling for file operations
+        - v2.8: Path length aware
         
         Returns:
             Tuple: (transcript_content_str, metadata_dict)
@@ -396,6 +431,7 @@ class TranscribeModel:
             load_priority = ['.srt', '.txt', '.vtt', '.json', '.tsv']
             
             logger.info(f"Processing outputs from temp dir: {temp_path}")
+            logger.info(f"Target output dir: {output_dir}")
             logger.info(f"Files found in temp dir: {list(temp_path.glob('*'))}")
             
             # Find and process output files
@@ -418,6 +454,12 @@ class TranscribeModel:
                 
                 final_path = output_dir / new_name
                 ext = temp_file.suffix.lower()
+                
+                # v2.8: Log path length for debugging
+                final_path_str = str(final_path)
+                path_len = len(final_path_str)
+                logger.info(f"Final path length: {path_len} chars (max={self.WINDOWS_MAX_PATH})")
+                logger.info(f"Final path: {final_path_str}")
                 
                 logger.debug(f"Processing {temp_file.name} -> {new_name} (keep={ext in keep_formats})")
                 
