@@ -1,20 +1,22 @@
 """
-Main entry point for n8n Summarizer application (v4.2)
+Main entry point for n8n Summarizer application (v5.0)
 
 Wires up views and controllers:
 - FileTab ↔ FileController
 - YouTubeSummarizerTab ↔ YouTubeSummarizerController (with Transcriber references)
 - TranscriberTab ↔ TranscriberController
-- BulkSummarizerTab ↔ BulkSummarizerController (with advanced options)
+- BulkSummarizerTab ↔ BulkSummarizerController
+- BulkTranscriberTab ↔ BulkTranscriberController (NEW in v5.0)
 
-New in v4.2:
-    - File type checkboxes (txt, srt, docx, pdf)
-    - Output format options (separate/combined files)
-    - Output location selection (default or custom)
+New in v5.0:
+    - Bulk Transcriber tab for folder-level media transcription
+    - Media format selection (11 formats: mp4, mov, avi, mkv, webm, mp3, wav, m4a, flac, aac, wma)
+    - Output format options (SRT, TXT, VTT, JSON)
+    - Recursive subfolder scanning
     - Preference persistence in .env
 
-Version: 4.2
-Updated: 2025-12-11 - Advanced Bulk Options (Phase 4.2)
+Version: 5.0
+Updated: 2026-01-06 - Phase 5.0 Bulk Transcription
 """
 import tkinter as tk
 from views.main_window import MainWindow
@@ -22,6 +24,7 @@ from controllers.file_controller import FileController
 from controllers.youtube_summarizer_controller import YouTubeSummarizerController
 from controllers.transcriber_controller import TranscriberController
 from controllers.bulk_summarizer_controller import BulkSummarizerController
+from controllers.bulk_transcriber_controller import BulkTranscriberController
 from utils.logger import logger
 from config import APP_TITLE
 
@@ -35,23 +38,27 @@ def main():
     - FileController (coordinates FileTab + models)
     - TranscriberController (coordinates TranscriberTab + models)
     - YouTubeSummarizerController (coordinates YouTubeSummarizerTab + models)
-    - BulkSummarizerController (coordinates BulkSummarizerTab + advanced options)
+    - BulkSummarizerController (coordinates BulkSummarizerTab + models)
+    - BulkTranscriberController (coordinates BulkTranscriberTab + models, NEW in v5.0)
     
-    Features (v4.2):
-    - File type selection: txt, srt, docx, pdf
-    - Output formats: separate files, combined file
-    - Output location: default or custom
-    - Preferences saved to .env
+    Features (v5.0):
+    - File summarization (txt, srt, docx, pdf)
+    - YouTube summarization with transcription
+    - Single file transcription (mp4, mp3, wav, m4a, flac, aac, wma, mov, avi, mkv, webm)
+    - Bulk summarization with advanced options
+    - Bulk transcription with media format selection and output formats
+    - Recursive subfolder scanning for bulk operations
+    - Preference persistence in .env
     """
     logger.info("=" * 50)
-    logger.info(f"Starting {APP_TITLE} v4.2")
+    logger.info(f"Starting {APP_TITLE} v5.0")
     logger.info("=" * 50)
     
     try:
         # Create Tkinter root window
         root = tk.Tk()
         
-        # Initialize main window (creates all tabs including Bulk Summarizer)
+        # Initialize main window (creates all tabs including Bulk Transcriber)
         window = MainWindow(root)
         
         # Initialize File Summarizer tab controller
@@ -80,6 +87,13 @@ def main():
         bulk_summarizer_controller = BulkSummarizerController(window.bulk_summarizer_tab)
         logger.info("BulkSummarizerController initialized (v4.2)")
         logger.info("Phase 4.2 features: Advanced options, preference persistence")
+        
+        # Initialize Bulk Transcriber tab controller (v5.0 NEW)
+        # Wires: BulkTranscriberTab UI ↔ BulkTranscriberController
+        # With media format selection, output formats, recursive scanning
+        bulk_transcriber_controller = BulkTranscriberController(window.bulk_transcriber_tab)
+        logger.info("BulkTranscriberController initialized (v5.0)")
+        logger.info("Phase 5.0 features: Bulk media transcription, format selection, recursive scanning")
         
         logger.info("Application ready")
         
