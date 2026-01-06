@@ -1,22 +1,23 @@
 """
 Bulk Transcriber Controller - Phase 5.0 Bulk Media Transcription
 
-Orchestrates bulk media file transcription:
+Orchestrates bulk media file transcription using LOCAL transcribe-anything:
 - Folder and media type validation (mp4, mp3, wav, m4a, flac, aac, wma, mov, avi, mkv, webm)
 - Background file discovery with multiple media types
 - Recursive subfolder scanning (NEW in v5.0)
-- Sequential file processing
-- N8N webhook communication for transcription
+- Sequential file processing using TranscribeModel
 - Progress tracking and UI updates
 - Error handling and logging
 - Output folder and file management
 - Output format handling (SRT, TXT, VTT, JSON)
 - Subfolder structure preservation in output
 
-Version: 1.0
+*** CRITICAL: Uses LOCAL TranscribeModel (transcribe-anything), NO N8N INVOLVED ***
+
+Version: 1.0 FINAL
 Created: 2026-01-06
 Phase: v5.0 - Bulk Transcription
-Fixed: 2026-01-06 - Use send_content() with file_path metadata
+Fixed: 2026-01-06 - Use TranscribeModel directly (NO N8N)
 """
 
 from pathlib import Path
@@ -25,7 +26,7 @@ from typing import List, Dict
 from datetime import datetime
 import logging
 
-from models.n8n_model import N8NModel
+from models.transcribe_model import TranscribeModel
 from utils.logger import logger
 
 
@@ -33,11 +34,13 @@ class BulkTranscriberController:
     """
     Orchestrates bulk media file transcription with recursive subfolder support.
     
+    Uses LOCAL TranscribeModel (transcribe-anything library) - NO N8N/webhooks involved!
+    
     Handles:
     - Validation of source folder and media types
     - Discovery of matching files (mp4, mp3, wav, m4a, flac, aac, wma, mov, avi, mkv, webm) with optional recursive scanning
     - Background processing with threading
-    - N8N integration for transcription (via send_content with file_path metadata)
+    - Local transcription using TranscribeModel (transcribe-anything wrapper)
     - Output folder and file management
     - Subfolder structure preservation
     - Real-time progress updates
@@ -53,14 +56,14 @@ class BulkTranscriberController:
             view: BulkTranscriberTab instance
         """
         self.view = view
-        self.n8n_model = N8NModel()
+        self.transcribe_model = TranscribeModel()  # Local transcriber (transcribe-anything)
         self.is_processing = False
         
         # Register callbacks
         self.view.set_on_start_requested(self.handle_start_processing)
         self.view.set_on_cancel_requested(self.handle_cancel_processing)
         
-        logger.info("BulkTranscriberController initialized (Phase 5.0)")
+        logger.info("BulkTranscriberController initialized (Phase 5.0 - LOCAL transcription only)")
     
     def handle_start_processing(self):
         """
@@ -134,6 +137,7 @@ class BulkTranscriberController:
         
         logger.info(f"Starting bulk transcription: {len(files)} files, output: {output_folder}, recursive: {recursive}")
         logger.info(f"Media types: {media_types}, Output formats: {output_formats}")
+        logger.info(f"Using LOCAL TranscribeModel (NO N8N)")
         
         # Launch background worker thread
         thread = Thread(
@@ -216,11 +220,13 @@ class BulkTranscriberController:
         """
         Background worker thread for bulk transcription.
         
+        Uses LOCAL TranscribeModel (transcribe-anything) - NO N8N involved!
+        
         Executes:
         1. Create output folder structure
         2. For each file:
            - Update UI with current file
-           - Send file path to N8N for transcription (using send_content with metadata)
+           - Call TranscribeModel.transcribe_file() directly
            - Save transcript in selected formats
            - Preserve subfolder structure in output
            - Log result (success/error)
@@ -242,6 +248,7 @@ class BulkTranscriberController:
             failed_files = []
             
             logger.info(f"Background transcription started: {total} files, output: {output_path}, recursive: {recursive}")
+            logger.info(f"Using LOCAL TranscribeModel (transcribe-anything library)")
             
             for idx, file_path in enumerate(files, 1):
                 # Check if user cancelled
@@ -264,36 +271,36 @@ class BulkTranscriberController:
                     
                     logger.info(f"Processing {idx}/{total}: {file_path.name}")
                     
-                    # Get file size for chunking reference
-                    file_size = file_path.stat().st_size
+                    # Determine output folder for this file (preserve subfolder structure if recursive)
+                    if recursive:
+                        relative_path = file_path.parent.relative_to(Path(source_folder))
+                        current_output_folder = output_path / relative_path
+                        current_output_folder.mkdir(parents=True, exist_ok=True)
+                        logger.debug(f"Created output subfolder: {current_output_folder}")
+                    else:
+                        current_output_folder = output_path
                     
-                    # Send to N8N for transcription
-                    # Use send_content() with metadata containing file_path
-                    # N8N workflow should extract file_path from metadata and use it for transcription
-                    success, transcript, error = self.n8n_model.send_content(
-                        file_name=file_path.name,
-                        content=str(file_path),  # Pass file path as content
-                        file_size_bytes=file_size,  # For reference
-                        metadata={
-                            'file_path': str(file_path),
-                            'media_file': True,
-                            'operation': 'transcription'
-                        }
+                    # Convert output_formats dict to keep_formats list
+                    keep_formats = []
+                    if output_formats.get('srt'):
+                        keep_formats.append('.srt')
+                    if output_formats.get('txt'):
+                        keep_formats.append('.txt')
+                    if output_formats.get('vtt'):
+                        keep_formats.append('.vtt')
+                    if output_formats.get('json'):
+                        keep_formats.append('.json')
+                    
+                    # Transcribe using LOCAL TranscribeModel
+                    success, transcript, error, metadata = self.transcribe_model.transcribe_file(
+                        file_path=str(file_path),
+                        device="cuda",  # or "cpu", "insane", "mps"
+                        output_dir=str(current_output_folder),
+                        keep_formats=keep_formats
                     )
                     
                     if success and transcript:
-                        # Create output subfolder structure if recursive
-                        if recursive:
-                            relative_path = file_path.parent.relative_to(Path(source_folder))
-                            current_output_folder = output_path / relative_path
-                            current_output_folder.mkdir(parents=True, exist_ok=True)
-                            logger.debug(f"Created output subfolder: {current_output_folder}")
-                        else:
-                            current_output_folder = output_path
-                        
-                        # Save transcript in selected formats
-                        self._save_transcript(current_output_folder, file_path, transcript, output_formats)
-                        
+                        # Transcription succeeded - files already saved by TranscribeModel
                         # Log success
                         self.view.root.after(
                             0,
@@ -304,8 +311,8 @@ class BulkTranscriberController:
                         successful += 1
                         logger.info(f"Successfully transcribed {file_path.name}")
                     else:
-                        # N8N returned error
-                        error_msg = error or "Unknown error from N8N"
+                        # Transcription failed
+                        error_msg = error or "Unknown error"
                         raise Exception(error_msg)
                 
                 except Exception as e:
@@ -380,65 +387,6 @@ class BulkTranscriberController:
         
         except Exception as e:
             logger.error(f"Error creating output folder: {str(e)}")
-            raise
-    
-    def _save_transcript(self, output_folder: Path, source_file: Path, 
-                        transcript: str, output_formats: Dict) -> None:
-        """
-        Save transcript in selected formats.
-        
-        Supports: SRT, TXT, VTT, JSON
-        
-        Args:
-            output_folder: Path to output folder
-            source_file: Path to source media file
-            transcript: Transcript text or data from N8N
-            output_formats: Dict with format flags {'srt': bool, 'txt': bool, 'vtt': bool, 'json': bool}
-        """
-        try:
-            base_name = source_file.stem
-            
-            # SRT format
-            if output_formats.get('srt'):
-                output_path = output_folder / f"{base_name}.srt"
-                with open(output_path, "w", encoding="utf-8") as f:
-                    f.write(transcript if isinstance(transcript, str) else str(transcript))
-                logger.info(f"Saved SRT transcript: {output_path}")
-            
-            # TXT format (plain text)
-            if output_formats.get('txt'):
-                output_path = output_folder / f"{base_name}.txt"
-                with open(output_path, "w", encoding="utf-8") as f:
-                    f.write(transcript if isinstance(transcript, str) else str(transcript))
-                logger.info(f"Saved TXT transcript: {output_path}")
-            
-            # VTT format (WebVTT)
-            if output_formats.get('vtt'):
-                output_path = output_folder / f"{base_name}.vtt"
-                with open(output_path, "w", encoding="utf-8") as f:
-                    # VTT header
-                    f.write("WEBVTT\n\n")
-                    f.write(transcript if isinstance(transcript, str) else str(transcript))
-                logger.info(f"Saved VTT transcript: {output_path}")
-            
-            # JSON format
-            if output_formats.get('json'):
-                import json
-                output_path = output_folder / f"{base_name}.json"
-                
-                # Create JSON structure
-                json_data = {
-                    "source_file": source_file.name,
-                    "created_at": datetime.now().isoformat(),
-                    "transcript": transcript if isinstance(transcript, str) else str(transcript)
-                }
-                
-                with open(output_path, "w", encoding="utf-8") as f:
-                    json.dump(json_data, f, indent=2, ensure_ascii=False)
-                logger.info(f"Saved JSON transcript: {output_path}")
-        
-        except Exception as e:
-            logger.error(f"Error saving transcript for {source_file.name}: {str(e)}")
             raise
     
     # Completion Handling
