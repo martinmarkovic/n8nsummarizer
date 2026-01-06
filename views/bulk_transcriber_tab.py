@@ -18,7 +18,7 @@ Layout (v5.0.1):
 Version: 1.1
 Created: 2026-01-06
 Phase: v5.0 - Bulk Transcription
-Updated: 2026-01-06 (v5.0.1 - Two-column layout)
+Updated: 2026-01-06 (v5.0.1 - Two-column layout + Start button fix)
 """
 
 import tkinter as tk
@@ -149,31 +149,34 @@ class BulkTranscriberTab(BaseTab):
         folder_path = Path(folder)
         count = 0
         
+        # Determine if we're using recursive or flat search
+        glob_method = folder_path.rglob if self.recursive_subfolders.get() else folder_path.glob
+        
         # Video formats
         if self.media_type_mp4.get():
-            count += len(list(folder_path.rglob("*.mp4") if self.recursive_subfolders.get() else folder_path.glob("*.mp4")))
+            count += len(list(glob_method("*.mp4")))
         if self.media_type_mov.get():
-            count += len(list(folder_path.rglob("*.mov") if self.recursive_subfolders.get() else folder_path.glob("*.mov")))
+            count += len(list(glob_method("*.mov")))
         if self.media_type_avi.get():
-            count += len(list(folder_path.rglob("*.avi") if self.recursive_subfolders.get() else folder_path.glob("*.avi")))
+            count += len(list(glob_method("*.avi")))
         if self.media_type_mkv.get():
-            count += len(list(folder_path.rglob("*.mkv") if self.recursive_subfolders.get() else folder_path.glob("*.mkv")))
+            count += len(list(glob_method("*.mkv")))
         if self.media_type_webm.get():
-            count += len(list(folder_path.rglob("*.webm") if self.recursive_subfolders.get() else folder_path.glob("*.webm")))
+            count += len(list(glob_method("*.webm")))
         
         # Audio formats
         if self.media_type_mp3.get():
-            count += len(list(folder_path.rglob("*.mp3") if self.recursive_subfolders.get() else folder_path.glob("*.mp3")))
+            count += len(list(glob_method("*.mp3")))
         if self.media_type_wav.get():
-            count += len(list(folder_path.rglob("*.wav") if self.recursive_subfolders.get() else folder_path.glob("*.wav")))
+            count += len(list(glob_method("*.wav")))
         if self.media_type_m4a.get():
-            count += len(list(folder_path.rglob("*.m4a") if self.recursive_subfolders.get() else folder_path.glob("*.m4a")))
+            count += len(list(glob_method("*.m4a")))
         if self.media_type_flac.get():
-            count += len(list(folder_path.rglob("*.flac") if self.recursive_subfolders.get() else folder_path.glob("*.flac")))
+            count += len(list(glob_method("*.flac")))
         if self.media_type_aac.get():
-            count += len(list(folder_path.rglob("*.aac") if self.recursive_subfolders.get() else folder_path.glob("*.aac")))
+            count += len(list(glob_method("*.aac")))
         if self.media_type_wma.get():
-            count += len(list(folder_path.rglob("*.wma") if self.recursive_subfolders.get() else folder_path.glob("*.wma")))
+            count += len(list(glob_method("*.wma")))
         
         return count
     
@@ -220,30 +223,54 @@ class BulkTranscriberTab(BaseTab):
                 command=self._on_media_type_changed
             ).pack(anchor=tk.W, padx=10, pady=3)
     
-    def _on_media_type_changed(self):
-        """Called when media type selection changes"""
-        if not any([self.media_type_mp4.get(), self.media_type_mov.get(), 
-                   self.media_type_avi.get(), self.media_type_mkv.get(),
-                   self.media_type_webm.get(), self.media_type_mp3.get(),
-                   self.media_type_wav.get(), self.media_type_m4a.get(),
-                   self.media_type_flac.get(), self.media_type_aac.get(),
-                   self.media_type_wma.get()]):
-            self.append_log("At least one media format must be selected", "warning")
+    def _any_media_type_selected(self) -> bool:
+        """Check if at least one media type is selected"""
+        return any([
+            self.media_type_mp4.get(), self.media_type_mov.get(), 
+            self.media_type_avi.get(), self.media_type_mkv.get(),
+            self.media_type_webm.get(), self.media_type_mp3.get(),
+            self.media_type_wav.get(), self.media_type_m4a.get(),
+            self.media_type_flac.get(), self.media_type_aac.get(),
+            self.media_type_wma.get()
+        ])
+    
+    def _update_start_button_state(self):
+        """Update start button state based on folder + media types"""
+        # Must have:
+        # 1. A folder selected
+        # 2. At least one media type selected
+        # 3. At least one matching file in the folder
+        
+        folder = self.get_source_folder()
+        has_media_types = self._any_media_type_selected()
+        
+        # If no media types selected, always disable
+        if not has_media_types:
             self.start_button.config(state=tk.DISABLED)
             return
         
-        folder = self.get_source_folder()
-        if folder:
-            file_count = self._count_matching_files(folder)
-            self.append_log(
-                f"Media formats updated: {file_count} matching files",
-                "info"
-            )
-            if file_count > 0:
-                self.start_button.config(state=tk.NORMAL)
-            else:
-                self.start_button.config(state=tk.DISABLED)
+        # If no folder, disable
+        if not folder:
+            self.start_button.config(state=tk.DISABLED)
+            return
         
+        # If folder selected, check for matching files
+        file_count = self._count_matching_files(folder)
+        if file_count > 0:
+            self.start_button.config(state=tk.NORMAL)
+        else:
+            self.start_button.config(state=tk.DISABLED)
+    
+    def _on_media_type_changed(self):
+        """Called when media type selection changes"""
+        # Check if at least one media type is selected
+        if not self._any_media_type_selected():
+            self.append_log("At least one media format must be selected", "warning")
+        
+        # Update button state
+        self._update_start_button_state()
+        
+        # Save preferences
         self._save_preferences()
     
     def _setup_recursive_option(self):
@@ -276,10 +303,7 @@ class BulkTranscriberTab(BaseTab):
                 f"Scanning mode updated ({recursive_status}): {file_count} matching files",
                 "info"
             )
-            if file_count > 0:
-                self.start_button.config(state=tk.NORMAL)
-            else:
-                self.start_button.config(state=tk.DISABLED)
+            self._update_start_button_state()
         
         self._save_preferences()
     
