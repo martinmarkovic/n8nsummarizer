@@ -1,16 +1,18 @@
 """
-Bulk Summarizer Tab - Phase 4.2 Advanced Options
+Bulk Summarizer Tab - Phase 4.3 Recursive Subfolder Support
 
 Manages the bulk file summarization interface:
 - File type selection with multiple checkboxes (txt, srt, docx, pdf)
 - Output format options (separate files, combined file)
 - Output location selection (default or custom)
+- Recursive subfolder scanning option (NEW in v4.7)
 - Progress tracking
 - Status logging
 - Remember last choice in .env
 
-Version: 4.2
+Version: 4.3
 Created: 2025-12-10
+Updated: 2026-01-06 (v4.7 - Added recursive subfolder support)
 """
 
 import tkinter as tk
@@ -23,7 +25,7 @@ from utils.logger import logger
 
 
 class BulkSummarizerTab(BaseTab):
-    """UI for bulk file summarization (Phase 4.2)"""
+    """UI for bulk file summarization (Phase 4.3 - with recursive subfolders)"""
     
     def __init__(self, notebook):
         # CRITICAL: Initialize variables BEFORE calling super().__init__()
@@ -41,6 +43,9 @@ class BulkSummarizerTab(BaseTab):
         # Output format options (multiple checkboxes)
         self.output_separate = tk.BooleanVar(value=True)
         self.output_combined = tk.BooleanVar(value=False)
+        
+        # v4.7: Recursive subfolder scanning
+        self.recursive_subfolders = tk.BooleanVar(value=False)
         
         # Output location
         self.output_location_default = tk.BooleanVar(value=True)
@@ -64,18 +69,20 @@ class BulkSummarizerTab(BaseTab):
         Sections:
         1. Folder Selection
         2. File Type Selection (Checkboxes)
-        3. Output Format Options (Checkboxes)
-        4. Output Location Selection
-        5. Processing Controls
-        6. Progress Tracking
-        7. Status Log
+        3. Recursive Subfolder Option (NEW v4.7)
+        4. Output Format Options (Checkboxes)
+        5. Output Location Selection
+        6. Processing Controls
+        7. Progress Tracking
+        8. Status Log
         """
         # Make tab expand
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(6, weight=1)
+        self.rowconfigure(7, weight=1)
         
         self._setup_folder_selection()
         self._setup_file_type()
+        self._setup_recursive_option()  # NEW in v4.7
         self._setup_output_format()
         self._setup_output_location()
         self._setup_processing_section()
@@ -125,14 +132,24 @@ class BulkSummarizerTab(BaseTab):
         folder_path = Path(folder)
         count = 0
         
+        # v4.7: If recursive option checked, search subfolders too
+        if self.recursive_subfolders.get():
+            glob_method = "rglob"
+        else:
+            glob_method = "glob"
+        
         if self.file_type_txt.get():
-            count += len(list(folder_path.glob("*.txt")))
+            pattern = f"{'**/'}*.txt" if glob_method == "rglob" else "*.txt"
+            count += len(list(getattr(folder_path, glob_method)(pattern)))
         if self.file_type_srt.get():
-            count += len(list(folder_path.glob("*.srt")))
+            pattern = f"{'**/'}*.srt" if glob_method == "rglob" else "*.srt"
+            count += len(list(getattr(folder_path, glob_method)(pattern)))
         if self.file_type_docx.get():
-            count += len(list(folder_path.glob("*.docx")))
+            pattern = f"{'**/'}*.docx" if glob_method == "rglob" else "*.docx"
+            count += len(list(getattr(folder_path, glob_method)(pattern)))
         if self.file_type_pdf.get():
-            count += len(list(folder_path.glob("*.pdf")))
+            pattern = f"{'**/'}*.pdf" if glob_method == "rglob" else "*.pdf"
+            count += len(list(getattr(folder_path, glob_method)(pattern)))
         
         return count
     
@@ -181,10 +198,56 @@ class BulkSummarizerTab(BaseTab):
         # Save preferences
         self._save_preferences()
     
+    def _setup_recursive_option(self):
+        """
+        v4.7: Checkbox for recursive subfolder scanning.
+        
+        When enabled:
+        - Scans all subfolders for matching files
+        - Output folder maintains same structure as source
+        - Each subfolder gets its own summarized folder
+        """
+        recursive_frame = ttk.LabelFrame(self, text="Scanning Options")
+        recursive_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
+        
+        ttk.Checkbutton(
+            recursive_frame,
+            text="Scan Subfolders (recursive scanning)",
+            variable=self.recursive_subfolders,
+            command=self._on_recursive_changed
+        ).pack(anchor=tk.W, padx=10, pady=5)
+        
+        info_label = ttk.Label(
+            recursive_frame,
+            text="When enabled: Scans all subfolders and maintains folder structure in output",
+            foreground="gray",
+            font=("TkDefaultFont", 9)
+        )
+        info_label.pack(anchor=tk.W, padx=30, pady=(0, 5))
+    
+    def _on_recursive_changed(self):
+        """Called when recursive subfolder option changes"""
+        folder = self.get_source_folder()
+        if folder:
+            file_count = self._count_matching_files(folder)
+            recursive_status = "with subfolders" if self.recursive_subfolders.get() else "without subfolders"
+            self.append_log(
+                f"Scanning mode updated ({recursive_status}): {file_count} matching files",
+                "info"
+            )
+            # Update start button state
+            if file_count > 0:
+                self.start_button.config(state=tk.NORMAL)
+            else:
+                self.start_button.config(state=tk.DISABLED)
+        
+        # Save preferences
+        self._save_preferences()
+    
     def _setup_output_format(self):
         """Checkboxes for output format options"""
         output_frame = ttk.LabelFrame(self, text="Output Format Options")
-        output_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
+        output_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         
         ttk.Checkbutton(
             output_frame,
@@ -208,7 +271,7 @@ class BulkSummarizerTab(BaseTab):
     def _setup_output_location(self):
         """Radio buttons for output location"""
         loc_frame = ttk.LabelFrame(self, text="Output Location")
-        loc_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
+        loc_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         loc_frame.columnconfigure(1, weight=1)
         
         ttk.Radiobutton(
@@ -262,7 +325,7 @@ class BulkSummarizerTab(BaseTab):
     def _setup_processing_section(self):
         """Start/Cancel buttons"""
         proc_frame = ttk.LabelFrame(self, text="Processing")
-        proc_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
+        proc_frame.grid(row=5, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         proc_frame.columnconfigure(0, weight=1)
         
         info_frame = ttk.Frame(proc_frame)
@@ -297,7 +360,7 @@ class BulkSummarizerTab(BaseTab):
     def _setup_progress_section(self):
         """Progress bar and current file info"""
         prog_frame = ttk.LabelFrame(self, text="Progress")
-        prog_frame.grid(row=5, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
+        prog_frame.grid(row=6, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         prog_frame.columnconfigure(0, weight=1)
         
         self.current_file_var = tk.StringVar(value="Idle")
@@ -316,7 +379,7 @@ class BulkSummarizerTab(BaseTab):
     def _setup_status_log(self):
         """Status log with scroll"""
         log_frame = ttk.LabelFrame(self, text="Status Log")
-        log_frame.grid(row=6, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), 
+        log_frame.grid(row=7, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), 
                       padx=10, pady=10)
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
@@ -370,6 +433,15 @@ class BulkSummarizerTab(BaseTab):
             "separate": self.output_separate.get(),
             "combined": self.output_combined.get()
         }
+    
+    def get_recursive_option(self) -> bool:
+        """
+        v4.7: Get recursive subfolder scanning option.
+        
+        Returns:
+            bool: True if recursive scanning is enabled
+        """
+        return self.recursive_subfolders.get()
     
     def set_processing_enabled(self, enabled: bool):
         """Enable/disable processing buttons"""
@@ -464,6 +536,8 @@ class BulkSummarizerTab(BaseTab):
                             self.output_separate.set(line.split("=")[1].lower() == "true")
                         elif line.startswith("BULK_OUTPUT_COMBINED="):
                             self.output_combined.set(line.split("=")[1].lower() == "true")
+                        elif line.startswith("BULK_RECURSIVE_SUBFOLDERS="):
+                            self.recursive_subfolders.set(line.split("=")[1].lower() == "true")
             logger.info("Bulk Summarizer preferences loaded")
         except Exception as e:
             logger.warning(f"Could not load preferences: {str(e)}")
@@ -501,6 +575,7 @@ class BulkSummarizerTab(BaseTab):
             env_content["BULK_FILE_TYPES"] = file_types_str
             env_content["BULK_OUTPUT_SEPARATE"] = str(self.output_separate.get())
             env_content["BULK_OUTPUT_COMBINED"] = str(self.output_combined.get())
+            env_content["BULK_RECURSIVE_SUBFOLDERS"] = str(self.recursive_subfolders.get())
             
             # Write back
             with open(env_path, "w") as f:
