@@ -10,9 +10,14 @@ Manages the bulk file summarization interface:
 - Status logging
 - Remember last choice in .env
 
+Layout (v5.0.1):
+- Row 0: Browse section (100% width)
+- Rows 1-6: Left column (controls) + Right column (status log)
+
 Version: 4.3
 Created: 2025-12-10
 Updated: 2026-01-06 (v4.7 - Added recursive subfolder support)
+Updated: 2026-01-06 (v5.0.1 - Two-column layout)
 """
 
 import tkinter as tk
@@ -55,7 +60,7 @@ class BulkSummarizerTab(BaseTab):
         self.on_cancel_requested = None
         
         # NOW call parent init (which calls _setup_ui())
-        super().__init__(notebook, "Bulk Summarizer")
+        super().__init__(notebook, "📦 Bulk Summarizer")
         
         # Load saved preferences from .env
         self._load_preferences()
@@ -64,35 +69,35 @@ class BulkSummarizerTab(BaseTab):
     
     def _setup_ui(self):
         """
-        Setup bulk summarizer UI.
+        Setup bulk summarizer UI with two-column layout.
         
-        Sections:
-        1. Folder Selection
-        2. File Type Selection (Checkboxes)
-        3. Recursive Subfolder Option (NEW v4.7)
-        4. Output Format Options (Checkboxes)
-        5. Output Location Selection
-        6. Processing Controls
-        7. Progress Tracking
-        8. Status Log
+        Layout:
+        - Row 0: Browse section (spans 2 columns, 100% width)
+        - Rows 1-6: Left column (controls) + Right column (status log)
         """
-        # Make tab expand
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(7, weight=1)
+        # Configure grid to have 2 columns
+        self.columnconfigure(0, weight=0)  # Left column (controls)
+        self.columnconfigure(1, weight=1)  # Right column (status log, expands)
+        self.rowconfigure(6, weight=1)     # Status log area expands vertically
         
+        # Row 0: Browse section (full width)
         self._setup_folder_selection()
+        
+        # Left column (Column 0) - All control sections
         self._setup_file_type()
         self._setup_recursive_option()  # NEW in v4.7
         self._setup_output_format()
         self._setup_output_location()
         self._setup_processing_section()
         self._setup_progress_section()
+        
+        # Right column (Column 1, Row 1-6) - Status log
         self._setup_status_log()
     
     def _setup_folder_selection(self):
-        """Folder selection with browse button"""
+        """Folder selection with browse button - Full width at top"""
         folder_frame = ttk.LabelFrame(self, text="Select Source Folder")
-        folder_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
+        folder_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=10, pady=10)
         folder_frame.columnconfigure(1, weight=1)
         
         ttk.Button(
@@ -104,7 +109,7 @@ class BulkSummarizerTab(BaseTab):
         ttk.Label(
             folder_frame,
             textvariable=self.source_folder_var
-        ).pack(side=tk.LEFT, padx=10, pady=5)
+        ).pack(side=tk.LEFT, padx=10, pady=5, fill=tk.X, expand=True)
     
     def _browse_folder(self):
         """Open folder selection dialog"""
@@ -154,7 +159,7 @@ class BulkSummarizerTab(BaseTab):
         return count
     
     def _setup_file_type(self):
-        """Checkboxes for file type selection (multiple)"""
+        """Checkboxes for file type selection (multiple) - Left column"""
         type_frame = ttk.LabelFrame(self, text="File Types to Scan")
         type_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         
@@ -200,7 +205,7 @@ class BulkSummarizerTab(BaseTab):
     
     def _setup_recursive_option(self):
         """
-        v4.7: Checkbox for recursive subfolder scanning.
+        v4.7: Checkbox for recursive subfolder scanning - Left column.
         
         When enabled:
         - Scans all subfolders for matching files
@@ -245,7 +250,7 @@ class BulkSummarizerTab(BaseTab):
         self._save_preferences()
     
     def _setup_output_format(self):
-        """Checkboxes for output format options"""
+        """Checkboxes for output format options - Left column"""
         output_frame = ttk.LabelFrame(self, text="Output Format Options")
         output_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         
@@ -269,7 +274,7 @@ class BulkSummarizerTab(BaseTab):
         info_label.pack(anchor=tk.W, padx=10, pady=(10, 5))
     
     def _setup_output_location(self):
-        """Radio buttons for output location"""
+        """Radio buttons for output location - Left column"""
         loc_frame = ttk.LabelFrame(self, text="Output Location")
         loc_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         loc_frame.columnconfigure(1, weight=1)
@@ -323,7 +328,7 @@ class BulkSummarizerTab(BaseTab):
             )
     
     def _setup_processing_section(self):
-        """Start/Cancel buttons"""
+        """Start/Cancel buttons - Left column"""
         proc_frame = ttk.LabelFrame(self, text="Processing")
         proc_frame.grid(row=5, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         proc_frame.columnconfigure(0, weight=1)
@@ -358,7 +363,7 @@ class BulkSummarizerTab(BaseTab):
         self.cancel_button.pack(side=tk.LEFT, padx=5)
     
     def _setup_progress_section(self):
-        """Progress bar and current file info"""
+        """Progress bar and current file info - Left column"""
         prog_frame = ttk.LabelFrame(self, text="Progress")
         prog_frame.grid(row=6, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         prog_frame.columnconfigure(0, weight=1)
@@ -377,9 +382,9 @@ class BulkSummarizerTab(BaseTab):
         ttk.Label(prog_frame, textvariable=self.progress_text_var).pack(anchor=tk.W, padx=10, pady=5)
     
     def _setup_status_log(self):
-        """Status log with scroll"""
+        """Status log with scroll - Right column (spans rows 1-6)"""
         log_frame = ttk.LabelFrame(self, text="Status Log")
-        log_frame.grid(row=7, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), 
+        log_frame.grid(row=1, column=1, rowspan=6, sticky=(tk.W, tk.E, tk.N, tk.S), 
                       padx=10, pady=10)
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
@@ -390,7 +395,7 @@ class BulkSummarizerTab(BaseTab):
         self.status_log = tk.Text(
             log_frame,
             height=10,
-            width=60,
+            width=40,
             yscrollcommand=scrollbar.set,
             state=tk.DISABLED
         )
