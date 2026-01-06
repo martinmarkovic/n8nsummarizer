@@ -1,21 +1,25 @@
 """
-Bulk Summarizer Controller - Phase 4.3 Enhanced Output Naming
+Bulk Summarizer Controller - Phase 4.4 Recursive Subfolder Support
 
 Orchestrates bulk file summarization:
 - Folder and file type validation (txt, srt, docx, pdf)
 - Background file discovery with multiple types
+- Recursive subfolder scanning (NEW in v4.7)
 - Sequential file processing
 - N8N webhook communication
 - Progress tracking and UI updates
 - Error handling and logging
 - Output folder and file management with improved naming
 - Output format handling (separate/combined)
+- Subfolder structure preservation in output
 
-Version: 4.3
-Updated: 2025-12-23
+Version: 4.4
+Updated: 2026-01-06
 Changes:
-- Fixed output folder naming: now uses original folder name + '- Summarized' instead of hardcoded 'Summaries'
-- Added font size preference persistence to .env
+- Added recursive subfolder scanning option
+- Output folder structure mirrors source folder structure
+- Each subfolder gets its own summarized subfolder in output
+- Subfolder processing with proper path handling
 """
 
 from pathlib import Path
@@ -31,14 +35,15 @@ from utils.logger import logger
 
 class BulkSummarizerController:
     """
-    Orchestrates bulk file summarization.
+    Orchestrates bulk file summarization with recursive subfolder support.
     
     Handles:
     - Validation of source folder and file types
-    - Discovery of matching files (txt, srt, docx, pdf)
+    - Discovery of matching files (txt, srt, docx, pdf) with optional recursive scanning
     - Background processing with threading
     - N8N integration for summarization
     - Output folder and file management
+    - Subfolder structure preservation
     - Real-time progress updates
     - Error handling and recovery
     - Separate and combined output formats
@@ -94,8 +99,11 @@ class BulkSummarizerController:
             self.view.append_log("Error: At least one output format must be selected", "error")
             return
         
+        # v4.7: Get recursive option
+        recursive = self.view.get_recursive_option()
+        
         # Discover files
-        files = self._discover_files(source_folder, file_types)
+        files = self._discover_files(source_folder, file_types, recursive)
         if not files:
             self.view.append_log(f"Error: No files found matching selected types: {', '.join(file_types)}", "error")
             return
@@ -109,16 +117,18 @@ class BulkSummarizerController:
         # Update UI and launch background thread
         self.view.append_log(f"Found {len(files)} files to process", "info")
         self.view.append_log(f"Output formats: {'separate' if output_formats['separate'] else ''} {'combined' if output_formats['combined'] else ''}", "info")
+        if recursive:
+            self.view.append_log(f"Recursive scanning enabled - processing subfolders", "info")
         self.view.set_processing_enabled(False)
         self.is_processing = True
         
-        logger.info(f"Starting bulk processing: {len(files)} files, output: {output_folder}")
+        logger.info(f"Starting bulk processing: {len(files)} files, output: {output_folder}, recursive: {recursive}")
         logger.info(f"File types: {file_types}, Output formats: separate={output_formats['separate']}, combined={output_formats['combined']}")
         
         # Launch background worker thread
         thread = Thread(
             target=self._process_folder_background,
-            args=(source_folder, files, output_folder, output_formats),
+            args=(source_folder, files, output_folder, output_formats, recursive),
             daemon=True
         )
         thread.start()
@@ -133,13 +143,16 @@ class BulkSummarizerController:
     
     # File Discovery
     
-    def _discover_files(self, folder: str, file_types: List[str]) -> List[Path]:
+    def _discover_files(self, folder: str, file_types: List[str], recursive: bool = False) -> List[Path]:
         """
         Discover all matching files in folder.
+        
+        v4.7: Added recursive parameter for subfolder scanning.
         
         Args:
             folder: Path to folder
             file_types: List of file types to search for ('txt', 'srt', 'docx', 'pdf')
+            recursive: If True, scan subfolders recursively
         
         Returns:
             Sorted list of Path objects matching selected file types
@@ -159,14 +172,20 @@ class BulkSummarizerController:
             # Discover files for each selected type
             for file_type in file_types:
                 if file_type in patterns:
-                    matching = list(folder_path.glob(patterns[file_type]))
+                    if recursive:
+                        # v4.7: Use rglob for recursive scanning
+                        matching = list(folder_path.rglob(patterns[file_type]))
+                        logger.debug(f"Found {len(matching)} {file_type} files (recursive)")
+                    else:
+                        # Normal glob for current folder only
+                        matching = list(folder_path.glob(patterns[file_type]))
+                        logger.debug(f"Found {len(matching)} {file_type} files")
                     files.extend(matching)
-                    logger.debug(f"Found {len(matching)} {file_type} files")
             
             # Sort and remove duplicates
             files = sorted(set(files))
             
-            logger.info(f"Discovered {len(files)} total files matching types: {file_types}")
+            logger.info(f"Discovered {len(files)} total files matching types: {file_types}, recursive={recursive}")
             return files
         
         except Exception as e:
@@ -176,9 +195,11 @@ class BulkSummarizerController:
     # Background Processing
     
     def _process_folder_background(self, source_folder: str, files: List[Path], 
-                                   output_folder: str, output_formats: dict):
+                                   output_folder: str, output_formats: dict, recursive: bool = False):
         """
         Background worker thread for bulk processing.
+        
+        v4.7: Added recursive parameter and subfolder structure preservation.
         
         Executes:
         1. Create output folder structure
@@ -187,6 +208,7 @@ class BulkSummarizerController:
            - Read file content
            - Send to N8N for summarization
            - Save summary (separate and/or combined)
+           - Preserve subfolder structure in output
            - Log result (success/error)
         3. Generate combined file if selected
         4. Show completion summary
@@ -196,6 +218,7 @@ class BulkSummarizerController:
             files: List of file paths to process
             output_folder: Path to output folder
             output_formats: Dict with 'separate' and 'combined' flags
+            recursive: If True, preserve subfolder structure in output
         """
         try:
             total = len(files)
@@ -206,7 +229,7 @@ class BulkSummarizerController:
             failed_files = []
             combined_content = []  # For combined output
             
-            logger.info(f"Background processing started: {total} files, output: {output_path}")
+            logger.info(f"Background processing started: {total} files, output: {output_path}, recursive: {recursive}")
             
             for idx, file_path in enumerate(files, 1):
                 # Check if user cancelled
@@ -241,14 +264,30 @@ class BulkSummarizerController:
                     )
                     
                     if success and summary:
+                        # v4.7: Create output subfolder structure if recursive
+                        if recursive:
+                            # Get relative path from source folder to preserve structure
+                            relative_path = file_path.parent.relative_to(Path(source_folder))
+                            current_output_folder = output_path / relative_path
+                            current_output_folder.mkdir(parents=True, exist_ok=True)
+                            logger.debug(f"Created output subfolder: {current_output_folder}")
+                        else:
+                            current_output_folder = output_path
+                        
                         # Save separate file if selected
                         if output_formats['separate']:
-                            self._save_summary(output_path, file_path, summary)
+                            self._save_summary(current_output_folder, file_path, summary)
                         
                         # Add to combined content if selected
                         if output_formats['combined']:
+                            # Include relative path in combined output for clarity
+                            display_name = file_path.name
+                            if recursive:
+                                relative_path = file_path.parent.relative_to(Path(source_folder))
+                                display_name = str(relative_path / file_path.name)
+                            
                             combined_content.append({
-                                'filename': file_path.name,
+                                'filename': display_name,
                                 'summary': summary
                             })
                         
@@ -326,7 +365,7 @@ class BulkSummarizerController:
         """
         Create output folder structure.
         
-        v4.3 Change: Output folder naming now uses original folder name + '- Summarized'
+        v4.4 Change: Output folder naming now uses original folder name + '- Summarized'
         Example: If source folder is 'Documents', output will be 'Documents - Summarized'
         
         If output_location is default (parent folder), creates:
@@ -452,6 +491,8 @@ class BulkSummarizerController:
             
             ===== [filename2] =====
             [summary2]
+        
+        v4.7: Includes relative paths when recursive scanning was used.
         
         Args:
             output_folder: Path to output folder
