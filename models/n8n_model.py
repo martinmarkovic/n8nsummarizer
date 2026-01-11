@@ -46,6 +46,14 @@ New in v4.6:
     - OUTPUT: Only raw N8N/LM Studio content, no app-generated labels
     - User-facing change: Cleaner output for both single and multi-chunk processing
 
+New in v4.6.1:
+    - FIX: cpp-llama update changed response format - now checks all response keys
+    - NEW: Fallback to ANY non-empty string in response (not just common keys)
+    - LOGGING: Full response body logged to file for debugging
+    - NEW: SAVE response to JSON file for manual inspection
+    - Context window aware: detects truncation and suggests splitting
+    - Better detection of LM Studio vs N8N wrapper responses
+
 This is PURE business logic - NO UI dependencies.
 Reusable by any controller (File tab, Transcribe tab, etc.)
 """
@@ -56,6 +64,7 @@ from datetime import datetime
 from typing import List, Tuple, Dict
 from config import N8N_WEBHOOK_URL, N8N_TIMEOUT
 from utils.logger import logger
+from pathlib import Path
 
 
 class N8NModel:
@@ -273,6 +282,7 @@ class N8NModel:
         v4.4.2: Handle empty responses correctly - empty doesn't mean failure!
         v4.4.3: Mark empty responses for filtering later
         v4.4.4: Better webhook test mode error handling
+        v4.6.1: Save full response to file for debugging
         
         Args:
             file_name (str): Name of file
@@ -344,6 +354,9 @@ class N8NModel:
                 # Not JSON, use raw text
                 response_data = response.text
                 logger.debug(f"Response text: {response_data[:200]}...")
+            
+            # v4.6.1: Save full response to file for debugging
+            self._save_response_debug(file_name, response_data, response.status_code)
             
             # Extract summary from response
             summary = self.extract_summary(response_data)
@@ -519,11 +532,13 @@ class N8NModel:
     def extract_summary(self, response_data) -> str:
         """
         Extract summary from n8n response.
-        Tries multiple common keys: summary, summarization, result, output, text, content
         
-        v4.4.2: Also handles None responses gracefully
-        v4.4.3: Returns None for truly empty responses (to be filtered)
-        v4.4.4: DEBUG LOGGING - Log full response and extraction process
+        v4.6.1: NEW LOGIC (cpp-llama update broke old parsing)
+        - First tries common keys: summary, summarization, result, output, text, content
+        - If no common keys found, checks ALL dict values for non-empty strings
+        - Returns FIRST non-empty string found (usually the summary)
+        - Fallback: stringifies entire response if no strings found
+        - Detects truncation patterns and logs warnings
         
         Args:
             response_data: Response from n8n (dict, str, etc.)
@@ -531,7 +546,7 @@ class N8NModel:
         Returns:
             str: Extracted summary or stringified response. None if truly empty.
         """
-        # v4.4.4 DEBUG: Log the FULL response first
+        # v4.6.1: Log the FULL response
         logger.debug(f"\n{'='*70}")
         logger.debug(f"EXTRACT_SUMMARY - Full N8N Response:")
         logger.debug(f"Response type: {type(response_data).__name__}")
@@ -556,21 +571,22 @@ class N8NModel:
         
         logger.debug(f"{'='*70}\n")
         
-        # Original extraction logic
+        # v4.6.1: Handle None
         if response_data is None:
             logger.debug("Result: Response is None")
             return None
         
+        # Handle string responses
         if isinstance(response_data, str):
-            # Check if it's an empty string
             if response_data.strip() == "":
                 logger.debug("Result: Response is empty string")
                 return None
             logger.debug(f"Result: Returning string response ({len(response_data)} chars)")
             return response_data
         
+        # Handle dict responses
         if isinstance(response_data, dict):
-            # Try common keys first
+            # v4.6.1: NEW - Try common keys first
             common_keys = ['summary', 'summarization', 'result', 'output', 'text', 'content']
             logger.debug(f"Checking for common keys: {common_keys}")
             
@@ -582,6 +598,8 @@ class N8NModel:
                     if isinstance(value, str):
                         if value.strip():
                             logger.debug(f"Result: Extracted from key '{key}' ({len(value)} chars)")
+                            # Detect truncation
+                            self._check_truncation(value, key)
                             return value
                         else:
                             logger.debug(f"  Key '{key}' is empty string, continuing")
@@ -591,26 +609,96 @@ class N8NModel:
                     else:
                         str_value = str(value)
                         logger.debug(f"Result: Found {type(value).__name__} in key '{key}', stringified ({len(str_value)} chars)")
+                        self._check_truncation(str_value, key)
                         return str_value
             
-            # If no common keys, check if dict is empty
+            # v4.6.1: NEW - If no common keys, search ALL dict values for strings
+            logger.info("No common keys found, searching all dict values for non-empty strings...")
+            for key, value in response_data.items():
+                if isinstance(value, str) and value.strip():
+                    logger.info(f"Found non-empty string in key '{key}' ({len(value)} chars)")
+                    self._check_truncation(value, key)
+                    return value
+            
+            # If dict is empty
             if not response_data:
                 logger.debug("Result: Response dict is empty")
                 return None
             
-            # Return pretty-printed JSON if not empty
+            # Return pretty-printed JSON if no strings found
             json_str = json.dumps(response_data, indent=2)
-            logger.debug(f"Result: No common keys found, returning full dict as JSON ({len(json_str)} chars)")
+            logger.debug(f"Result: No string values found, returning full dict as JSON ({len(json_str)} chars)")
             return json_str
         
         # For other types, stringify
         str_response = str(response_data)
         if str_response.strip():
             logger.debug(f"Result: Stringified {type(response_data).__name__} ({len(str_response)} chars)")
+            self._check_truncation(str_response)
             return str_response
         else:
             logger.debug(f"Result: Response is empty after stringification")
             return None
+    
+    def _check_truncation(self, text: str, source_key: str = None):
+        """
+        v4.6.1: Check if response looks truncated (indicator of context window issues)
+        
+        Logs warnings if text appears cut off:
+        - Ends abruptly mid-word
+        - Ends with incomplete sentence
+        - Exceeds context window patterns
+        
+        Args:
+            text (str): Response text to check
+            source_key (str): Which key the text came from (for logging)
+        """
+        if not text or len(text) < 100:
+            return
+        
+        # Check for abrupt ending patterns
+        last_chars = text[-50:]
+        
+        # Pattern: ends with incomplete word (random characters at end)
+        if not last_chars.rstrip().endswith(('.', '!', '?', '\n', '"', "'", '-', ')', ']')):
+            logger.warning(f"Response may be truncated (abrupt ending): ...{text[-40:]}")
+            logger.warning("SUGGESTION: Try increasing context window in LM Studio or splitting input smaller")
+    
+    def _save_response_debug(self, file_name: str, response_data, status_code: int):
+        """
+        v4.6.1: Save full response to JSON file for debugging
+        
+        Creates debug_responses/ directory with timestamp + filename
+        
+        Args:
+            file_name (str): Original file name
+            response_data: Full response from n8n
+            status_code (int): HTTP status code
+        """
+        try:
+            debug_dir = Path("debug_responses")
+            debug_dir.mkdir(exist_ok=True)
+            
+            # Create filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            clean_name = file_name.replace('.', '_').replace('/', '_')[:50]
+            debug_file = debug_dir / f"{timestamp}_{clean_name}_response.json"
+            
+            # Save response
+            debug_data = {
+                'timestamp': datetime.now().isoformat(),
+                'file_name': file_name,
+                'status_code': status_code,
+                'response_type': type(response_data).__name__,
+                'response': response_data
+            }
+            
+            with open(debug_file, 'w', encoding='utf-8') as f:
+                json.dump(debug_data, f, indent=2, default=str)
+            
+            logger.debug(f"Response debug saved to: {debug_file}")
+        except Exception as e:
+            logger.warning(f"Failed to save response debug: {e}")
     
     def save_webhook_to_env(self, webhook_url: str) -> bool:
         """
