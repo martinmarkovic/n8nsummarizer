@@ -45,7 +45,12 @@ class FileController:
     
     def handle_file_selected(self, file_path: str):
         """Handle file selection from view"""
-        logger.info(f"File selected: {file_path}")
+        # DEBUG: Track which tab is handling this callback (Bug 2 diagnostic)
+        logger.info(f"="*70)
+        logger.info(f"[FILE TAB] File selected: {file_path}")
+        logger.info(f"[FILE TAB] View ID: {id(self.view)}")
+        logger.info(f"[FILE TAB] Controller ID: {id(self)}")
+        logger.info(f"="*70)
         
         # Use model to read file
         success, content, error = self.file_model.read_file(file_path)
@@ -132,11 +137,13 @@ class FileController:
             file_size_bytes = os.path.getsize(file_path)
             logger.debug(f"File size: {file_size_bytes} bytes ({file_size_bytes/1024:.1f} KB)")
             
-            # Send to n8n with FILE SIZE IN BYTES (v4.4.4 CRITICAL FIX!)
-            success, response_data, error = self.n8n_model.send_content(
+            # BUG FIX v5.0.2: send_content() returns (success, summary, error)
+            # The summary is ALREADY EXTRACTED internally by n8n_model
+            # No need to call extract_summary() again!
+            success, summary, error = self.n8n_model.send_content(
                 file_name=file_info['name'],
                 content=content,
-                file_size_bytes=file_size_bytes,  # v4.4.4: PASS FILE SIZE IN BYTES!
+                file_size_bytes=file_size_bytes,
                 metadata={
                     'size_bytes': file_info['size'],
                     'lines': file_info['lines']
@@ -144,9 +151,9 @@ class FileController:
             )
             
             if success:
-                summary = self.n8n_model.extract_summary(response_data)
                 saved_msg = " (saved to .env)" if saved_to_env else ""
                 
+                # BUG FIX v5.0.2: Use summary directly - it's already extracted!
                 if summary:
                     # Schedule UI update on main thread
                     self.view.root.after(
