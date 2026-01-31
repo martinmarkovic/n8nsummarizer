@@ -100,7 +100,13 @@ class TranscriberController:
         Args:
             file_path: Path to selected file
         """
-        logger.info(f"File selected: {file_path}")
+        # DEBUG: Identify transcriber tab callback clearly (Bug 2 diagnostic)
+        logger.info("=" * 70)
+        logger.info(f"[TRANSCRIBER TAB] File selected: {file_path}")
+        logger.info(f"[TRANSCRIBER TAB] View ID: {id(self.view)}")
+        logger.info(f"[TRANSCRIBER TAB] Controller ID: {id(self)}")
+        logger.info("=" * 70)
+        
         self.view.set_status(f"Ready to transcribe: {Path(file_path).name}")
     
     def _handle_transcribe_clicked(self):
@@ -152,6 +158,9 @@ class TranscriberController:
             device: Device to use (cpu, cuda, insane, mps)
         """
         file_path = self.view.get_file_path()
+        
+        # DEBUG: Log which path transcriber is using (Bug 2 diagnostic)
+        logger.info(f"[TRANSCRIBER TAB] Using file_path from view: {file_path}")
         
         if not file_path or not file_path.strip():
             self.view.show_error("Please select a file first")
