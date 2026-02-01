@@ -103,3 +103,23 @@ class TranslationTab(BaseTab):
             # Minimal inline error reporting; controllers will handle richer flows later
             self.source_text.delete("1.0", tk.END)
             self.source_text.insert(tk.END, f"Error loading file: {exc}")
+
+    # --- BaseTab abstract method implementations ---
+
+    def get_content(self) -> str:
+        """Return the current source text content.
+
+        For now we expose the loaded source text so future controllers
+        can send it to a translation workflow.
+        """
+        return self.source_text.get("1.0", tk.END).strip()
+
+    def clear_all(self):
+        """Clear source/target text and reset file path.
+
+        Keeps webhook URL so users don't lose their configured endpoint
+        when clearing the current content.
+        """
+        self.source_text.delete("1.0", tk.END)
+        self.target_text.delete("1.0", tk.END)
+        self.source_file_path.set("[No file selected]")
