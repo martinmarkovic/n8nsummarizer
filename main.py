@@ -1,22 +1,16 @@
 """
-Main entry point for n8n Summarizer application (v5.0)
+Main entry point for n8n Summarizer application (v6.0)
 
 Wires up views and controllers:
 - FileTab ↔ FileController
 - YouTubeSummarizerTab ↔ YouTubeSummarizerController (with Transcriber references)
 - TranscriberTab ↔ TranscriberController
 - BulkSummarizerTab ↔ BulkSummarizerController
-- BulkTranscriberTab ↔ BulkTranscriberController (NEW in v5.0)
+- BulkTranscriberTab ↔ BulkTranscriberController
+- TranslationTab (UI only, no controller yet)
 
-New in v5.0:
-    - Bulk Transcriber tab for folder-level media transcription
-    - Media format selection (11 formats: mp4, mov, avi, mkv, webm, mp3, wav, m4a, flac, aac, wma)
-    - Output format options (SRT, TXT, VTT, JSON)
-    - Recursive subfolder scanning
-    - Preference persistence in .env
-
-Version: 5.0
-Updated: 2026-01-06 - Phase 5.0 Bulk Transcription
+Version: 6.0
+Updated: 2026-02-01 - Translation tab UI placeholder
 """
 import tkinter as tk
 from views.main_window import MainWindow
@@ -39,26 +33,28 @@ def main():
     - TranscriberController (coordinates TranscriberTab + models)
     - YouTubeSummarizerController (coordinates YouTubeSummarizerTab + models)
     - BulkSummarizerController (coordinates BulkSummarizerTab + models)
-    - BulkTranscriberController (coordinates BulkTranscriberTab + models, NEW in v5.0)
+    - BulkTranscriberController (coordinates BulkTranscriberTab + models)
+    - TranslationTab (UI only, controller in future phase)
     
-    Features (v5.0):
+    Features (v6.0):
     - File summarization (txt, srt, docx, pdf)
     - YouTube summarization with transcription
     - Single file transcription (mp4, mp3, wav, m4a, flac, aac, wma, mov, avi, mkv, webm)
     - Bulk summarization with advanced options
     - Bulk transcription with media format selection and output formats
+    - Translation tab (UI placeholder for future workflows)
     - Recursive subfolder scanning for bulk operations
     - Preference persistence in .env
     """
     logger.info("=" * 50)
-    logger.info(f"Starting {APP_TITLE} v5.0")
+    logger.info(f"Starting {APP_TITLE} v6.0")
     logger.info("=" * 50)
     
     try:
         # Create Tkinter root window
         root = tk.Tk()
         
-        # Initialize main window (creates all tabs including Bulk Transcriber)
+        # Initialize main window (creates all tabs including Translation)
         window = MainWindow(root)
         
         # Initialize File Summarizer tab controller
@@ -71,7 +67,7 @@ def main():
         transcriber_controller = TranscriberController(window.transcriber_tab)
         logger.info("TranscriberController initialized")
         
-        # Initialize YouTube Summarizer tab controller (v3.1)
+        # Initialize YouTube Summarizer tab controller
         # Wires: YouTubeSummarizerTab UI ↔ YouTubeSummarizerController ↔ TranscribeModel + N8NModel
         # Pass BOTH transcriber_tab reference (for UI) AND transcriber_controller
         youtube_summarizer_controller = YouTubeSummarizerController(
@@ -81,19 +77,20 @@ def main():
         )
         logger.info("YouTubeSummarizerController initialized")
         
-        # Initialize Bulk Summarizer tab controller (v4.2)
+        # Initialize Bulk Summarizer tab controller
         # Wires: BulkSummarizerTab UI ↔ BulkSummarizerController
         # With advanced options: file types, output formats, custom location
         bulk_summarizer_controller = BulkSummarizerController(window.bulk_summarizer_tab)
-        logger.info("BulkSummarizerController initialized (v4.2)")
-        logger.info("Phase 4.2 features: Advanced options, preference persistence")
+        logger.info("BulkSummarizerController initialized")
         
-        # Initialize Bulk Transcriber tab controller (v5.0 NEW)
+        # Initialize Bulk Transcriber tab controller
         # Wires: BulkTranscriberTab UI ↔ BulkTranscriberController
         # With media format selection, output formats, recursive scanning
         bulk_transcriber_controller = BulkTranscriberController(window.bulk_transcriber_tab)
-        logger.info("BulkTranscriberController initialized (v5.0)")
-        logger.info("Phase 5.0 features: Bulk media transcription, format selection, recursive scanning")
+        logger.info("BulkTranscriberController initialized")
+        
+        # Translation tab has UI only (no controller yet - future phase)
+        logger.info("TranslationTab initialized (UI only)")
         
         logger.info("Application ready")
         

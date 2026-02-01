@@ -1,33 +1,48 @@
-# models/ – Data, HTTP and Workflow Helpers
+# Models Layer
 
-This folder contains **non‑GUI logic**: data structures, file handling and HTTP helpers used by controllers.
+Data access and external service integration.
 
-## What Lives Here
+## Core Models
 
-- **file_model.py** – Represents files and their metadata
-- **file_scanner.py** – File system scanning helpers (single and bulk)
-- **http_client.py** – HTTP requests to n8n / webhooks / APIs
-- **n8n_model.py** & `models/n8n/` – n8n‑specific helpers
-- **transcribe_model.py** & `models/transcription/` – audio/video transcription model helpers
+### `file_model.py`
+Handles file reading and parsing:
+- Text files (`.txt`, `.srt`, `.log`, `.csv`, `.json`, `.xml`)
+- DOCX files (Word documents)
+- PDF files (text extraction)
+- Character encoding detection
+- File validation (size limits, format checks)
 
-## Responsibilities
+### `n8n_model.py`
+Wrapper for n8n webhook integration (summary, transcription, translation).
 
-- Encapsulate IO and integration logic
-- Provide simple, high‑level methods for controllers
-- Never import Tkinter or view classes
+### `transcribe_model.py`
+Handles media file transcription via n8n webhooks.
 
-## Guidelines for New Code
+## Sub-packages
 
-- One responsibility per module when possible
-- Expose small, composable functions / classes
-- Keep functions side‑effect aware (log, dont print)
-- Validate inputs early and return clear error information
+### `models/n8n/`
+N8N webhook clients:
+- `summary_client.py` - Text summarization requests
+- `transcribe_client.py` - Media transcription requests
 
-## For Agents / AIs
+### `models/transcription/`
+Transcription utilities:
+- `format_converter.py` - Convert between SRT, TXT, VTT, JSON formats
+- `parser.py` - Parse transcription responses
 
-When adding a new workflow integration (e.g. translation):
+## Usage
 
-- Add a new model module here (e.g. `translation_model.py`)
-- Keep all HTTP and payload construction here
-- Expose clear methods like `send_to_webhook(file_path, config)`
-- Let controllers decide **when** to call these methods, views just collect inputs
+Models are instantiated by controllers and called to retrieve/process data:
+
+```python
+from models.file_model import FileModel
+from models.n8n_model import N8NModel
+
+file_model = FileModel()
+content = file_model.read_file("/path/to/file.txt")
+
+n8n = N8NModel()
+response = n8n.send_summarize_request(content)
+```
+
+Models have **no UI dependencies** - purely data and business logic.

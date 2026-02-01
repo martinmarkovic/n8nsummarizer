@@ -1,5 +1,5 @@
 """
-Configuration module for Text File Scanner - Extended Version with Theme Support
+Configuration module for n8n Summarizer v6.0
 """
 import os
 from dotenv import load_dotenv
@@ -11,8 +11,8 @@ N8N_WEBHOOK_URL = os.getenv('N8N_WEBHOOK_URL', 'http://localhost:5678/webhook-te
 N8N_TIMEOUT = int(os.getenv('N8N_TIMEOUT', '30'))
 
 # Application Settings
-APP_TITLE = "Text File Scanner - Extended"
-APP_WIDTH = 1400  # Twice wider (was 600)
+APP_TITLE = "n8n Summarizer"
+APP_WIDTH = 1400
 APP_HEIGHT = 800
 DEFAULT_ENCODING = 'utf-8'
 SUPPORTED_EXTENSIONS = ['.txt', '.log', '.csv', '.json', '.xml', '.srt', '.docx']

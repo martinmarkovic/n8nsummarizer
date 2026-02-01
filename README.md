@@ -1,53 +1,41 @@
-# n8nsummarizer v6.0
+# n8n Summarizer v6.0
 
-Small desktop helper for n8n-based summarization, transcription, and (upcoming) translation workflows.
+Desktop application for summarizing text files, transcribing media, and bulk processing via n8n webhooks.
 
-## Purpose
+## Features
 
-- Provide a local GUI to trigger n8n workflows (via webhooks or HTTP APIs)
-- Handle file selection, basic pre‑validation and progress display
-- Keep logic cleanly separated into **models**, **views**, and **controllers**
+- **File Summarizer** - Load text/srt/docx/pdf files and summarize via n8n
+- **YouTube Summarization** - Transcribe and summarize YouTube videos
+- **Transcriber** - Convert audio/video to text (11 media formats)
+- **Bulk Summarizer** - Process entire folders of documents
+- **Bulk Transcriber** - Process entire folders of media files
+- **Translation** - UI placeholder for future translation workflows (v6.0)
 
-This README is intentionally concise so humans, AIs, and agents can quickly understand the structure and intent.
+## Quick Start
 
-## High‑Level Architecture (MVC)
+1. Install dependencies: `pip install -r requirements.txt`
+2. Copy `.env.example` to `.env` and configure n8n webhook URLs
+3. Run: `python main.py` or `runGui.bat`
 
-- **models/** – Data and integration layer
-  - File metadata and scanning
-  - HTTP client for talking to n8n / webhooks
-  - n8n‑specific model helpers
-- **views/** – Tkinter GUI layer
-  - Main window and all tabs
-  - Pure presentation and user input controls
-- **controllers/** – Orchestrate workflows
-  - Glue between views, models, and n8n
-  - No direct UI widgets, no low‑level HTTP here
+## Architecture
 
-Main entry point: `main.py` (creates the main window, wires controllers and views).
+**MVC Pattern:**
+- `views/` - UI tabs (Tkinter)
+- `controllers/` - Business logic and event handlers
+- `models/` - Data access and n8n integration
+- `utils/` - Shared utilities (logger, file scanner)
 
-## Tabs (v6.0)
+**Modular Tabs (v5.0.3+):**
+- `views/bulk_summarizer/` - Refactored into 6 focused modules
+- `views/bulk_transcriber/` - Refactored into 7 focused modules
 
-1. **YouTube Summarizer** – Summarize YouTube videos via n8n
-2. **File Summarizer** – Summarize local files
-3. **Scanner** – Scan folders and prepare batches
-4. **Transcriber** – Single‑file transcription
-5. **Bulk Transcriber** – Bulk folder transcription
-6. **Translation (NEW, basic)** – Placeholder tab for upcoming translation workflows
+## Documentation
 
-The translation tab currently only offers basic UI (file picker + two text boxes) and does **not** call any backend yet.
+- `models/README.md` - Model layer details
+- `views/README.md` - View layer and tab structure
+- `controllers/README.md` - Controller layer and workflows
+- Package-level READMEs in `views/bulk_summarizer/` and `views/bulk_transcriber/`
 
-## Conventions
+## Version
 
-- Prefer small, focused modules over monoliths
-- Keep business logic in **controllers** and **models**, not in views
-- Use `.env` for configuration and preferences (BULK_* and n8n settings)
-- Keep documentation short and task‑oriented
-
-## For Agents / Tools
-
-When extending this project:
-
-- Put GUI changes in `views/`
-- Put HTTP/n8n logic in `models/` (or `models/n8n/`)
-- Put coordination logic in `controllers/`
-- Update the relevant folder‑level README with any new concepts or invariants
+Current: **v6.0** (February 2026)

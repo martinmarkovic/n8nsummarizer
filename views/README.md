@@ -1,37 +1,46 @@
-# views/ – Tkinter GUI Layer
+# Views Layer
 
-This folder contains all user interface code: main window and individual tabs.
+UI components built with Tkinter.
 
-## What Lives Here
+## Main Window
 
-- **main_window.py** – Application shell and tab registration
-- **base_tab.py** – Common base class for all tabs
-- **file_tab.py** – File summarizer UI
-- **transcriber_tab.py** – Single‑file transcriber UI
-- **bulk_summarizer/** – Modular bulk summarizer UI
-- **bulk_transcriber/** – Modular bulk transcriber UI
-- **bulk_summarizer_tab.py** – Legacy/compat wrapper (still supported)
-- **bulk_transcriber_tab.py** – Legacy/compat wrapper (still supported)
-- **youtube_summarizer_tab.py** – YouTube summarizer UI
-- **(NEW) translation_tab.py** – Placeholder for translation workflows
+`main_window.py` - Application shell with 6 tabs, theme toggle, font size controls.
 
-## Responsibilities
+## Tabs
 
-- Layout (frames, labels, buttons, textboxes, progress bars)
-- User input collection (but not business logic)
-- Delegation of actions to controllers
+### Single-File Tabs
+1. `file_tab.py` - File Summarizer (load file, send to n8n, display summary)
+2. `youtube_summarizer_tab.py` - YouTube Summarization (URL → transcript → summary)
+3. `transcriber_tab.py` - Transcriber (audio/video → text formats)
 
-## Guidelines for New UI
+### Bulk Processing Tabs (Modular Packages)
+4. `bulk_summarizer/` - Bulk Summarizer (folder of docs → summaries)
+   - `tab.py` - Main coordinator (~200 lines)
+   - `file_type_selector.py` - File type checkboxes
+   - `preferences.py` - .env persistence
+   - `ui_components.py` - Layout builder
+   - `constants.py` - Configuration
 
-- Use `BaseTab` as the base for new tabs
-- Keep tabs focused on presentation and event wiring
-- Avoid direct HTTP or filesystem access here
-- Prefer composition (helper components) over giant tab classes
+5. `bulk_transcriber/` - Bulk Transcriber (folder of media → transcripts)
+   - `tab.py` - Main coordinator (~250 lines)
+   - `media_type_selector.py` - Video/audio format checkboxes
+   - `output_format_selector.py` - Output format checkboxes
+   - `preferences.py` - .env persistence
+   - `ui_components.py` - Layout builder
+   - `constants.py` - Configuration
 
-## For Agents / AIs
+6. `translation_tab.py` - Translation (UI placeholder, no backend yet - v6.0)
 
-When adding a new tab:
+## Base Class
 
-- Create `views/translation_tab.py` (for example)
-- Register it in `main_window.py`
-- Ensure it exposes a small, clear public API that controllers can use
+`base_tab.py` - Shared tab functionality (status updates, logging, common methods).
+
+All tabs inherit from `BaseTab` and implement `_setup_ui()`.
+
+## Modular Design (v5.0.3+)
+
+Bulk tabs refactored into packages with single-responsibility modules:
+- **71% code reduction** in main tab files
+- **Independently testable** components
+- **Reusable** selectors and UI builders
+- **Clean separation** of UI, state, and persistence

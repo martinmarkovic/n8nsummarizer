@@ -1,34 +1,61 @@
-# controllers/ – Workflow Orchestration
+# Controllers Layer
 
-Controllers connect **views** with **models** and external services (n8n, webhooks).
+Business logic and coordination between views and models.
 
-## What Lives Here
+## Controllers
 
-- **file_controller.py** – File summarization workflow
-- **bulk_summarizer_controller.py** – Bulk summarization
-- **transcriber_controller.py** – Single‑file transcription
-- **bulk_transcriber_controller.py** – Bulk transcription
-- **scanner_controller.py** – Folder scanning flows
-- **youtube_summarizer_controller.py** – YouTube summarization
+### `file_controller.py`
+Coordinates File Summarizer tab:
+- Handles file selection and loading
+- Sends content to n8n for summarization
+- Manages export (TXT, DOCX)
+- Preference persistence
 
-## Responsibilities
+### `youtube_summarizer_controller.py`
+Coordinates YouTube Summarization:
+- Extracts video metadata
+- Sends to n8n for transcription
+- Summarizes transcript
+- Export options
 
-- Read user input from views
-- Call appropriate model functions (file, HTTP, n8n, transcription)
-- Update views with progress, results and errors
-- Contain workflow logic, not low‑level details
+### `transcriber_controller.py`
+Coordinates Transcriber tab:
+- Handles media file selection
+- Sends to n8n for transcription
+- Format conversion (SRT, TXT, VTT, JSON)
+- Export management
 
-## Guidelines for New Code
+### `bulk_summarizer_controller.py`
+Coordinates Bulk Summarizer:
+- Scans folders for matching file types
+- Processes files in batches
+- Progress tracking and logging
+- Output location management
 
-- Dont import Tkinter directly; work against view interfaces
-- Dont perform raw HTTP here; call model helpers instead
-- Keep methods short and focused on workflow steps
-- Log important events via `utils.logger`
+### `bulk_transcriber_controller.py`
+Coordinates Bulk Transcriber:
+- Scans folders for media files
+- Processes media in batches
+- Multiple output format generation
+- Progress tracking and logging
 
-## For Agents / AIs
+## Pattern
 
-When wiring a new feature (e.g. translation tab):
+All controllers follow:
+1. Receive view reference in `__init__`
+2. Bind UI event handlers to controller methods
+3. Call models for data/processing
+4. Update view with results
+5. Handle errors and logging
 
-- Create a new controller (e.g. `translation_controller.py`)
-- Accept dependencies (models, view/tab instance) via constructor
-- Expose clear methods that the view can bind to buttons (e.g. `on_translate_clicked()`)
+## Usage
+
+Controllers are instantiated in `main.py` and passed their respective tab views:
+
+```python
+from controllers.file_controller import FileController
+
+file_controller = FileController(window.file_tab)
+```
+
+Controllers orchestrate workflows but **never directly manipulate UI** - they call view methods.
