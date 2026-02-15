@@ -1,10 +1,10 @@
 """
-Main Window GUI v6.0 - Translation Tab Integration
+Main Window GUI v6.1 - Downloader Tab Integration
 
 This window manages:
 - Header (title + font size + theme toggle)
 - Tab container (notebook)
-- Tab initialization (6 tabs total)
+- Tab initialization (7 tabs total)
 - Theme management
 - Font size management with .env persistence
 - Status bar
@@ -12,12 +12,16 @@ This window manages:
 All tab-specific UI code moved to individual tab files.
 Easy to add new tabs by creating new tab classes and initializing them here.
 
+v6.1 Changes:
+- Added 7th tab: Downloader (YouTube video download functionality)
+- Updated version references from v6.0 to v6.1
+
 v6.0 Changes:
 - Added 6th tab: Translation (UI placeholder for future translation workflows)
 - Updated version references from v5.0 to v6.0
 
 Created: 2025-11-30
-Version: 6.0
+Version: 6.1
 """
 import tkinter as tk
 from tkinter import ttk
@@ -35,6 +39,7 @@ from views.transcriber_tab import TranscriberTab
 from views.bulk_summarizer_tab import BulkSummarizerTab
 from views.bulk_transcriber_tab import BulkTranscriberTab
 from views.translation_tab import TranslationTab
+from views.downloader_tab import DownloaderTab
 
 # Load environment variables
 load_dotenv()
@@ -52,13 +57,14 @@ class MainWindow:
     - Theme management
     - Status bar
     
-    Tab order (v6.0):
+    Tab order (v6.1):
     1. File Summarizer
     2. YouTube Summarization
     3. Transcriber
     4. Bulk Summarizer
     5. Bulk Transcriber
-    6. Translation (UI only)
+    6. Translation
+    7. Downloader (NEW)
     """
     
     # Font sizes
@@ -75,7 +81,7 @@ class MainWindow:
             root: Tkinter root window
         """
         self.root = root
-        self.root.title(f"{APP_TITLE} v6.0")
+        self.root.title(f"{APP_TITLE} v6.1")
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
         
@@ -98,7 +104,7 @@ class MainWindow:
         
         self._apply_theme()
         
-        logger.info(f"MainWindow initialized (v6.0 - {self.current_theme} theme, {self.current_font_size}px font)")
+        logger.info(f"MainWindow initialized (v6.1 - {self.current_theme} theme, {self.current_font_size}px font)")
     
     def _load_font_size_from_env(self) -> int:
         """
@@ -175,7 +181,7 @@ class MainWindow:
         Creates:
         - Main frame
         - Header (title + font size + theme toggle)
-        - Tab notebook with all tabs (6 total)
+        - Tab notebook with all tabs (7 total)
         - Status bar
         """
         # Main frame
@@ -208,7 +214,7 @@ class MainWindow:
         
         self.title_label = ttk.Label(
             header_frame,
-            text=f"{APP_TITLE} v6.0",
+            text=f"{APP_TITLE} v6.1",
             font=("Segoe UI", 14, "bold")
         )
         self.title_label.grid(row=0, column=0, sticky=tk.W)
@@ -259,13 +265,14 @@ class MainWindow:
         """
         Setup tab notebook with all tabs.
         
-        Tab order (v6.0):
+        Tab order (v6.1):
         1. File Summarizer
         2. YouTube Summarization
         3. Transcriber
         4. Bulk Summarizer
         5. Bulk Transcriber
-        6. Translation (UI only)
+        6. Translation
+        7. Downloader (NEW)
         
         Args:
             parent: Parent frame
@@ -294,11 +301,15 @@ class MainWindow:
         self.bulk_transcriber_tab = BulkTranscriberTab(self.notebook)
         self.notebook.add(self.bulk_transcriber_tab, text="🎬 Bulk Transcriber")
         
-        # Tab 6: Translation (NEW in v6.0)
+        # Tab 6: Translation
         self.translation_tab = TranslationTab(self.notebook)
         self.notebook.add(self.translation_tab, text="🌐 Translation")
         
-        logger.info("All tabs initialized (v6.0 - Translation tab added)")
+        # Tab 7: Downloader (NEW in v6.1)
+        self.downloader_tab = DownloaderTab(self.notebook)
+        self.notebook.add(self.downloader_tab, text="📥 Downloader")
+        
+        logger.info("All tabs initialized (v6.1 - Downloader tab added)")
     
     def _setup_status_bar(self, parent):
         """
@@ -372,10 +383,14 @@ class MainWindow:
         if hasattr(self, 'bulk_transcriber_tab'):
             self.bulk_transcriber_tab.status_log.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
         
-        # Translation tab (NEW)
+        # Translation tab
         if hasattr(self, 'translation_tab'):
             self.translation_tab.source_text.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
             self.translation_tab.target_text.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
+        
+        # Downloader tab (NEW)
+        if hasattr(self, 'downloader_tab'):
+            self.downloader_tab.status_log.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
         
         # Title label
         if hasattr(self, 'title_label'):
@@ -432,7 +447,7 @@ class MainWindow:
         """
         Apply current font size to all text widgets.
         
-        v6.0: Now also applies to Translation tab
+        v6.1: Now also applies to Downloader tab
         """
         # Update display label
         self.font_size_var.set(f"{self.current_font_size}px")
@@ -459,10 +474,14 @@ class MainWindow:
         if hasattr(self, 'bulk_transcriber_tab'):
             self.bulk_transcriber_tab.status_log.configure(font=("Segoe UI", self.current_font_size))
         
-        # Apply to Translation tab (NEW)
+        # Apply to Translation tab
         if hasattr(self, 'translation_tab'):
             self.translation_tab.source_text.configure(font=("Segoe UI", self.current_font_size))
             self.translation_tab.target_text.configure(font=("Segoe UI", self.current_font_size))
+        
+        # Apply to Downloader tab (NEW)
+        if hasattr(self, 'downloader_tab'):
+            self.downloader_tab.status_log.configure(font=("Segoe UI", self.current_font_size))
         
         logger.debug(f"Applied font size {self.current_font_size}px to all text widgets")
     
@@ -500,4 +519,6 @@ class MainWindow:
             return self.bulk_transcriber_tab
         elif tab_index == 5:
             return self.translation_tab
+        elif tab_index == 6:
+            return self.downloader_tab
         return None
