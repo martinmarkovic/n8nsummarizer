@@ -10,7 +10,7 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.1.1 - Fixed YouTube 403 error with extractor args
+Version: 6.1.2 - Fixed format availability with android client
 """
 
 import yt_dlp
@@ -30,14 +30,16 @@ class YouTubeDownloader:
     """
     
     # Resolution presets mapping to yt-dlp format strings
+    # Using simpler format strings that work with android client
     RESOLUTION_FORMATS = {
-        "Best Available": "bestvideo+bestaudio/best",
-        "2160p (4K)": "bestvideo[height<=2160]+bestaudio/best[height<=2160]",
-        "1440p (2K)": "bestvideo[height<=1440]+bestaudio/best[height<=1440]",
-        "1080p (Full HD)": "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
-        "720p (HD)": "bestvideo[height<=720]+bestaudio/best[height<=720]",
-        "480p": "bestvideo[height<=480]+bestaudio/best[height<=480]",
-        "360p": "bestvideo[height<=360]+bestaudio/best[height<=360]",
+        "Best Available": "best",
+        "2160p (4K)": "best[height<=2160]",
+        "1440p (2K)": "best[height<=1440]",
+        "1080p (Full HD)": "best[height<=1080]",
+        "720p (HD)": "best[height<=720]",
+        "480p": "best[height<=480]",
+        "360p": "best[height<=360]",
+        "Audio Only (MP3)": "bestaudio/best",
     }
     
     def __init__(self):
@@ -127,11 +129,10 @@ class YouTubeDownloader:
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
-                # FIX: Add extractor args to bypass JS runtime requirement
+                # Use android client - most reliable for info extraction
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['ios', 'web'],  # Use iOS and web clients
-                        'skip': ['dash', 'hls'],  # Skip DASH/HLS to avoid issues
+                        'player_client': ['android'],
                     }
                 },
             }
@@ -178,26 +179,28 @@ class YouTubeDownloader:
         # Configure yt-dlp options
         format_string = self.RESOLUTION_FORMATS[self.selected_resolution]
         
+        # Build yt-dlp options
         ydl_opts = {
             'format': format_string,
             'outtmpl': str(self.download_path / '%(title)s.%(ext)s'),
             'progress_hooks': [self._progress_hook],
-            'merge_output_format': 'mp4',  # Ensure MP4 output
-            'postprocessor_args': [
-                '-c:v', 'copy',  # Copy video codec (no re-encoding)
-                '-c:a', 'aac',   # Convert audio to AAC if needed
-            ],
             'quiet': False,
             'no_warnings': False,
-            # FIX: Add extractor args to bypass YouTube 403 Forbidden error
-            # This solves the JS runtime requirement and SABR streaming issues
+            # Use android client - most reliable for downloads
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['ios', 'web'],  # Use iOS and web clients instead of default
-                    'skip': ['dash', 'hls'],  # Skip problematic formats
+                    'player_client': ['android'],
                 }
             },
         }
+        
+        # Add audio extraction options if Audio Only selected
+        if self.selected_resolution == "Audio Only (MP3)":
+            ydl_opts['postprocessors'] = [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }]
         
         # Perform download
         self.is_downloading = True
