@@ -14,7 +14,7 @@ Handles:
 - Settings persistence (path, quality, PO token)
 
 Created: 2026-02-15
-Version: 6.4 - Added PO Token support
+Version: 6.4.5 - Simplified approach without token usage
 """
 
 import threading
@@ -33,7 +33,8 @@ class DownloaderController:
     in background threads to keep UI responsive.
     
     v6.3: Settings persistence (remembers download path and quality)
-    v6.4: PO Token support for HD quality downloads
+    v6.4: PO Token field support (stored but not used currently)
+    v6.4.5: Simplified to working approach without tokens
     """
     
     def __init__(self, view):
@@ -79,12 +80,12 @@ class DownloaderController:
             self.model.set_resolution(saved_quality)
             logger.info(f"Restored quality: {saved_quality}")
         
-        # Restore saved PO token (v6.4)
+        # Restore saved PO token (stored but not used currently)
         saved_token = self.settings.get_youtube_po_token()
         if saved_token:
             self.view.po_token_var.set(saved_token)
             self.model.set_po_token(saved_token)
-            logger.info("Restored PO Token")
+            logger.info("Restored PO Token (stored)")
         
         logger.info("SettingsManager configured")
         
@@ -130,7 +131,7 @@ class DownloaderController:
             logger.info(f"Resolution set: {resolution}")
     
     def set_po_token(self, token: str) -> None:
-        """Set PO Token for HD quality downloads and save to settings (v6.4).
+        """Set PO Token and save to settings (stored for future use).
         
         Args:
             token: PO Token string
@@ -215,7 +216,7 @@ Views: {views_str}
             self.view.update_status("Error: No download folder selected")
             return
         
-        # Get PO token (v6.4)
+        # Store PO token if provided (for future use)
         po_token = self.view.get_po_token()
         if po_token:
             self.model.set_po_token(po_token)
@@ -231,8 +232,6 @@ Views: {views_str}
         self.view.log_message(f"Starting download: {url}")
         self.view.log_message(f"Resolution: {self.model.selected_resolution}")
         self.view.log_message(f"Destination: {download_path}")
-        if po_token:
-            self.view.log_message("Using PO Token for HD quality")
         self.view.update_status("Download in progress...")
         
         # Start download in background
