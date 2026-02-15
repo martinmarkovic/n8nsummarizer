@@ -10,7 +10,10 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.2.9 - Restored v6.1 working config (android + simple formats)
+Version: 6.2.10 - Reality check: 360p max without PO tokens
+
+IMPORTANT: As of February 2026, YouTube requires PO Tokens for qualities above 360p.
+Without PO tokens, downloads are limited to 360p (format 18) regardless of selected quality.
 """
 
 import yt_dlp
@@ -28,11 +31,12 @@ class YouTubeDownloader:
     Handles video download operations with configurable quality,
     destination folder, and progress tracking.
     
-    Uses android client with simple format strings for reliability.
+    LIMITATION: Currently limited to 360p due to YouTube's PO Token requirement.
+    Higher qualities (720p, 1080p, etc.) require PO Token implementation.
     """
     
     # Resolution presets mapping to yt-dlp format strings
-    # Using simpler format strings that work reliably with android client
+    # NOTE: Currently all qualities above 360p are blocked by YouTube without PO tokens
     RESOLUTION_FORMATS = {
         "Best Available": "best",
         "2160p (4K)": "best[height<=2160]",
@@ -50,6 +54,7 @@ class YouTubeDownloader:
         self.selected_resolution: str = "Best Available"
         self.progress_callback: Optional[Callable] = None
         self.is_downloading: bool = False
+        self._po_token_warning_shown: bool = False
         
     def set_download_path(self, path: str) -> None:
         """Set destination folder for downloads.
@@ -69,6 +74,23 @@ class YouTubeDownloader:
         if resolution in self.RESOLUTION_FORMATS:
             self.selected_resolution = resolution
             logger.info(f"Resolution set to: {resolution}")
+            
+            # Warn user about PO token limitation (once per session)
+            if not self._po_token_warning_shown and resolution not in ["360p", "Audio Only (MP3)"]:
+                logger.warning("="*60)
+                logger.warning("YouTube Limitation: PO Token Required")
+                logger.warning("="*60)
+                logger.warning(f"You selected: {resolution}")
+                logger.warning("Due to YouTube restrictions (Feb 2026), downloads are")
+                logger.warning("limited to 360p (format 18) without PO Tokens.")
+                logger.warning("")
+                logger.warning("The download will proceed but may be 360p instead of")
+                logger.warning(f"{resolution} you requested.")
+                logger.warning("")
+                logger.warning("To enable higher qualities, PO Token implementation")
+                logger.warning("is required. See: https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide")
+                logger.warning("="*60)
+                self._po_token_warning_shown = True
         else:
             logger.warning(f"Unknown resolution '{resolution}', using Best Available")
             self.selected_resolution = "Best Available"
@@ -209,15 +231,22 @@ class YouTubeDownloader:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 logger.info(f"Starting download: {url}")
-                logger.info(f"Resolution: {self.selected_resolution}")
+                logger.info(f"Resolution requested: {self.selected_resolution}")
                 logger.info(f"Format string: {format_string}")
-                logger.info(f"Using android client for reliable downloads")
+                logger.info(f"Using android client")
                 logger.info(f"Destination: {self.download_path}")
                 
                 ydl.download([url])
                 
                 self.is_downloading = False
-                return True, "Download completed successfully"
+                
+                # Add note about actual quality if higher quality was requested
+                if self.selected_resolution not in ["360p", "Audio Only (MP3)", "Best Available"]:
+                    return True, ("Download completed successfully. "
+                                "NOTE: Due to YouTube restrictions, actual quality may be 360p. "
+                                "PO Token required for higher qualities.")
+                else:
+                    return True, "Download completed successfully"
                 
         except Exception as e:
             self.is_downloading = False
