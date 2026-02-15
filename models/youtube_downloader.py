@@ -1,5 +1,5 @@
 """
-YouTube Downloader Model - yt-dlp wrapper for video downloads (v6.1)
+YouTube Downloader Model - yt-dlp wrapper for video downloads (v6.2)
 
 Provides core functionality for downloading YouTube videos with:
 - Quality/resolution selection
@@ -10,7 +10,7 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.1.2 - Fixed format availability with android client
+Version: 6.2 - Fixed quality selection with mweb client
 """
 
 import yt_dlp
@@ -30,16 +30,16 @@ class YouTubeDownloader:
     """
     
     # Resolution presets mapping to yt-dlp format strings
-    # Using simpler format strings that work with android client
+    # Using height-based selection for reliable quality matching
     RESOLUTION_FORMATS = {
-        "Best Available": "best",
-        "2160p (4K)": "best[height<=2160]",
-        "1440p (2K)": "best[height<=1440]",
-        "1080p (Full HD)": "best[height<=1080]",
-        "720p (HD)": "best[height<=720]",
-        "480p": "best[height<=480]",
-        "360p": "best[height<=360]",
-        "Audio Only (MP3)": "bestaudio/best",
+        "Best Available": "bv*+ba/b",  # Best video + best audio, fallback to best
+        "2160p (4K)": "bv*[height<=2160]+ba/b[height<=2160]",
+        "1440p (2K)": "bv*[height<=1440]+ba/b[height<=1440]",
+        "1080p (Full HD)": "bv*[height<=1080]+ba/b[height<=1080]",
+        "720p (HD)": "bv*[height<=720]+ba/b[height<=720]",
+        "480p": "bv*[height<=480]+ba/b[height<=480]",
+        "360p": "bv*[height<=360]+ba/b[height<=360]",
+        "Audio Only (MP3)": "ba/b",
     }
     
     def __init__(self):
@@ -129,10 +129,10 @@ class YouTubeDownloader:
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
-                # Use android client - most reliable for info extraction
+                # Use mobile web client - works without tokens
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['android'],
+                        'player_client': ['mweb'],
                     }
                 },
             }
@@ -186,12 +186,14 @@ class YouTubeDownloader:
             'progress_hooks': [self._progress_hook],
             'quiet': False,
             'no_warnings': False,
-            # Use android client - most reliable for downloads
+            # Use mobile web client - most reliable for quality selection
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android'],
+                    'player_client': ['mweb'],
                 }
             },
+            # Prefer merging video+audio for better quality
+            'merge_output_format': 'mp4',
         }
         
         # Add audio extraction options if Audio Only selected
@@ -208,6 +210,7 @@ class YouTubeDownloader:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 logger.info(f"Starting download: {url}")
                 logger.info(f"Resolution: {self.selected_resolution}")
+                logger.info(f"Format string: {format_string}")
                 logger.info(f"Destination: {self.download_path}")
                 
                 ydl.download([url])
