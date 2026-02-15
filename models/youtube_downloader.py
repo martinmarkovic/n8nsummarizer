@@ -10,7 +10,7 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.2.5 - Use browser cookies for authentication (bypasses PO Token requirements)
+Version: 6.2.6 - Handle cookie extraction errors with fallback
 """
 
 import yt_dlp
@@ -28,7 +28,7 @@ class YouTubeDownloader:
     Handles video download operations with configurable quality,
     destination folder, and progress tracking.
     
-    Uses browser cookies for authentication to bypass PO Token requirements.
+    Uses browser cookies when available, falls back to android client.
     """
     
     # Resolution presets mapping to yt-dlp format strings
@@ -50,6 +50,7 @@ class YouTubeDownloader:
         self.selected_resolution: str = "Best Available"
         self.progress_callback: Optional[Callable] = None
         self.is_downloading: bool = False
+        self.use_cookies: bool = True  # Try cookies first, fallback if fails
         
     def set_download_path(self, path: str) -> None:
         """Set destination folder for downloads.
@@ -126,13 +127,18 @@ class YouTubeDownloader:
         Returns:
             Dictionary with video info or None if error
         """
+        # Try without cookies first for info extraction
         try:
             ydl_opts = {
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
-                # Use cookies from browser
-                'cookiesfrombrowser': ('chrome',),  # or 'firefox', 'edge', 'safari'
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android'],
+                        'skip': ['dash', 'hls']
+                    }
+                },
             }
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -177,16 +183,37 @@ class YouTubeDownloader:
         # Configure yt-dlp options
         format_string = self.RESOLUTION_FORMATS[self.selected_resolution]
         
-        # Build yt-dlp options
+        # Build base yt-dlp options
         ydl_opts = {
             'format': format_string,
             'outtmpl': str(self.download_path / '%(title)s.%(ext)s'),
             'progress_hooks': [self._progress_hook],
             'quiet': False,
             'no_warnings': False,
-            # Use cookies from browser - this bypasses ALL token requirements
-            'cookiesfrombrowser': ('chrome',),  # Will try: chrome, firefox, edge, safari, etc.
+            # Use android client which works without cookies
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android'],
+                    'skip': ['dash', 'hls']
+                }
+            },
         }
+        
+        # Try adding cookies from browser if enabled
+        if self.use_cookies:
+            try:
+                # Test if cookies can be extracted
+                test_opts = {'cookiesfrombrowser': ('chrome',), 'quiet': True}
+                with yt_dlp.YoutubeDL(test_opts) as test_ydl:
+                    # If this doesn't raise, cookies work
+                    pass
+                # Add cookies to options
+                ydl_opts['cookiesfrombrowser'] = ('chrome',)
+                logger.info("Using browser cookies for authentication")
+            except Exception as e:
+                logger.warning(f"Cookie extraction failed: {str(e)}")
+                logger.info("Continuing without cookies (using android client)")
+                self.use_cookies = False  # Don't try again this session
         
         # Add audio extraction options if Audio Only selected
         if self.selected_resolution == "Audio Only (MP3)":
@@ -203,7 +230,6 @@ class YouTubeDownloader:
                 logger.info(f"Starting download: {url}")
                 logger.info(f"Resolution: {self.selected_resolution}")
                 logger.info(f"Format string: {format_string}")
-                logger.info(f"Using browser cookies for authentication")
                 logger.info(f"Destination: {self.download_path}")
                 
                 ydl.download([url])
