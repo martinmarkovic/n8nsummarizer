@@ -10,7 +10,7 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.2.6 - Handle cookie extraction errors with fallback
+Version: 6.2.7 - Skip cookies, use android client directly (no DPAPI errors)
 """
 
 import yt_dlp
@@ -28,7 +28,7 @@ class YouTubeDownloader:
     Handles video download operations with configurable quality,
     destination folder, and progress tracking.
     
-    Uses browser cookies when available, falls back to android client.
+    Uses android client for reliable downloads without authentication.
     """
     
     # Resolution presets mapping to yt-dlp format strings
@@ -50,7 +50,6 @@ class YouTubeDownloader:
         self.selected_resolution: str = "Best Available"
         self.progress_callback: Optional[Callable] = None
         self.is_downloading: bool = False
-        self.use_cookies: bool = True  # Try cookies first, fallback if fails
         
     def set_download_path(self, path: str) -> None:
         """Set destination folder for downloads.
@@ -127,7 +126,6 @@ class YouTubeDownloader:
         Returns:
             Dictionary with video info or None if error
         """
-        # Try without cookies first for info extraction
         try:
             ydl_opts = {
                 'quiet': True,
@@ -183,14 +181,14 @@ class YouTubeDownloader:
         # Configure yt-dlp options
         format_string = self.RESOLUTION_FORMATS[self.selected_resolution]
         
-        # Build base yt-dlp options
+        # Build yt-dlp options - using android client (no cookies needed)
         ydl_opts = {
             'format': format_string,
             'outtmpl': str(self.download_path / '%(title)s.%(ext)s'),
             'progress_hooks': [self._progress_hook],
             'quiet': False,
             'no_warnings': False,
-            # Use android client which works without cookies
+            # Use android client which works reliably without authentication
             'extractor_args': {
                 'youtube': {
                     'player_client': ['android'],
@@ -198,22 +196,6 @@ class YouTubeDownloader:
                 }
             },
         }
-        
-        # Try adding cookies from browser if enabled
-        if self.use_cookies:
-            try:
-                # Test if cookies can be extracted
-                test_opts = {'cookiesfrombrowser': ('chrome',), 'quiet': True}
-                with yt_dlp.YoutubeDL(test_opts) as test_ydl:
-                    # If this doesn't raise, cookies work
-                    pass
-                # Add cookies to options
-                ydl_opts['cookiesfrombrowser'] = ('chrome',)
-                logger.info("Using browser cookies for authentication")
-            except Exception as e:
-                logger.warning(f"Cookie extraction failed: {str(e)}")
-                logger.info("Continuing without cookies (using android client)")
-                self.use_cookies = False  # Don't try again this session
         
         # Add audio extraction options if Audio Only selected
         if self.selected_resolution == "Audio Only (MP3)":
@@ -230,6 +212,7 @@ class YouTubeDownloader:
                 logger.info(f"Starting download: {url}")
                 logger.info(f"Resolution: {self.selected_resolution}")
                 logger.info(f"Format string: {format_string}")
+                logger.info(f"Using android client (no authentication required)")
                 logger.info(f"Destination: {self.download_path}")
                 
                 ydl.download([url])
