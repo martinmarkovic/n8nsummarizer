@@ -10,7 +10,7 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.2.1 - Fixed quality selection with better format filters
+Version: 6.2.2 - Fixed quality selection with android client (no PO Token needed)
 """
 
 import yt_dlp
@@ -30,7 +30,7 @@ class YouTubeDownloader:
     """
     
     # Resolution presets mapping to yt-dlp format strings
-    # Using explicit format selection for reliable quality matching
+    # Using explicit format selection that works with android client
     RESOLUTION_FORMATS = {
         "Best Available": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "2160p (4K)": "bestvideo[height<=2160][ext=mp4]+bestaudio[ext=m4a]/best[height<=2160][ext=mp4]/best[height<=2160]",
@@ -129,10 +129,10 @@ class YouTubeDownloader:
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
-                # Use mobile web client - works without tokens
+                # Use android client - works without PO Token
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['mweb'],
+                        'player_client': ['android'],
                     }
                 },
             }
@@ -186,10 +186,10 @@ class YouTubeDownloader:
             'progress_hooks': [self._progress_hook],
             'quiet': False,
             'no_warnings': False,
-            # Use mobile web client - most reliable for quality selection
+            # Use android client - most reliable, no PO Token needed
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['mweb'],
+                    'player_client': ['android'],
                 }
             },
             # Prefer merging video+audio for better quality
