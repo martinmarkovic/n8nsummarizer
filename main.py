@@ -1,5 +1,5 @@
 """
-Main entry point for n8n Summarizer application (v6.0)
+Main entry point for n8n Summarizer application (v6.3)
 
 Wires up views and controllers:
 - FileTab ↔ FileController
@@ -8,9 +8,14 @@ Wires up views and controllers:
 - BulkSummarizerTab ↔ BulkSummarizerController
 - BulkTranscriberTab ↔ BulkTranscriberController
 - TranslationTab (UI only, no controller yet)
+- DownloaderTab ↔ DownloaderController
 
-Version: 6.0
-Updated: 2026-02-01 - Translation tab UI placeholder
+New in v6.3:
+- Settings persistence (remembers last tab, downloader path/quality)
+- SettingsManager integration
+
+Version: 6.3
+Updated: 2026-02-15 - Settings persistence
 """
 import tkinter as tk
 from views.main_window import MainWindow
@@ -20,6 +25,7 @@ from controllers.transcriber_controller import TranscriberController
 from controllers.bulk_summarizer_controller import BulkSummarizerController
 from controllers.bulk_transcriber_controller import BulkTranscriberController
 from utils.logger import logger
+from utils.settings_manager import SettingsManager
 from config import APP_TITLE
 
 
@@ -28,6 +34,7 @@ def main():
     Initialize and run the application.
     
     Creates:
+    - SettingsManager (persistent user preferences)
     - MainWindow (views layer with all tabs)
     - FileController (coordinates FileTab + models)
     - TranscriberController (coordinates TranscriberTab + models)
@@ -35,27 +42,34 @@ def main():
     - BulkSummarizerController (coordinates BulkSummarizerTab + models)
     - BulkTranscriberController (coordinates BulkTranscriberTab + models)
     - TranslationTab (UI only, controller in future phase)
+    - DownloaderTab with persistent settings
     
-    Features (v6.0):
+    Features (v6.3):
     - File summarization (txt, srt, docx, pdf)
     - YouTube summarization with transcription
     - Single file transcription (mp4, mp3, wav, m4a, flac, aac, wma, mov, avi, mkv, webm)
     - Bulk summarization with advanced options
     - Bulk transcription with media format selection and output formats
     - Translation tab (UI placeholder for future workflows)
+    - YouTube video downloader
     - Recursive subfolder scanning for bulk operations
-    - Preference persistence in .env
+    - Preference persistence in .env (tab, path, quality)
     """
     logger.info("=" * 50)
-    logger.info(f"Starting {APP_TITLE} v6.0")
+    logger.info(f"Starting {APP_TITLE} v6.3")
     logger.info("=" * 50)
     
     try:
+        # Initialize settings manager FIRST
+        settings = SettingsManager()
+        logger.info("SettingsManager initialized")
+        
         # Create Tkinter root window
         root = tk.Tk()
         
-        # Initialize main window (creates all tabs including Translation)
-        window = MainWindow(root)
+        # Initialize main window (creates all tabs including Translation and Downloader)
+        # Pass settings manager to main window
+        window = MainWindow(root, settings)
         
         # Initialize File Summarizer tab controller
         # Wires: FileTab UI ↔ FileController ↔ FileModel + N8NModel
@@ -91,6 +105,12 @@ def main():
         
         # Translation tab has UI only (no controller yet - future phase)
         logger.info("TranslationTab initialized (UI only)")
+        
+        # Downloader tab controller already initialized in DownloaderTab.__init__
+        # Now inject settings manager into it
+        if hasattr(window, 'downloader_tab') and window.downloader_tab.controller:
+            window.downloader_tab.controller.set_settings_manager(settings)
+            logger.info("DownloaderController configured with SettingsManager")
         
         logger.info("Application ready")
         
