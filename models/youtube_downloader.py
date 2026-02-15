@@ -10,7 +10,7 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.2.2 - Fixed quality selection with android client (no PO Token needed)
+Version: 6.2.3 - Fixed quality selection by using yt-dlp default client negotiation
 """
 
 import yt_dlp
@@ -30,16 +30,16 @@ class YouTubeDownloader:
     """
     
     # Resolution presets mapping to yt-dlp format strings
-    # Using explicit format selection that works with android client
+    # Using height-based selection with proper fallbacks
     RESOLUTION_FORMATS = {
-        "Best Available": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "2160p (4K)": "bestvideo[height<=2160][ext=mp4]+bestaudio[ext=m4a]/best[height<=2160][ext=mp4]/best[height<=2160]",
-        "1440p (2K)": "bestvideo[height<=1440][ext=mp4]+bestaudio[ext=m4a]/best[height<=1440][ext=mp4]/best[height<=1440]",
-        "1080p (Full HD)": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]",
-        "720p (HD)": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]",
-        "480p": "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[height<=480]",
-        "360p": "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best[height<=360]",
-        "Audio Only (MP3)": "bestaudio[ext=m4a]/bestaudio",
+        "Best Available": "bv*+ba/b",  # Best video + best audio
+        "2160p (4K)": "bv*[height<=2160]+ba/b[height<=2160]",
+        "1440p (2K)": "bv*[height<=1440]+ba/b[height<=1440]",
+        "1080p (Full HD)": "bv*[height<=1080]+ba/b[height<=1080]",
+        "720p (HD)": "bv*[height<=720]+ba/b[height<=720]",
+        "480p": "bv*[height<=480]+ba/b[height<=480]",
+        "360p": "bv*[height<=360]+ba/b[height<=360]",
+        "Audio Only (MP3)": "ba/b",
     }
     
     def __init__(self):
@@ -129,12 +129,6 @@ class YouTubeDownloader:
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
-                # Use android client - works without PO Token
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['android'],
-                    }
-                },
             }
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -186,16 +180,8 @@ class YouTubeDownloader:
             'progress_hooks': [self._progress_hook],
             'quiet': False,
             'no_warnings': False,
-            # Use android client - most reliable, no PO Token needed
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android'],
-                }
-            },
-            # Prefer merging video+audio for better quality
-            'merge_output_format': 'mp4',
-            # Force IPv4 for better connectivity
-            'force_ipv4': True,
+            # Don't specify client - let yt-dlp auto-negotiate
+            # This is more reliable and doesn't require PO tokens
         }
         
         # Add audio extraction options if Audio Only selected
