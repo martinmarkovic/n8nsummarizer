@@ -11,7 +11,7 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.4.2 - Full PO Token integration
+Version: 6.4.3 - Fixed PO Token with web client
 
 IMPORTANT: As of February 2026, YouTube requires PO Tokens for qualities above 360p.
 With PO tokens provided, all qualities up to 4K are supported.
@@ -106,9 +106,9 @@ class YouTubeDownloader:
         if token:
             token = token.strip()
             
-            # Remove 'web+' prefix if present (from cookie extraction)
-            if token.startswith('web+'):
-                token = token[4:]
+            # Remove any prefix (web+, android.gvs+, etc.)
+            if '+' in token:
+                token = token.split('+', 1)[1]
                 
             if len(token) < 10:
                 logger.warning(f"PO Token seems too short ({len(token)} chars). May be invalid.")
@@ -196,10 +196,10 @@ class YouTubeDownloader:
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
-                # Use android client for info extraction
+                # Use web client with PO token
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['android'],
+                        'player_client': ['web'],
                     }
                 },
             }
@@ -250,27 +250,28 @@ class YouTubeDownloader:
         # Configure yt-dlp options
         format_string = self.RESOLUTION_FORMATS[self.selected_resolution]
         
-        # Build yt-dlp options
+        # Build yt-dlp options - use web client for PO token compatibility
         ydl_opts = {
             'format': format_string,
             'outtmpl': str(self.download_path / '%(title)s.%(ext)s'),
             'progress_hooks': [self._progress_hook],
             'quiet': False,
             'no_warnings': False,
-            # Use android client as base
+            # Use web client - compatible with extracted web PO tokens
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android'],
+                    'player_client': ['web'],
                 }
             },
         }
         
         # Add PO token if available for HD downloads
         if self.has_po_token():
-            # yt-dlp expects format: web+<token>
+            # yt-dlp expects format: web+<token> for web client
             po_token_value = f'web+{self._po_token}'
             ydl_opts['extractor_args']['youtube']['po_token'] = [po_token_value]
             logger.info(f"✓ Using PO Token for HD download (token length: {len(self._po_token)})")
+            logger.info(f"Client: web | Token format: web+{self._po_token[:15]}...")
         else:
             logger.warning("⚠ No PO Token - download may be limited to 360p")
         
@@ -289,6 +290,7 @@ class YouTubeDownloader:
                 logger.info(f"Starting download: {url}")
                 logger.info(f"Resolution requested: {self.selected_resolution}")
                 logger.info(f"Format string: {format_string}")
+                logger.info(f"Player client: web")
                 logger.info(f"PO Token: {'✓ Enabled' if self.has_po_token() else '✗ Not set'}")
                 logger.info(f"Destination: {self.download_path}")
                 
