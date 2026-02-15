@@ -12,7 +12,7 @@ Provides UI for downloading YouTube videos with:
 Integrated with DownloaderController for download operations.
 
 Created: 2026-02-15
-Version: 6.1
+Version: 6.1.1 - Fixed resolution dropdown population
 """
 
 import tkinter as tk
@@ -43,9 +43,10 @@ class DownloaderTab(BaseTab):
         # Initialize controller after UI is ready
         self.controller = DownloaderController(self)
         
-        # Set default resolution
+        # Populate resolution dropdown and set default
         resolutions = self.controller.get_available_resolutions()
         if resolutions:
+            self.resolution_combo['values'] = resolutions  # FIX: Populate combobox
             self.resolution_var.set(resolutions[0])  # "Best Available"
             self.controller.set_resolution(resolutions[0])
 
@@ -101,7 +102,7 @@ class DownloaderTab(BaseTab):
             row=2, column=0, sticky=tk.W, padx=(0, 10), pady=5
         )
         
-        # Placeholder - will be populated after controller init
+        # Resolution combobox - will be populated in __init__ after controller is ready
         self.resolution_combo = ttk.Combobox(
             controls_frame,
             textvariable=self.resolution_var,
