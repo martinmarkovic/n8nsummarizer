@@ -10,7 +10,7 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.2.8 - Use web client + add format debugging
+Version: 6.2.9 - Restored v6.1 working config (android + simple formats)
 """
 
 import yt_dlp
@@ -28,20 +28,20 @@ class YouTubeDownloader:
     Handles video download operations with configurable quality,
     destination folder, and progress tracking.
     
-    Uses web client which works without PO tokens.
+    Uses android client with simple format strings for reliability.
     """
     
     # Resolution presets mapping to yt-dlp format strings
-    # Using height-based selection with proper fallbacks
+    # Using simpler format strings that work reliably with android client
     RESOLUTION_FORMATS = {
-        "Best Available": "bv*+ba/b",  # Best video + best audio
-        "2160p (4K)": "bv*[height<=2160]+ba/b[height<=2160]",
-        "1440p (2K)": "bv*[height<=1440]+ba/b[height<=1440]",
-        "1080p (Full HD)": "bv*[height<=1080]+ba/b[height<=1080]",
-        "720p (HD)": "bv*[height<=720]+ba/b[height<=720]",
-        "480p": "bv*[height<=480]+ba/b[height<=480]",
-        "360p": "bv*[height<=360]+ba/b[height<=360]",
-        "Audio Only (MP3)": "ba/b",
+        "Best Available": "best",
+        "2160p (4K)": "best[height<=2160]",
+        "1440p (2K)": "best[height<=1440]",
+        "1080p (Full HD)": "best[height<=1080]",
+        "720p (HD)": "best[height<=720]",
+        "480p": "best[height<=480]",
+        "360p": "best[height<=360]",
+        "Audio Only (MP3)": "bestaudio/best",
     }
     
     def __init__(self):
@@ -131,9 +131,10 @@ class YouTubeDownloader:
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
+                # Use android client - most reliable for info extraction
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['web'],
+                        'player_client': ['android'],
                     }
                 },
             }
@@ -180,18 +181,17 @@ class YouTubeDownloader:
         # Configure yt-dlp options
         format_string = self.RESOLUTION_FORMATS[self.selected_resolution]
         
-        # Build yt-dlp options - using web client (no PO tokens needed)
+        # Build yt-dlp options
         ydl_opts = {
             'format': format_string,
             'outtmpl': str(self.download_path / '%(title)s.%(ext)s'),
             'progress_hooks': [self._progress_hook],
             'quiet': False,
             'no_warnings': False,
-            'listformats': False,  # Don't list formats, just download
-            # Use web client which doesn't require PO tokens
+            # Use android client - most reliable for downloads
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['web'],
+                    'player_client': ['android'],
                 }
             },
         }
@@ -211,26 +211,9 @@ class YouTubeDownloader:
                 logger.info(f"Starting download: {url}")
                 logger.info(f"Resolution: {self.selected_resolution}")
                 logger.info(f"Format string: {format_string}")
-                logger.info(f"Using web client (no PO tokens required)")
+                logger.info(f"Using android client for reliable downloads")
                 logger.info(f"Destination: {self.download_path}")
                 
-                # First, list available formats for debugging
-                try:
-                    info = ydl.extract_info(url, download=False)
-                    if 'formats' in info:
-                        logger.info("=== AVAILABLE FORMATS ===")
-                        for fmt in info['formats']:
-                            if fmt.get('vcodec') != 'none':  # Video formats
-                                height = fmt.get('height', '?')
-                                fps = fmt.get('fps', '?')
-                                ext = fmt.get('ext', '?')
-                                format_id = fmt.get('format_id', '?')
-                                logger.info(f"Format {format_id}: {height}p @ {fps}fps ({ext})")
-                        logger.info("=== END FORMATS ===")
-                except Exception as e:
-                    logger.warning(f"Could not list formats: {e}")
-                
-                # Now download
                 ydl.download([url])
                 
                 self.is_downloading = False
