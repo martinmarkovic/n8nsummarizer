@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "YouTube PO Token Extractor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Extracts YouTube PO Token for n8n Summarizer HD quality downloads",
   "permissions": [
     "cookies",
     "tabs",
     "activeTab",
+    "scripting",
     "clipboardWrite"
   ],
   "host_permissions": [
