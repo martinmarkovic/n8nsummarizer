@@ -1,5 +1,5 @@
 """
-Main Window GUI v6.2 - Downloader Quality Fix
+Main Window GUI v6.3 - Settings Persistence
 
 This window manages:
 - Header (title + font size + theme toggle)
@@ -8,9 +8,14 @@ This window manages:
 - Theme management
 - Font size management with .env persistence
 - Status bar
+- Tab selection persistence (remembers last active tab)
 
 All tab-specific UI code moved to individual tab files.
 Easy to add new tabs by creating new tab classes and initializing them here.
+
+v6.3 Changes:
+- Added tab persistence (remembers last active tab across sessions)
+- Integrated SettingsManager for persistent preferences
 
 v6.2 Changes:
 - Fixed quality selection in Downloader tab (now properly downloads 720p/1080p)
@@ -24,7 +29,7 @@ v6.0 Changes:
 - Updated version references from v5.0 to v6.0
 
 Created: 2025-11-30
-Version: 6.2
+Version: 6.3
 """
 import tkinter as tk
 from tkinter import ttk
@@ -36,6 +41,7 @@ from config import (
     APP_TITLE, APP_WIDTH, APP_HEIGHT, DEFAULT_THEME, DARK_THEME, LIGHT_THEME
 )
 from utils.logger import logger
+from utils.settings_manager import SettingsManager
 from views.file_tab import FileTab
 from views.youtube_summarizer_tab import YouTubeSummarizerTab
 from views.transcriber_tab import TranscriberTab
@@ -59,15 +65,16 @@ class MainWindow:
     - Tab initialization
     - Theme management
     - Status bar
+    - Tab selection persistence
     
-    Tab order (v6.2):
-    1. File Summarizer
-    2. YouTube Summarization
-    3. Transcriber
-    4. Bulk Summarizer
-    5. Bulk Transcriber
-    6. Translation
-    7. Downloader
+    Tab order (v6.3):
+    1. File Summarizer (index 0)
+    2. YouTube Summarization (index 1)
+    3. Transcriber (index 2)
+    4. Bulk Summarizer (index 3)
+    5. Bulk Transcriber (index 4)
+    6. Translation (index 5)
+    7. Downloader (index 6)
     """
     
     # Font sizes
@@ -76,17 +83,21 @@ class MainWindow:
     ENV_KEY_FONT_SIZE = "APP_FONT_SIZE"
     ENV_FILE = ".env"
     
-    def __init__(self, root):
+    def __init__(self, root, settings_manager: SettingsManager):
         """
         Initialize main window.
         
         Args:
             root: Tkinter root window
+            settings_manager: SettingsManager instance for persistent preferences
         """
         self.root = root
-        self.root.title(f"{APP_TITLE} v6.2")
+        self.root.title(f"{APP_TITLE} v6.3")
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
+        
+        # Store settings manager
+        self.settings = settings_manager
         
         # Theme state
         self.current_theme = DEFAULT_THEME
@@ -107,7 +118,46 @@ class MainWindow:
         
         self._apply_theme()
         
-        logger.info(f"MainWindow initialized (v6.2 - {self.current_theme} theme, {self.current_font_size}px font)")
+        # Restore last active tab AFTER all tabs are created
+        self._restore_last_active_tab()
+        
+        # Bind tab change event to save preference
+        self.notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
+        
+        logger.info(f"MainWindow initialized (v6.3 - {self.current_theme} theme, {self.current_font_size}px font)")
+    
+    def _restore_last_active_tab(self):
+        """
+        Restore the last active tab from settings.
+        
+        Called after all tabs are initialized.
+        """
+        try:
+            last_tab = self.settings.get_last_active_tab()
+            # Validate tab index (0-6 for 7 tabs)
+            if 0 <= last_tab <= 6:
+                self.notebook.select(last_tab)
+                logger.info(f"Restored last active tab: {last_tab}")
+            else:
+                logger.warning(f"Invalid tab index {last_tab}, using default (0)")
+                self.notebook.select(0)
+        except Exception as e:
+            logger.error(f"Error restoring last active tab: {str(e)}")
+            self.notebook.select(0)
+    
+    def _on_tab_changed(self, event=None):
+        """
+        Handle tab change event - save current tab to settings.
+        
+        Args:
+            event: Tkinter event (unused)
+        """
+        try:
+            current_tab = self.notebook.index(self.notebook.select())
+            self.settings.set_last_active_tab(current_tab)
+            logger.debug(f"Saved current tab to settings: {current_tab}")
+        except Exception as e:
+            logger.error(f"Error saving current tab: {str(e)}")
     
     def _load_font_size_from_env(self) -> int:
         """
@@ -217,7 +267,7 @@ class MainWindow:
         
         self.title_label = ttk.Label(
             header_frame,
-            text=f"{APP_TITLE} v6.2",
+            text=f"{APP_TITLE} v6.3",
             font=("Segoe UI", 14, "bold")
         )
         self.title_label.grid(row=0, column=0, sticky=tk.W)
@@ -268,14 +318,14 @@ class MainWindow:
         """
         Setup tab notebook with all tabs.
         
-        Tab order (v6.2):
-        1. File Summarizer
-        2. YouTube Summarization
-        3. Transcriber
-        4. Bulk Summarizer
-        5. Bulk Transcriber
-        6. Translation
-        7. Downloader (Quality fix in v6.2)
+        Tab order (v6.3):
+        0. File Summarizer
+        1. YouTube Summarization
+        2. Transcriber
+        3. Bulk Summarizer
+        4. Bulk Transcriber
+        5. Translation
+        6. Downloader
         
         Args:
             parent: Parent frame
@@ -284,35 +334,35 @@ class MainWindow:
         self.notebook = ttk.Notebook(parent)
         self.notebook.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         
-        # Tab 1: File Summarizer
+        # Tab 0: File Summarizer
         self.file_tab = FileTab(self.notebook)
         self.notebook.add(self.file_tab, text="📄 File Summarizer")
         
-        # Tab 2: YouTube Summarization
+        # Tab 1: YouTube Summarization
         self.youtube_summarizer_tab = YouTubeSummarizerTab(self.notebook)
         self.notebook.add(self.youtube_summarizer_tab, text="🎜 YouTube Summarization")
         
-        # Tab 3: Transcriber
+        # Tab 2: Transcriber
         self.transcriber_tab = TranscriberTab(self.notebook)
         self.notebook.add(self.transcriber_tab, text="🗡 Transcriber")
         
-        # Tab 4: Bulk Summarizer
+        # Tab 3: Bulk Summarizer
         self.bulk_summarizer_tab = BulkSummarizerTab(self.notebook)
         self.notebook.add(self.bulk_summarizer_tab, text="📦 Bulk Summarizer")
         
-        # Tab 5: Bulk Transcriber
+        # Tab 4: Bulk Transcriber
         self.bulk_transcriber_tab = BulkTranscriberTab(self.notebook)
         self.notebook.add(self.bulk_transcriber_tab, text="🎬 Bulk Transcriber")
         
-        # Tab 6: Translation
+        # Tab 5: Translation
         self.translation_tab = TranslationTab(self.notebook)
         self.notebook.add(self.translation_tab, text="🌐 Translation")
         
-        # Tab 7: Downloader (Quality fix in v6.2)
+        # Tab 6: Downloader
         self.downloader_tab = DownloaderTab(self.notebook)
         self.notebook.add(self.downloader_tab, text="📥 Downloader")
         
-        logger.info("All tabs initialized (v6.2 - Downloader quality fix)")
+        logger.info("All tabs initialized (v6.3 - Settings persistence)")
     
     def _setup_status_bar(self, parent):
         """
@@ -450,7 +500,7 @@ class MainWindow:
         """
         Apply current font size to all text widgets.
         
-        v6.2: Now also applies to Downloader tab
+        v6.3: Applies to all tabs including Downloader
         """
         # Update display label
         self.font_size_var.set(f"{self.current_font_size}px")
