@@ -1,5 +1,5 @@
 """
-Main Window GUI v6.1 - Downloader Tab Integration
+Main Window GUI v6.2 - Downloader Quality Fix
 
 This window manages:
 - Header (title + font size + theme toggle)
@@ -12,6 +12,9 @@ This window manages:
 All tab-specific UI code moved to individual tab files.
 Easy to add new tabs by creating new tab classes and initializing them here.
 
+v6.2 Changes:
+- Fixed quality selection in Downloader tab (now properly downloads 720p/1080p)
+
 v6.1 Changes:
 - Added 7th tab: Downloader (YouTube video download functionality)
 - Updated version references from v6.0 to v6.1
@@ -21,7 +24,7 @@ v6.0 Changes:
 - Updated version references from v5.0 to v6.0
 
 Created: 2025-11-30
-Version: 6.1
+Version: 6.2
 """
 import tkinter as tk
 from tkinter import ttk
@@ -57,14 +60,14 @@ class MainWindow:
     - Theme management
     - Status bar
     
-    Tab order (v6.1):
+    Tab order (v6.2):
     1. File Summarizer
     2. YouTube Summarization
     3. Transcriber
     4. Bulk Summarizer
     5. Bulk Transcriber
     6. Translation
-    7. Downloader (NEW)
+    7. Downloader
     """
     
     # Font sizes
@@ -81,7 +84,7 @@ class MainWindow:
             root: Tkinter root window
         """
         self.root = root
-        self.root.title(f"{APP_TITLE} v6.1")
+        self.root.title(f"{APP_TITLE} v6.2")
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
         
@@ -104,7 +107,7 @@ class MainWindow:
         
         self._apply_theme()
         
-        logger.info(f"MainWindow initialized (v6.1 - {self.current_theme} theme, {self.current_font_size}px font)")
+        logger.info(f"MainWindow initialized (v6.2 - {self.current_theme} theme, {self.current_font_size}px font)")
     
     def _load_font_size_from_env(self) -> int:
         """
@@ -214,7 +217,7 @@ class MainWindow:
         
         self.title_label = ttk.Label(
             header_frame,
-            text=f"{APP_TITLE} v6.1",
+            text=f"{APP_TITLE} v6.2",
             font=("Segoe UI", 14, "bold")
         )
         self.title_label.grid(row=0, column=0, sticky=tk.W)
@@ -265,14 +268,14 @@ class MainWindow:
         """
         Setup tab notebook with all tabs.
         
-        Tab order (v6.1):
+        Tab order (v6.2):
         1. File Summarizer
         2. YouTube Summarization
         3. Transcriber
         4. Bulk Summarizer
         5. Bulk Transcriber
         6. Translation
-        7. Downloader (NEW)
+        7. Downloader (Quality fix in v6.2)
         
         Args:
             parent: Parent frame
@@ -305,11 +308,11 @@ class MainWindow:
         self.translation_tab = TranslationTab(self.notebook)
         self.notebook.add(self.translation_tab, text="🌐 Translation")
         
-        # Tab 7: Downloader (NEW in v6.1)
+        # Tab 7: Downloader (Quality fix in v6.2)
         self.downloader_tab = DownloaderTab(self.notebook)
         self.notebook.add(self.downloader_tab, text="📥 Downloader")
         
-        logger.info("All tabs initialized (v6.1 - Downloader tab added)")
+        logger.info("All tabs initialized (v6.2 - Downloader quality fix)")
     
     def _setup_status_bar(self, parent):
         """
@@ -388,7 +391,7 @@ class MainWindow:
             self.translation_tab.source_text.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
             self.translation_tab.target_text.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
         
-        # Downloader tab (NEW)
+        # Downloader tab
         if hasattr(self, 'downloader_tab'):
             self.downloader_tab.status_log.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
         
@@ -447,7 +450,7 @@ class MainWindow:
         """
         Apply current font size to all text widgets.
         
-        v6.1: Now also applies to Downloader tab
+        v6.2: Now also applies to Downloader tab
         """
         # Update display label
         self.font_size_var.set(f"{self.current_font_size}px")
@@ -479,7 +482,7 @@ class MainWindow:
             self.translation_tab.source_text.configure(font=("Segoe UI", self.current_font_size))
             self.translation_tab.target_text.configure(font=("Segoe UI", self.current_font_size))
         
-        # Apply to Downloader tab (NEW)
+        # Apply to Downloader tab
         if hasattr(self, 'downloader_tab'):
             self.downloader_tab.status_log.configure(font=("Segoe UI", self.current_font_size))
         
