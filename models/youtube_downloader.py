@@ -1,9 +1,8 @@
-"""
+""" 
 YouTube Downloader Model - yt-dlp wrapper for video downloads (v6.4)
 
 Provides core functionality for downloading YouTube videos with:
 - Quality/resolution selection
-- PO Token support for HD downloads
 - Progress tracking
 - Error handling
 - Destination folder management
@@ -11,12 +10,11 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.4.4 - Fixed SABR streaming with tv_embedded client
+Version: 6.4.5 - Simplified to working format strings without tokens
 
-IMPORTANT: As of February 2026, YouTube requires PO Tokens for qualities above 360p.
-With PO tokens provided, all qualities up to 4K are supported.
-
-NOTE: Using tv_embedded client to avoid SABR streaming enforcement and n-challenge issues.
+IMPORTANT: Using simplified format strings that work reliably:
+  bv*[height<=720]+ba/b[height<=720]
+This approach downloads correct quality without complex client/token configuration.
 """
 
 import yt_dlp
@@ -32,20 +30,22 @@ class YouTubeDownloader:
     Model for downloading YouTube videos using yt-dlp.
     
     Handles video download operations with configurable quality,
-    destination folder, PO token support, and progress tracking.
+    destination folder, and progress tracking.
     
-    PO Token enables HD downloads (720p, 1080p, 4K).
+    Uses simplified format strings for reliable downloads.
     """
     
     # Resolution presets mapping to yt-dlp format strings
+    # Pattern: bv*[height<=N]+ba/b[height<=N]
+    # bv* = best video, ba = best audio, b = best (fallback)
     RESOLUTION_FORMATS = {
-        "Best Available": "best",
-        "2160p (4K)": "best[height<=2160]",
-        "1440p (2K)": "best[height<=1440]",
-        "1080p (Full HD)": "best[height<=1080]",
-        "720p (HD)": "best[height<=720]",
-        "480p": "best[height<=480]",
-        "360p": "best[height<=360]",
+        "Best Available": "bv*+ba/b",
+        "2160p (4K)": "bv*[height<=2160]+ba/b[height<=2160]",
+        "1440p (2K)": "bv*[height<=1440]+ba/b[height<=1440]",
+        "1080p (Full HD)": "bv*[height<=1080]+ba/b[height<=1080]",
+        "720p (HD)": "bv*[height<=720]+ba/b[height<=720]",
+        "480p": "bv*[height<=480]+ba/b[height<=480]",
+        "360p": "bv*[height<=360]+ba/b[height<=360]",
         "Audio Only (MP3)": "bestaudio/best",
     }
     
@@ -55,8 +55,7 @@ class YouTubeDownloader:
         self.selected_resolution: str = "Best Available"
         self.progress_callback: Optional[Callable] = None
         self.is_downloading: bool = False
-        self._po_token: Optional[str] = None
-        self._po_token_warning_shown: bool = False
+        self._po_token: Optional[str] = None  # Keep field but don't use for now
         
     def set_download_path(self, path: str) -> None:
         """Set destination folder for downloads.
@@ -76,53 +75,28 @@ class YouTubeDownloader:
         if resolution in self.RESOLUTION_FORMATS:
             self.selected_resolution = resolution
             logger.info(f"Resolution set to: {resolution}")
-            
-            # Warn user about PO token requirement if not set
-            if not self._po_token and not self._po_token_warning_shown and \
-               resolution not in ["360p", "480p", "Audio Only (MP3)"]:
-                logger.warning("="*60)
-                logger.warning("YouTube Limitation: PO Token Required")
-                logger.warning("="*60)
-                logger.warning(f"You selected: {resolution}")
-                logger.warning("Due to YouTube restrictions (Feb 2026), downloads are")
-                logger.warning("limited to 360p without PO Tokens.")
-                logger.warning("")
-                logger.warning("Please provide PO Token in the Downloader tab to enable")
-                logger.warning("higher quality downloads (720p, 1080p, 4K).")
-                logger.warning("")
-                logger.warning("Use the browser extension to extract PO Token easily.")
-                logger.warning("="*60)
-                self._po_token_warning_shown = True
         else:
             logger.warning(f"Unknown resolution '{resolution}', using Best Available")
             self.selected_resolution = "Best Available"
     
     def set_po_token(self, token: Optional[str]) -> None:
-        """Set PO Token for HD downloads.
+        """Store PO Token for future use (not currently used in downloads).
         
         Args:
-            token: YouTube visitor data token (visitor_data or VISITOR_INFO1_LIVE value)
+            token: YouTube PO token
                   Can be None or empty string to clear token
         """
-        # Clean and validate token
+        # Store token but don't apply it during download
         if token:
             token = token.strip()
-            
-            # Remove any prefix (web+, android.gvs+, etc.)
-            if '+' in token:
-                token = token.split('+', 1)[1]
-                
-            if len(token) < 10:
-                logger.warning(f"PO Token seems too short ({len(token)} chars). May be invalid.")
-                self._po_token = None
-                return
-                
-            self._po_token = token
-            logger.info(f"✓ PO Token set ({len(token)} chars) - HD downloads enabled")
-            logger.info(f"Token preview: {token[:20]}...")
+            self._po_token = token if len(token) >= 10 else None
+            if self._po_token:
+                logger.info(f"PO Token stored ({len(token)} chars) - saved for future use")
+            else:
+                logger.warning("PO Token too short, not stored")
         else:
             self._po_token = None
-            logger.info("PO Token cleared - downloads limited to 360p")
+            logger.info("PO Token cleared")
     
     def get_po_token(self) -> Optional[str]:
         """Get current PO Token.
@@ -198,17 +172,7 @@ class YouTubeDownloader:
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
-                # Use tv_embedded client - avoids SABR and n-challenge
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['tv_embedded'],
-                    }
-                },
             }
-            
-            # Add PO token if available (tv_embedded doesn't require it but use if available)
-            if self.has_po_token():
-                ydl_opts['extractor_args']['youtube']['po_token'] = [f'web+{self._po_token}']
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -249,34 +213,17 @@ class YouTubeDownloader:
         except Exception as e:
             return False, f"Failed to create download directory: {str(e)}"
             
-        # Configure yt-dlp options
+        # Configure yt-dlp options with simplified format string
         format_string = self.RESOLUTION_FORMATS[self.selected_resolution]
         
-        # Build yt-dlp options - use tv_embedded client to avoid SABR streaming and n-challenge
-        # tv_embedded client provides direct URLs without SABR or requiring JS challenge solving
+        # Minimal yt-dlp options - let yt-dlp use its defaults
         ydl_opts = {
             'format': format_string,
             'outtmpl': str(self.download_path / '%(title)s.%(ext)s'),
             'progress_hooks': [self._progress_hook],
             'quiet': False,
             'no_warnings': False,
-            # Use tv_embedded client - stable, no SABR, no n-challenge, works without PO token
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['tv_embedded'],
-                }
-            },
         }
-        
-        # Add PO token if available (optional for tv_embedded but may improve quality)
-        if self.has_po_token():
-            # tv_embedded doesn't strictly require PO token but we'll include it if available
-            po_token_value = f'web+{self._po_token}'
-            ydl_opts['extractor_args']['youtube']['po_token'] = [po_token_value]
-            logger.info(f"✓ Using PO Token for potential quality improvement (token length: {len(self._po_token)})")
-            logger.info(f"Client: tv_embedded | Token format: web+{self._po_token[:15]}...")
-        else:
-            logger.info("⚠ No PO Token - using tv_embedded client (works without token)")
         
         # Add audio extraction options if Audio Only selected
         if self.selected_resolution == "Audio Only (MP3)":
@@ -291,29 +238,19 @@ class YouTubeDownloader:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 logger.info(f"Starting download: {url}")
-                logger.info(f"Resolution requested: {self.selected_resolution}")
+                logger.info(f"Resolution: {self.selected_resolution}")
                 logger.info(f"Format string: {format_string}")
-                logger.info(f"Player client: tv_embedded")
-                logger.info(f"PO Token: {'✓ Enabled' if self.has_po_token() else '✗ Not set'}")
                 logger.info(f"Destination: {self.download_path}")
                 
                 ydl.download([url])
                 
                 self.is_downloading = False
-                
-                # Success message
                 return True, f"Download completed successfully at {self.selected_resolution} quality."
                 
         except Exception as e:
             self.is_downloading = False
             error_msg = f"Download failed: {str(e)}"
             logger.error(error_msg)
-            
-            # Provide helpful error message
-            if "Sign in to confirm you're not a bot" in str(e) or "HTTP Error 403" in str(e):
-                error_msg += "\n\nThis may be due to YouTube bot protection. "
-                error_msg += "Try again in a few minutes or use a different network."
-            
             return False, error_msg
             
     def cancel_download(self) -> None:
