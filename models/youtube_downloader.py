@@ -10,7 +10,7 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.1
+Version: 6.1.1 - Fixed YouTube 403 error with extractor args
 """
 
 import yt_dlp
@@ -127,6 +127,13 @@ class YouTubeDownloader:
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
+                # FIX: Add extractor args to bypass JS runtime requirement
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['ios', 'web'],  # Use iOS and web clients
+                        'skip': ['dash', 'hls'],  # Skip DASH/HLS to avoid issues
+                    }
+                },
             }
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -182,6 +189,14 @@ class YouTubeDownloader:
             ],
             'quiet': False,
             'no_warnings': False,
+            # FIX: Add extractor args to bypass YouTube 403 Forbidden error
+            # This solves the JS runtime requirement and SABR streaming issues
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'web'],  # Use iOS and web clients instead of default
+                    'skip': ['dash', 'hls'],  # Skip problematic formats
+                }
+            },
         }
         
         # Perform download
