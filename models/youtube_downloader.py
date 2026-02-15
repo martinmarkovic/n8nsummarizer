@@ -10,7 +10,7 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.2.4 - Fixed 403 error using ios client (bypasses SABR restrictions)
+Version: 6.2.5 - Use browser cookies for authentication (bypasses PO Token requirements)
 """
 
 import yt_dlp
@@ -27,6 +27,8 @@ class YouTubeDownloader:
     
     Handles video download operations with configurable quality,
     destination folder, and progress tracking.
+    
+    Uses browser cookies for authentication to bypass PO Token requirements.
     """
     
     # Resolution presets mapping to yt-dlp format strings
@@ -129,12 +131,8 @@ class YouTubeDownloader:
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
-                # Use ios client for info extraction
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['ios'],
-                    }
-                },
+                # Use cookies from browser
+                'cookiesfrombrowser': ('chrome',),  # or 'firefox', 'edge', 'safari'
             }
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -186,12 +184,8 @@ class YouTubeDownloader:
             'progress_hooks': [self._progress_hook],
             'quiet': False,
             'no_warnings': False,
-            # Use ios client - bypasses 403 and SABR streaming issues
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['ios'],
-                }
-            },
+            # Use cookies from browser - this bypasses ALL token requirements
+            'cookiesfrombrowser': ('chrome',),  # Will try: chrome, firefox, edge, safari, etc.
         }
         
         # Add audio extraction options if Audio Only selected
@@ -209,6 +203,7 @@ class YouTubeDownloader:
                 logger.info(f"Starting download: {url}")
                 logger.info(f"Resolution: {self.selected_resolution}")
                 logger.info(f"Format string: {format_string}")
+                logger.info(f"Using browser cookies for authentication")
                 logger.info(f"Destination: {self.download_path}")
                 
                 ydl.download([url])
