@@ -10,7 +10,7 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.2.7 - Skip cookies, use android client directly (no DPAPI errors)
+Version: 6.2.8 - Use web client + add format debugging
 """
 
 import yt_dlp
@@ -28,7 +28,7 @@ class YouTubeDownloader:
     Handles video download operations with configurable quality,
     destination folder, and progress tracking.
     
-    Uses android client for reliable downloads without authentication.
+    Uses web client which works without PO tokens.
     """
     
     # Resolution presets mapping to yt-dlp format strings
@@ -133,8 +133,7 @@ class YouTubeDownloader:
                 'extract_flat': False,
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['android'],
-                        'skip': ['dash', 'hls']
+                        'player_client': ['web'],
                     }
                 },
             }
@@ -181,18 +180,18 @@ class YouTubeDownloader:
         # Configure yt-dlp options
         format_string = self.RESOLUTION_FORMATS[self.selected_resolution]
         
-        # Build yt-dlp options - using android client (no cookies needed)
+        # Build yt-dlp options - using web client (no PO tokens needed)
         ydl_opts = {
             'format': format_string,
             'outtmpl': str(self.download_path / '%(title)s.%(ext)s'),
             'progress_hooks': [self._progress_hook],
             'quiet': False,
             'no_warnings': False,
-            # Use android client which works reliably without authentication
+            'listformats': False,  # Don't list formats, just download
+            # Use web client which doesn't require PO tokens
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android'],
-                    'skip': ['dash', 'hls']
+                    'player_client': ['web'],
                 }
             },
         }
@@ -212,9 +211,26 @@ class YouTubeDownloader:
                 logger.info(f"Starting download: {url}")
                 logger.info(f"Resolution: {self.selected_resolution}")
                 logger.info(f"Format string: {format_string}")
-                logger.info(f"Using android client (no authentication required)")
+                logger.info(f"Using web client (no PO tokens required)")
                 logger.info(f"Destination: {self.download_path}")
                 
+                # First, list available formats for debugging
+                try:
+                    info = ydl.extract_info(url, download=False)
+                    if 'formats' in info:
+                        logger.info("=== AVAILABLE FORMATS ===")
+                        for fmt in info['formats']:
+                            if fmt.get('vcodec') != 'none':  # Video formats
+                                height = fmt.get('height', '?')
+                                fps = fmt.get('fps', '?')
+                                ext = fmt.get('ext', '?')
+                                format_id = fmt.get('format_id', '?')
+                                logger.info(f"Format {format_id}: {height}p @ {fps}fps ({ext})")
+                        logger.info("=== END FORMATS ===")
+                except Exception as e:
+                    logger.warning(f"Could not list formats: {e}")
+                
+                # Now download
                 ydl.download([url])
                 
                 self.is_downloading = False
