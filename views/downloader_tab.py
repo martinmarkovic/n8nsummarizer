@@ -1,10 +1,11 @@
 """
-Downloader Tab - YouTube video downloader interface (v6.1)
+Downloader Tab - YouTube video downloader interface (v6.4)
 
 Provides UI for downloading YouTube videos with:
 - URL input field
 - Destination folder selection
 - Resolution/quality chooser
+- PO Token input field (v6.4)
 - Download button
 - Progress display
 - Status log
@@ -12,7 +13,7 @@ Provides UI for downloading YouTube videos with:
 Integrated with DownloaderController for download operations.
 
 Created: 2026-02-15
-Version: 6.1.1 - Fixed resolution dropdown population
+Version: 6.4.0 - Added PO Token input field
 """
 
 import tkinter as tk
@@ -33,6 +34,7 @@ class DownloaderTab(BaseTab):
         self.url_var = tk.StringVar()
         self.download_path_var = tk.StringVar(value="[No folder selected]")
         self.resolution_var = tk.StringVar()
+        self.po_token_var = tk.StringVar()  # v6.4: PO Token
         self.progress_var = tk.StringVar(value="Ready")
         
         # Controller will be initialized after UI setup
@@ -97,7 +99,8 @@ class DownloaderTab(BaseTab):
         )
         browse_btn.grid(row=1, column=2, padx=(5, 0), pady=5)
         
-        # Resolution Selection
+        # === Row 2: Quality and PO Token (side by side) ===
+        # Quality Selection
         ttk.Label(controls_frame, text="Quality:").grid(
             row=2, column=0, sticky=tk.W, padx=(0, 10), pady=5
         )
@@ -120,6 +123,29 @@ class DownloaderTab(BaseTab):
             width=12
         )
         self.download_btn.grid(row=2, column=2, padx=(5, 0), pady=5)
+        
+        # === Row 3: PO Token Input (v6.4) ===
+        ttk.Label(controls_frame, text="PO Token:").grid(
+            row=3, column=0, sticky=tk.W, padx=(0, 10), pady=5
+        )
+        
+        po_token_entry = ttk.Entry(
+            controls_frame,
+            textvariable=self.po_token_var,
+            show="*"  # Hide token like password
+        )
+        po_token_entry.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=5)
+        po_token_entry.bind('<FocusOut>', self._on_po_token_change)
+        po_token_entry.bind('<Return>', self._on_po_token_change)
+        
+        # Help button for PO Token
+        help_btn = ttk.Button(
+            controls_frame,
+            text="❓ Help",
+            width=12,
+            command=self._show_po_token_help
+        )
+        help_btn.grid(row=3, column=2, padx=(5, 0), pady=5)
         
         # === Row 1: Video Info Display ===
         info_frame = ttk.LabelFrame(self, text="Video Information", padding=10)
@@ -172,6 +198,32 @@ class DownloaderTab(BaseTab):
         if self.controller:
             self.controller.set_resolution(resolution)
             self.log_message(f"Quality changed to: {resolution}")
+    
+    def _on_po_token_change(self, event=None):
+        """Handle PO Token input change (v6.4)."""
+        token = self.po_token_var.get().strip()
+        if self.controller:
+            self.controller.set_po_token(token)
+            if token:
+                self.log_message("PO Token updated (required for HD quality)")
+            else:
+                self.log_message("PO Token cleared")
+    
+    def _show_po_token_help(self):
+        """Show help dialog for PO Token (v6.4)."""
+        help_text = (
+            "PO Token is required for downloading HD quality (720p+) videos.\n\n"
+            "How to get PO Token:\n\n"
+            "1. Install the browser extension (see docs/browser_extension/)\n"
+            "2. Open YouTube in your browser\n"
+            "3. Click the extension icon\n"
+            "4. Click 'Extract PO Token'\n"
+            "5. Token is automatically copied to clipboard\n"
+            "6. Paste it here\n\n"
+            "Token lasts 2-7 days before needing refresh.\n\n"
+            "Manual extraction: See docs/YOUTUBE_PO_TOKEN_GUIDE.md"
+        )
+        messagebox.showinfo("PO Token Help", help_text)
             
     def _fetch_video_info(self):
         """Fetch and display video information."""
@@ -197,6 +249,14 @@ class DownloaderTab(BaseTab):
             YouTube URL string
         """
         return self.url_var.get().strip()
+    
+    def get_po_token(self) -> str:
+        """Get current PO Token from input field (v6.4).
+        
+        Returns:
+            PO Token string or empty string
+        """
+        return self.po_token_var.get().strip()
         
     def get_download_path(self) -> str:
         """Get current download path.
@@ -299,4 +359,4 @@ class DownloaderTab(BaseTab):
         self.info_text.config(state=tk.DISABLED)
         self.status_log.delete("1.0", tk.END)
         self.progress_var.set("Ready")
-        # Don't clear download path - user likely wants to reuse it
+        # Don't clear download path and PO token - user likely wants to reuse them
