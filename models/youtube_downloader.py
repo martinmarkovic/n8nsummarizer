@@ -10,7 +10,7 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.2.3 - Fixed quality selection by using yt-dlp default client negotiation
+Version: 6.2.4 - Fixed 403 error using ios client (bypasses SABR restrictions)
 """
 
 import yt_dlp
@@ -129,6 +129,12 @@ class YouTubeDownloader:
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
+                # Use ios client for info extraction
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['ios'],
+                    }
+                },
             }
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -180,8 +186,12 @@ class YouTubeDownloader:
             'progress_hooks': [self._progress_hook],
             'quiet': False,
             'no_warnings': False,
-            # Don't specify client - let yt-dlp auto-negotiate
-            # This is more reliable and doesn't require PO tokens
+            # Use ios client - bypasses 403 and SABR streaming issues
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios'],
+                }
+            },
         }
         
         # Add audio extraction options if Audio Only selected
