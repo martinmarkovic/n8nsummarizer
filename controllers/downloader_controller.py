@@ -1,5 +1,5 @@
 """
-Downloader Controller - Orchestrates YouTube video downloads (v6.3)
+Downloader Controller - Orchestrates YouTube video downloads (v6.4)
 
 Mediates between:
 - DownloaderTab view (UI)
@@ -11,10 +11,10 @@ Handles:
 - Progress updates to UI
 - Error handling and user feedback
 - Threading for non-blocking downloads
-- Settings persistence (path, quality)
+- Settings persistence (path, quality, PO token)
 
 Created: 2026-02-15
-Version: 6.3
+Version: 6.4 - Added PO Token support
 """
 
 import threading
@@ -32,8 +32,8 @@ class DownloaderController:
     Coordinates between view and model, handling downloads
     in background threads to keep UI responsive.
     
-    New in v6.3:
-    - Settings persistence (remembers download path and quality)
+    v6.3: Settings persistence (remembers download path and quality)
+    v6.4: PO Token support for HD quality downloads
     """
     
     def __init__(self, view):
@@ -58,7 +58,7 @@ class DownloaderController:
         Inject settings manager for persistent preferences.
         
         This is called by main.py after controller is created.
-        Restores saved download path and quality if available.
+        Restores saved download path, quality, and PO token if available.
         
         Args:
             settings_manager: SettingsManager instance
@@ -78,6 +78,13 @@ class DownloaderController:
             self.view.resolution_var.set(saved_quality)
             self.model.set_resolution(saved_quality)
             logger.info(f"Restored quality: {saved_quality}")
+        
+        # Restore saved PO token (v6.4)
+        saved_token = self.settings.get_youtube_po_token()
+        if saved_token:
+            self.view.po_token_var.set(saved_token)
+            self.model.set_po_token(saved_token)
+            logger.info("Restored PO Token")
         
         logger.info("SettingsManager configured")
         
@@ -121,6 +128,24 @@ class DownloaderController:
             logger.info(f"Resolution saved: {resolution}")
         else:
             logger.info(f"Resolution set: {resolution}")
+    
+    def set_po_token(self, token: str) -> None:
+        """Set PO Token for HD quality downloads and save to settings (v6.4).
+        
+        Args:
+            token: PO Token string
+        """
+        self.model.set_po_token(token)
+        
+        # Save to settings if available
+        if self.settings:
+            self.settings.set_youtube_po_token(token)
+            if token:
+                logger.info("PO Token saved")
+            else:
+                logger.info("PO Token cleared")
+        else:
+            logger.info(f"PO Token set")
         
     def get_available_resolutions(self) -> list[str]:
         """Get list of available resolution presets.
@@ -189,6 +214,11 @@ Views: {views_str}
             self.view.show_error("Please select a download folder")
             self.view.update_status("Error: No download folder selected")
             return
+        
+        # Get PO token (v6.4)
+        po_token = self.view.get_po_token()
+        if po_token:
+            self.model.set_po_token(po_token)
             
         # Check if already downloading
         if self.download_thread and self.download_thread.is_alive():
@@ -201,6 +231,8 @@ Views: {views_str}
         self.view.log_message(f"Starting download: {url}")
         self.view.log_message(f"Resolution: {self.model.selected_resolution}")
         self.view.log_message(f"Destination: {download_path}")
+        if po_token:
+            self.view.log_message("Using PO Token for HD quality")
         self.view.update_status("Download in progress...")
         
         # Start download in background
