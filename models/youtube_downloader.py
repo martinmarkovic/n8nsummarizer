@@ -1,9 +1,10 @@
 """ 
-YouTube Downloader Model - yt-dlp wrapper for video downloads (v6.5)
+YouTube Downloader Model - yt-dlp wrapper for video downloads (v6.7)
 
 Provides core functionality for downloading YouTube videos with:
 - Quality/resolution selection
 - Playlist (bulk) downloads when a playlist URL is provided
+- Resume-from-item support using playlist index in URL
 - Audio-only modes (best/worst) via format presets
 - Progress tracking
 - Error handling
@@ -12,7 +13,7 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.5.0 - Playlist-aware logging and audio-only presets
+Version: 6.7.0 - Resume playlist downloads from current item when index is present
 
 NOTE: Uses simplified format strings that work reliably without
 custom clients or PO tokens.
@@ -31,8 +32,8 @@ class YouTubeDownloader:
     """Model for downloading YouTube videos using yt-dlp.
     
     Handles video download operations with configurable quality,
-    destination folder, playlist handling, audio-only modes,
-    and progress tracking.
+    destination folder, playlist handling (including resume-from-item),
+    audio-only modes, and progress tracking.
     
     Uses simplified format strings for reliable downloads.
     """
@@ -153,6 +154,29 @@ class YouTubeDownloader:
         except Exception:
             pass
         return False
+
+    @staticmethod
+    def _get_playlist_start_index(url: str) -> Optional[int]:
+        """Extract playlist start index from a watch URL if present.
+
+        Typical playlist watch URLs look like:
+        https://www.youtube.com/watch?v=VIDEO_ID&list=PLAYLIST_ID&index=12
+
+        In that case this returns 12, so downloads can resume from item 12
+        onward using yt-dlp's `playliststart` option.
+        """
+        try:
+            parsed = urlparse(url)
+            query = parse_qs(parsed.query)
+            # YouTube commonly uses `index` as 1-based position in playlist
+            if "index" in query and query["index"]:
+                raw = query["index"][0]
+                idx = int(raw)
+                if idx >= 1:
+                    return idx
+        except Exception:
+            pass
+        return None
             
     # --------------------------- Public API ---------------------------
     def validate_url(self, url: str) -> tuple[bool, str]:
@@ -259,9 +283,21 @@ class YouTubeDownloader:
                 'preferredquality': '192',
             }]
         
-        # Log whether this looks like a playlist (bulk download)
-        if self._is_playlist_url(url):
-            logger.info("Detected playlist URL - yt-dlp will download all items in the playlist")
+        is_playlist = self._is_playlist_url(url)
+
+        # If this is a playlist URL that includes a valid index parameter,
+        # resume from that item forward using playliststart.
+        if is_playlist:
+            start_idx = self._get_playlist_start_index(url)
+            if start_idx is not None:
+                ydl_opts['playliststart'] = start_idx
+                logger.info(
+                    "Detected playlist URL with index=%s - will download from item %s onward",
+                    start_idx,
+                    start_idx,
+                )
+            else:
+                logger.info("Detected playlist URL - yt-dlp will download all items in the playlist")
         else:
             logger.info("Detected single video URL")
         
@@ -279,7 +315,14 @@ class YouTubeDownloader:
                 
                 self.is_downloading = False
                 
-                if self._is_playlist_url(url):
+                if is_playlist:
+                    # Message depends on whether a start index was used
+                    start_idx = self._get_playlist_start_index(url)
+                    if start_idx is not None:
+                        return True, (
+                            f"Playlist download from item {start_idx} onward completed at "
+                            f"{self.selected_resolution} quality."
+                        )
                     return True, f"Playlist download completed at {self.selected_resolution} quality."
                 else:
                     return True, f"Download completed successfully at {self.selected_resolution} quality."
