@@ -1,11 +1,11 @@
 """
-Downloader Tab - YouTube video downloader interface (v6.4)
+Downloader Tab - YouTube video downloader interface (v6.6)
 
 Provides UI for downloading YouTube videos with:
 - URL input field
 - Destination folder selection
-- Resolution/quality chooser
-- PO Token input field (v6.4)
+- Resolution/quality chooser (including audio-only presets)
+- PO Token input field
 - Download button
 - Progress display
 - Status log
@@ -13,7 +13,7 @@ Provides UI for downloading YouTube videos with:
 Integrated with DownloaderController for download operations.
 
 Created: 2026-02-15
-Version: 6.4.0 - Added PO Token input field
+Version: 6.6.0 - Exposed audio-only options in resolution dropdown
 """
 
 import tkinter as tk
@@ -34,7 +34,7 @@ class DownloaderTab(BaseTab):
         self.url_var = tk.StringVar()
         self.download_path_var = tk.StringVar(value="[No folder selected]")
         self.resolution_var = tk.StringVar()
-        self.po_token_var = tk.StringVar()  # v6.4: PO Token
+        self.po_token_var = tk.StringVar()
         self.progress_var = tk.StringVar(value="Ready")
         
         # Controller will be initialized after UI setup
@@ -45,12 +45,33 @@ class DownloaderTab(BaseTab):
         # Initialize controller after UI is ready
         self.controller = DownloaderController(self)
         
-        # Populate resolution dropdown and set default
-        resolutions = self.controller.get_available_resolutions()
-        if resolutions:
-            self.resolution_combo['values'] = resolutions  # FIX: Populate combobox
-            self.resolution_var.set(resolutions[0])  # "Best Available"
-            self.controller.set_resolution(resolutions[0])
+        # Populate resolution dropdown with all presets (video + audio)
+        self._populate_resolution_dropdown()
+
+    def _populate_resolution_dropdown(self):
+        """Populate resolution dropdown with video quality and audio-only options."""
+        if not self.controller:
+            return
+            
+        # Get all available presets from controller/model
+        all_resolutions = self.controller.get_available_resolutions()
+        
+        # Separate video and audio presets for display organization
+        video_resolutions = [r for r in all_resolutions if not r.startswith("Audio Only")]
+        audio_resolutions = [r for r in all_resolutions if r.startswith("Audio Only")]
+        
+        # Combine with separator for visual clarity
+        display_values = video_resolutions.copy()
+        if audio_resolutions:
+            display_values.append("─────────────────")  # Visual separator
+            display_values.extend(audio_resolutions)
+        
+        self.resolution_combo['values'] = display_values
+        
+        # Set default to first video option (Best Available)
+        if video_resolutions:
+            self.resolution_var.set(video_resolutions[0])
+            self.controller.set_resolution(video_resolutions[0])
 
     def _setup_ui(self):
         """Build downloader UI with input controls and status display."""
@@ -99,13 +120,13 @@ class DownloaderTab(BaseTab):
         )
         browse_btn.grid(row=1, column=2, padx=(5, 0), pady=5)
         
-        # === Row 2: Quality and PO Token (side by side) ===
-        # Quality Selection
+        # === Row 2: Quality Selection ===
         ttk.Label(controls_frame, text="Quality:").grid(
             row=2, column=0, sticky=tk.W, padx=(0, 10), pady=5
         )
         
         # Resolution combobox - will be populated in __init__ after controller is ready
+        # Now includes video quality presets AND audio-only presets (v6.6)
         self.resolution_combo = ttk.Combobox(
             controls_frame,
             textvariable=self.resolution_var,
@@ -124,7 +145,7 @@ class DownloaderTab(BaseTab):
         )
         self.download_btn.grid(row=2, column=2, padx=(5, 0), pady=5)
         
-        # === Row 3: PO Token Input (v6.4) ===
+        # === Row 3: PO Token Input ===
         ttk.Label(controls_frame, text="PO Token:").grid(
             row=3, column=0, sticky=tk.W, padx=(0, 10), pady=5
         )
@@ -179,9 +200,9 @@ class DownloaderTab(BaseTab):
         
     def populate_resolutions(self):
         """Populate resolution combobox after controller is initialized."""
-        if self.controller:
-            resolutions = self.controller.get_available_resolutions()
-            self.resolution_combo['values'] = resolutions
+        # This method exists for backward compatibility but is replaced by
+        # _populate_resolution_dropdown() in v6.6
+        self._populate_resolution_dropdown()
             
     def _browse_folder(self):
         """Open folder browser dialog for selecting download destination."""
@@ -195,25 +216,37 @@ class DownloaderTab(BaseTab):
     def _on_resolution_change(self, event=None):
         """Handle resolution selection change."""
         resolution = self.resolution_var.get()
+        
+        # Skip if user selected the separator line
+        if resolution.startswith("─"):
+            # Revert to previous selection (first video option)
+            if self.controller:
+                resolutions = self.controller.get_available_resolutions()
+                video_resolutions = [r for r in resolutions if not r.startswith("Audio Only")]
+                if video_resolutions:
+                    self.resolution_var.set(video_resolutions[0])
+            return
+            
         if self.controller:
             self.controller.set_resolution(resolution)
             self.log_message(f"Quality changed to: {resolution}")
     
     def _on_po_token_change(self, event=None):
-        """Handle PO Token input change (v6.4)."""
+        """Handle PO Token input change."""
         token = self.po_token_var.get().strip()
         if self.controller:
             self.controller.set_po_token(token)
             if token:
-                self.log_message("PO Token updated (required for HD quality)")
+                self.log_message("PO Token updated (stored for future use)")
             else:
                 self.log_message("PO Token cleared")
     
     def _show_po_token_help(self):
-        """Show help dialog for PO Token (v6.4)."""
+        """Show help dialog for PO Token."""
         help_text = (
-            "PO Token is required for downloading HD quality (720p+) videos.\n\n"
-            "How to get PO Token:\n\n"
+            "PO Token (optional) can be used for future features.\n\n"
+            "Current downloads work without PO Token using simplified format strings.\n\n"
+            "How to get PO Token (if needed later):\n\n"
             "1. Install the browser extension (see docs/browser_extension/)\n"
             "2. Open YouTube in your browser\n"
             "3. Click the extension icon\n"
@@ -251,7 +284,7 @@ class DownloaderTab(BaseTab):
         return self.url_var.get().strip()
     
     def get_po_token(self) -> str:
-        """Get current PO Token from input field (v6.4).
+        """Get current PO Token from input field.
         
         Returns:
             PO Token string or empty string
