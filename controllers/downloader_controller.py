@@ -1,5 +1,5 @@
 """
-Downloader Controller - Orchestrates YouTube video downloads (v6.4)
+Downloader Controller - Orchestrates YouTube video downloads (v6.5)
 
 Mediates between:
 - DownloaderTab view (UI)
@@ -14,7 +14,7 @@ Handles:
 - Settings persistence (path, quality, PO token)
 
 Created: 2026-02-15
-Version: 6.4.5 - Simplified approach without token usage
+Version: 6.5.0 - Playlist-aware logging, audio-only presets via model
 """
 
 import threading
@@ -26,20 +26,18 @@ from utils.logger import logger
 
 
 class DownloaderController:
-    """
-    Controller for YouTube downloader operations.
+    """Controller for YouTube downloader operations.
     
     Coordinates between view and model, handling downloads
     in background threads to keep UI responsive.
     
     v6.3: Settings persistence (remembers download path and quality)
     v6.4: PO Token field support (stored but not used currently)
-    v6.4.5: Simplified to working approach without tokens
+    v6.5: Playlist-aware logging and audio-only presets handled in model
     """
     
     def __init__(self, view):
-        """
-        Initialize controller.
+        """Initialize controller.
         
         Args:
             view: DownloaderTab view instance
@@ -55,8 +53,7 @@ class DownloaderController:
         logger.info("DownloaderController initialized")
     
     def set_settings_manager(self, settings_manager):
-        """
-        Inject settings manager for persistent preferences.
+        """Inject settings manager for persistent preferences.
         
         This is called by main.py after controller is created.
         Restores saved download path, quality, and PO token if available.
@@ -93,7 +90,7 @@ class DownloaderController:
         """Validate YouTube URL.
         
         Args:
-            url: YouTube video URL
+            url: YouTube video or playlist URL
             
         Returns:
             Tuple of (is_valid, message)
@@ -116,7 +113,7 @@ class DownloaderController:
             logger.info(f"Download path set: {path}")
         
     def set_resolution(self, resolution: str) -> None:
-        """Set preferred video resolution and save to settings.
+        """Set preferred video/audio resolution preset and save to settings.
         
         Args:
             resolution: Resolution preset name
@@ -146,7 +143,7 @@ class DownloaderController:
             else:
                 logger.info("PO Token cleared")
         else:
-            logger.info(f"PO Token set")
+            logger.info("PO Token set")
         
     def get_available_resolutions(self) -> list[str]:
         """Get list of available resolution presets.
@@ -198,7 +195,7 @@ Views: {views_str}
         thread.start()
         
     def start_download(self) -> None:
-        """Start video download in background thread."""
+        """Start video or playlist download in background thread."""
         # Get URL from view
         url = self.view.get_url()
         
@@ -230,7 +227,7 @@ Views: {views_str}
         self.view.set_download_button_state(False)  # Disable download button
         self.view.clear_log()
         self.view.log_message(f"Starting download: {url}")
-        self.view.log_message(f"Resolution: {self.model.selected_resolution}")
+        self.view.log_message(f"Resolution preset: {self.model.selected_resolution}")
         self.view.log_message(f"Destination: {download_path}")
         self.view.update_status("Download in progress...")
         
@@ -298,7 +295,7 @@ Views: {views_str}
             self.view.show_success(message)
         else:
             self.view.log_message("✗ " + message)
-            self.view.update_status(f"Download failed")
+            self.view.update_status("Download failed")
             self.view.show_error(message)
             
         logger.info(f"Download complete: success={success}, message={message}")

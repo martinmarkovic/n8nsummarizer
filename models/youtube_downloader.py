@@ -1,8 +1,10 @@
 """ 
-YouTube Downloader Model - yt-dlp wrapper for video downloads (v6.4)
+YouTube Downloader Model - yt-dlp wrapper for video downloads (v6.5)
 
 Provides core functionality for downloading YouTube videos with:
 - Quality/resolution selection
+- Playlist (bulk) downloads when a playlist URL is provided
+- Audio-only modes (best/worst) via format presets
 - Progress tracking
 - Error handling
 - Destination folder management
@@ -10,33 +12,33 @@ Provides core functionality for downloading YouTube videos with:
 Uses yt-dlp library for robust video downloading.
 
 Created: 2026-02-15
-Version: 6.4.5 - Simplified to working format strings without tokens
+Version: 6.5.0 - Playlist-aware logging and audio-only presets
 
-IMPORTANT: Using simplified format strings that work reliably:
-  bv*[height<=720]+ba/b[height<=720]
-This approach downloads correct quality without complex client/token configuration.
+NOTE: Uses simplified format strings that work reliably without
+custom clients or PO tokens.
 """
 
 import yt_dlp
 from pathlib import Path
 from typing import Optional, Callable, Dict, Any
 import logging
+from urllib.parse import urlparse, parse_qs
 
 logger = logging.getLogger(__name__)
 
 
 class YouTubeDownloader:
-    """
-    Model for downloading YouTube videos using yt-dlp.
+    """Model for downloading YouTube videos using yt-dlp.
     
     Handles video download operations with configurable quality,
-    destination folder, and progress tracking.
+    destination folder, playlist handling, audio-only modes,
+    and progress tracking.
     
     Uses simplified format strings for reliable downloads.
     """
     
     # Resolution presets mapping to yt-dlp format strings
-    # Pattern: bv*[height<=N]+ba/b[height<=N]
+    # Pattern for video: bv*[height<=N]+ba/b[height<=N]
     # bv* = best video, ba = best audio, b = best (fallback)
     RESOLUTION_FORMATS = {
         "Best Available": "bv*+ba/b",
@@ -46,7 +48,9 @@ class YouTubeDownloader:
         "720p (HD)": "bv*[height<=720]+ba/b[height<=720]",
         "480p": "bv*[height<=480]+ba/b[height<=480]",
         "360p": "bv*[height<=360]+ba/b[height<=360]",
-        "Audio Only (MP3)": "bestaudio/best",
+        # Audio-only presets
+        "Audio Only (Best)": "bestaudio/best",
+        "Audio Only (Worst)": "worstaudio/worst",
     }
     
     def __init__(self):
@@ -55,8 +59,9 @@ class YouTubeDownloader:
         self.selected_resolution: str = "Best Available"
         self.progress_callback: Optional[Callable] = None
         self.is_downloading: bool = False
-        self._po_token: Optional[str] = None  # Keep field but don't use for now
+        self._po_token: Optional[str] = None  # Stored for future use (not applied)
         
+    # --------------------------- Configuration ---------------------------
     def set_download_path(self, path: str) -> None:
         """Set destination folder for downloads.
         
@@ -67,14 +72,14 @@ class YouTubeDownloader:
         logger.info(f"Download path set to: {self.download_path}")
         
     def set_resolution(self, resolution: str) -> None:
-        """Set preferred video resolution.
+        """Set preferred video/audio resolution preset.
         
         Args:
-            resolution: Resolution preset key (e.g., '1080p (Full HD)')
+            resolution: Resolution preset key (e.g., '1080p (Full HD)' or 'Audio Only (Best)')
         """
         if resolution in self.RESOLUTION_FORMATS:
             self.selected_resolution = resolution
-            logger.info(f"Resolution set to: {resolution}")
+            logger.info(f"Resolution preset set to: {resolution}")
         else:
             logger.warning(f"Unknown resolution '{resolution}', using Best Available")
             self.selected_resolution = "Best Available"
@@ -86,7 +91,6 @@ class YouTubeDownloader:
             token: YouTube PO token
                   Can be None or empty string to clear token
         """
-        # Store token but don't apply it during download
         if token:
             token = token.strip()
             self._po_token = token if len(token) >= 10 else None
@@ -110,7 +114,7 @@ class YouTubeDownloader:
         """Check if PO Token is configured.
         
         Returns:
-            True if PO token is set and valid
+            True if PO token is set and appears valid
         """
         return self._po_token is not None and len(self._po_token) >= 10
             
@@ -122,6 +126,7 @@ class YouTubeDownloader:
         """
         self.progress_callback = callback
         
+    # --------------------------- Helpers ---------------------------
     def _progress_hook(self, d: Dict[str, Any]) -> None:
         """Internal progress hook called by yt-dlp.
         
@@ -131,11 +136,30 @@ class YouTubeDownloader:
         if self.progress_callback:
             self.progress_callback(d)
             
+    @staticmethod
+    def _is_playlist_url(url: str) -> bool:
+        """Heuristic check whether a YouTube URL is a playlist.
+        
+        Looks for `list` parameter commonly used in playlist URLs.
+        """
+        try:
+            parsed = urlparse(url)
+            query = parse_qs(parsed.query)
+            if "list" in query:
+                return True
+            # Also treat /playlist URLs as playlists
+            if "playlist" in parsed.path:
+                return True
+        except Exception:
+            pass
+        return False
+            
+    # --------------------------- Public API ---------------------------
     def validate_url(self, url: str) -> tuple[bool, str]:
         """Validate if URL is a valid YouTube URL.
         
         Args:
-            url: YouTube video URL
+            url: YouTube video or playlist URL
             
         Returns:
             Tuple of (is_valid, message)
@@ -151,6 +175,7 @@ class YouTubeDownloader:
             "youtu.be/",
             "youtube.com/shorts/",
             "youtube.com/embed/",
+            "youtube.com/playlist",
         ]
         
         if any(pattern in url for pattern in valid_patterns):
@@ -187,10 +212,10 @@ class YouTubeDownloader:
             return None
             
     def download_video(self, url: str) -> tuple[bool, str]:
-        """Download YouTube video with configured settings.
+        """Download YouTube video or playlist with configured settings.
         
         Args:
-            url: YouTube video URL
+            url: YouTube video or playlist URL
             
         Returns:
             Tuple of (success, message)
@@ -217,7 +242,7 @@ class YouTubeDownloader:
         format_string = self.RESOLUTION_FORMATS[self.selected_resolution]
         
         # Minimal yt-dlp options - let yt-dlp use its defaults
-        ydl_opts = {
+        ydl_opts: Dict[str, Any] = {
             'format': format_string,
             'outtmpl': str(self.download_path / '%(title)s.%(ext)s'),
             'progress_hooks': [self._progress_hook],
@@ -225,27 +250,39 @@ class YouTubeDownloader:
             'no_warnings': False,
         }
         
-        # Add audio extraction options if Audio Only selected
-        if self.selected_resolution == "Audio Only (MP3)":
+        # If audio-only preset, add postprocessors for MP3 conversion
+        if self.selected_resolution.startswith("Audio Only"):
             ydl_opts['postprocessors'] = [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
+                # Use 192 kbps as a balanced default; yt-dlp may upscale/downscale
                 'preferredquality': '192',
             }]
+        
+        # Log whether this looks like a playlist (bulk download)
+        if self._is_playlist_url(url):
+            logger.info("Detected playlist URL - yt-dlp will download all items in the playlist")
+        else:
+            logger.info("Detected single video URL")
         
         # Perform download
         self.is_downloading = True
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 logger.info(f"Starting download: {url}")
-                logger.info(f"Resolution: {self.selected_resolution}")
+                logger.info(f"Resolution preset: {self.selected_resolution}")
                 logger.info(f"Format string: {format_string}")
                 logger.info(f"Destination: {self.download_path}")
                 
+                # Passing the playlist or single URL lets yt-dlp handle bulk vs single
                 ydl.download([url])
                 
                 self.is_downloading = False
-                return True, f"Download completed successfully at {self.selected_resolution} quality."
+                
+                if self._is_playlist_url(url):
+                    return True, f"Playlist download completed at {self.selected_resolution} quality."
+                else:
+                    return True, f"Download completed successfully at {self.selected_resolution} quality."
                 
         except Exception as e:
             self.is_downloading = False
