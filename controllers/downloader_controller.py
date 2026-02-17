@@ -1,9 +1,9 @@
 """
-Downloader Controller - Orchestrates YouTube video downloads (v6.5)
+Downloader Controller - Orchestrates video downloads (v6.8)
 
 Mediates between:
 - DownloaderTab view (UI)
-- YouTubeDownloader model (download logic)
+- VideoDownloader router model (YouTube/Twitter/Instagram)
 - SettingsManager (persistent preferences)
 
 Handles:
@@ -14,19 +14,19 @@ Handles:
 - Settings persistence (path, quality, PO token)
 
 Created: 2026-02-15
-Version: 6.5.0 - Playlist-aware logging, audio-only presets via model
+Version: 6.8.0 - Multi-source video downloads via VideoDownloader
 """
 
 import threading
 from pathlib import Path
 from typing import Optional
 
-from models.youtube_downloader import YouTubeDownloader
+from models.video_downloader import VideoDownloader
 from utils.logger import logger
 
 
 class DownloaderController:
-    """Controller for YouTube downloader operations.
+    """Controller for video downloader operations.
     
     Coordinates between view and model, handling downloads
     in background threads to keep UI responsive.
@@ -34,6 +34,7 @@ class DownloaderController:
     v6.3: Settings persistence (remembers download path and quality)
     v6.4: PO Token field support (stored but not used currently)
     v6.5: Playlist-aware logging and audio-only presets handled in model
+    v6.8: Multi-source router for YouTube/Twitter/Instagram
     """
     
     def __init__(self, view):
@@ -43,14 +44,14 @@ class DownloaderController:
             view: DownloaderTab view instance
         """
         self.view = view
-        self.model = YouTubeDownloader()
+        self.model = VideoDownloader()
         self.download_thread: Optional[threading.Thread] = None
         self.settings = None  # Will be set by main.py after initialization
         
         # Set up model callbacks
         self.model.set_progress_callback(self._on_progress)
         
-        logger.info("DownloaderController initialized")
+        logger.info("DownloaderController initialized (VideoDownloader)")
     
     def set_settings_manager(self, settings_manager):
         """Inject settings manager for persistent preferences.
@@ -77,7 +78,7 @@ class DownloaderController:
             self.model.set_resolution(saved_quality)
             logger.info(f"Restored quality: {saved_quality}")
         
-        # Restore saved PO token (stored but not used currently)
+        # Restore saved PO token (stored but only used for YouTube backend)
         saved_token = self.settings.get_youtube_po_token()
         if saved_token:
             self.view.po_token_var.set(saved_token)
@@ -87,14 +88,7 @@ class DownloaderController:
         logger.info("SettingsManager configured")
         
     def validate_url(self, url: str) -> tuple[bool, str]:
-        """Validate YouTube URL.
-        
-        Args:
-            url: YouTube video or playlist URL
-            
-        Returns:
-            Tuple of (is_valid, message)
-        """
+        """Validate URL for any supported platform."""
         return self.model.validate_url(url)
         
     def set_download_path(self, path: str) -> None:
@@ -128,7 +122,7 @@ class DownloaderController:
             logger.info(f"Resolution set: {resolution}")
     
     def set_po_token(self, token: str) -> None:
-        """Set PO Token and save to settings (stored for future use).
+        """Set PO Token and save to settings (stored for future use on YouTube backend).
         
         Args:
             token: PO Token string
@@ -151,21 +145,17 @@ class DownloaderController:
         Returns:
             List of resolution options
         """
-        return YouTubeDownloader.get_available_resolutions()
+        return self.model.get_available_resolutions()
         
     def fetch_video_info(self, url: str) -> None:
-        """Fetch video information in background.
-        
-        Args:
-            url: YouTube video URL
-        """
+        """Fetch video information in background."""
         def fetch():
             self.view.update_status("Fetching video information...")
             info = self.model.get_video_info(url)
             
             if info:
                 # Format duration
-                duration = info['duration']
+                duration = info.get('duration', 0)
                 minutes = duration // 60
                 seconds = duration % 60
                 duration_str = f"{minutes}:{seconds:02d}"
@@ -180,8 +170,8 @@ class DownloaderController:
                     views_str = f"{views} views"
                 
                 info_text = f"""
-Title: {info['title']}
-Uploader: {info['uploader']}
+Title: {info.get('title', 'Unknown')}
+Uploader: {info.get('uploader', 'Unknown')}
 Duration: {duration_str}
 Views: {views_str}
 """
@@ -213,7 +203,7 @@ Views: {views_str}
             self.view.update_status("Error: No download folder selected")
             return
         
-        # Store PO token if provided (for future use)
+        # Store PO token if provided (for YouTube backend)
         po_token = self.view.get_po_token()
         if po_token:
             self.model.set_po_token(po_token)
