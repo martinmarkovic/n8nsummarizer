@@ -8,7 +8,7 @@ load_dotenv()
 
 # n8n Configuration
 N8N_WEBHOOK_URL = os.getenv('N8N_WEBHOOK_URL', 'http://localhost:5678/webhook-test/hook1')
-N8N_TIMEOUT = int(os.getenv('N8N_TIMEOUT', '30'))
+N8N_TIMEOUT = int(os.getenv('N8N_TIMEOUT', '120'))  # Increased from 30 to 120 seconds for large files
 
 # Application Settings
 APP_TITLE = "n8n Summarizer"
