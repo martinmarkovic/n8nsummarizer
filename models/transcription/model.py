@@ -252,3 +252,15 @@ class TranscribeModel:
             ".aiff",
             ".au",
         }
+
+    @staticmethod
+    def validate_youtube_url(url: str) -> bool:
+        """Validate if URL is a YouTube URL.
+
+        Args:
+            url: URL string to validate
+
+        Returns:
+            True if valid YouTube URL, False otherwise
+        """
+        return validate_youtube_url(url)
