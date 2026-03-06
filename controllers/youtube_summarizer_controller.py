@@ -1,5 +1,5 @@
 """
-YouTube Summarizer Controller v3.1.2 - Coordinates YouTube tab + models
+YouTube Summarizer Controller v3.1.3 - Coordinates YouTube tab + models
 
 Responsibilities:
     - Listen to YouTubeSummarizerTab UI events
@@ -11,6 +11,9 @@ Responsibilities:
     - Manage threading for blocking operations
     - Error handling and user feedback
 
+New in v3.1.3:
+    - Fixed extract_summary bug - send_content already returns summary
+
 New in v3.1.2:
     - Call Transcriber controller to store transcript (not just UI)
     - Enables export in Transcriber tab
@@ -18,11 +21,12 @@ New in v3.1.2:
 
 Controller is THIN - just coordinates, doesn't contain business logic.
 
-Version: 3.1.2
+Version: 3.1.3
 Created: 2025-12-07 (v3.0)
 Updated: 2025-12-07 (v3.1 - Summarize button, .docx export, Transcriber tab integration)
 Fixed: 2025-12-07 (v3.1.1 - Smart filenames, transcript persistence)
 Fixed: 2025-12-07 (v3.1.2 - Transcriber controller integration)
+Fixed: 2026-03-06 (v3.1.3 - Remove redundant extract_summary call)
 """
 import os
 import threading
@@ -232,8 +236,9 @@ class YouTubeSummarizerController:
         try:
             logger.info("Sending transcript to n8n webhook...")
             
-            # Send to n8n
-            success, response_data, error = self.n8n_model.send_content(
+            # Send to n8n - send_content already returns (success, summary, error)
+            # No need to call extract_summary again (FIXED in v3.1.3)
+            success, summary, error = self.n8n_model.send_content(
                 file_name=self.current_youtube_title or 'youtube_video',
                 content=transcript_content,
                 metadata={
@@ -247,9 +252,7 @@ class YouTubeSummarizerController:
                 self.view.root.after(0, self._on_n8n_error, error_msg)
                 return
             
-            # Extract summary from response
-            summary = self.n8n_model.extract_summary(response_data)
-            
+            # Summary is already extracted by send_content
             if not summary:
                 self.view.root.after(
                     0,
