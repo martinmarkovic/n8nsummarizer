@@ -1,5 +1,5 @@
 """
-YouTube Summarizer Controller v3.1.4 - Coordinates YouTube tab + models
+YouTube Summarizer Controller v3.1.5 - Coordinates YouTube tab + models
 
 Responsibilities:
     - Listen to YouTubeSummarizerTab UI events
@@ -10,6 +10,9 @@ Responsibilities:
     - Forward transcript to Transcriber tab
     - Manage threading for blocking operations
     - Error handling and user feedback
+
+New in v3.1.5:
+    - Delete transcript files immediately after loading into memory (before summarization)
 
 New in v3.1.4:
     - Delete transcript files after successful summarization (keeps in-memory for export)
@@ -24,13 +27,14 @@ New in v3.1.2:
 
 Controller is THIN - just coordinates, doesn't contain business logic.
 
-Version: 3.1.4
+Version: 3.1.5
 Created: 2025-12-07 (v3.0)
 Updated: 2025-12-07 (v3.1 - Summarize button, .docx export, Transcriber tab integration)
 Fixed: 2025-12-07 (v3.1.1 - Smart filenames, transcript persistence)
 Fixed: 2025-12-07 (v3.1.2 - Transcriber controller integration)
 Fixed: 2026-03-06 (v3.1.3 - Remove redundant extract_summary call)
 Fixed: 2026-03-08 (v3.1.4 - Delete transcript files after summarization)
+Fixed: 2026-03-08 (v3.1.5 - Delete transcript files immediately after loading)
 """
 import os
 import threading
@@ -59,14 +63,15 @@ class YouTubeSummarizerController:
     1. User enters YouTube URL
     2. Controller validates URL
     3. Calls TranscribeModel to transcribe YouTube video
-    4. Saves transcript to disk (Transcriber output folder)
-    5. Stores transcript in memory (persists even if temp files deleted)
-    6. Sends transcript to N8NModel for summarization
-    7. N8NModel calls n8n webhook
-    8. Displays summary in UI
-    9. Forwards transcript to Transcriber tab (BOTH UI and controller)
-    10. Deletes transcript files from disk (NEW v3.1.4 - keeps in memory)
+    4. Saves transcript to disk temporarily
+    5. Loads transcript into memory
+    6. Deletes transcript files from disk IMMEDIATELY (NEW v3.1.5)
+    7. Sends transcript to N8NModel for summarization
+    8. N8NModel calls n8n webhook
+    9. Displays summary in UI
+    10. Forwards transcript to Transcriber tab (BOTH UI and controller)
     11. User can export summary with smart filename
+    12. User can export transcript from Transcriber tab if needed
     """
     
     def __init__(self, view, transcriber_tab=None, transcriber_controller=None):
@@ -179,6 +184,10 @@ class YouTubeSummarizerController:
             self.current_youtube_title = metadata.get('base_name', 'youtube_video') if metadata else 'youtube_video'
             self.current_metadata = metadata  # NEW v3.1.4 - Store for cleanup
             
+            # NEW v3.1.5: Delete transcript files IMMEDIATELY after loading into memory
+            # This keeps disk clean throughout the entire process
+            self._cleanup_transcript_files()
+            
             # Send to n8n for summarization
             self.view.root.after(
                 0,
@@ -282,9 +291,9 @@ class YouTubeSummarizerController:
     
     def _cleanup_transcript_files(self):
         """
-        Delete transcript files from disk after successful summarization (NEW v3.1.4).
+        Delete transcript files from disk (NEW v3.1.4, moved earlier in v3.1.5).
         
-        Transcript content remains in memory and is available in Transcriber tab.
+        Transcript content is already in memory and will be forwarded to Transcriber tab.
         User can export if needed from Transcriber tab.
         
         This prevents old transcript files from interfering with future transcriptions.
@@ -329,7 +338,7 @@ class YouTubeSummarizerController:
         Handle successful summarization.
         
         Displays summary and notifies user that transcript is available in Transcriber tab.
-        NEW v3.1.4: Deletes transcript files from disk after forwarding to Transcriber tab.
+        Files already deleted in v3.1.5 (happens right after transcription).
         """
         logger.info("Summarization succeeded")
         
@@ -353,16 +362,13 @@ class YouTubeSummarizerController:
                     )
                     logger.info("Transcript stored in Transcriber controller")
                 
-                # NEW v3.1.4: Delete transcript files from disk (keeps in-memory)
-                self._cleanup_transcript_files()
-                
                 # Show notification to user
                 self.view.show_info(
                     "Summarization Complete!",
                     f"YouTube video successfully transcribed and summarized!\n\n"
                     f"✓ Summary is displayed above\n"
-                    f"✓ Full transcript ({self.current_transcript_format}) forwarded to Transcriber tab\n\n"
-                    f"Switch to the Transcriber tab to view the full transcript."
+                    f"✓ Full transcript ({self.current_transcript_format}) available in Transcriber tab\n\n"
+                    f"Switch to the Transcriber tab to view and export the full transcript."
                 )
                 logger.info("Transcript forwarded to Transcriber tab")
             except Exception as e:
