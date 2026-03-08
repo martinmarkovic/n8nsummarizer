@@ -112,10 +112,26 @@ def process_outputs(
             for fallback_file in output_dir.iterdir():
                 if not fallback_file.is_file():
                     continue
+                
+                # FIXED: Only read files matching expected patterns to avoid reading old unrelated transcripts
+                # Only consider files that are either:
+                # 1. Named with current base_name (e.g., 'VideoTitle.txt')
+                # 2. Named 'out.*' (freshly created by transcribe-anything)
+                if not (
+                    fallback_file.name.startswith(base_name)
+                    or fallback_file.name.startswith("out.")
+                ):
+                    logger.debug(
+                        "Skipping unrelated file in fallback: %s (doesn't match base_name '%s' or 'out.*')",
+                        fallback_file.name,
+                        base_name,
+                    )
+                    continue
+                
                 ext = fallback_file.suffix.lower()
                 if ext in output_extensions:
                     try:
-                        logger.info("Trying fallback format: %s", ext)
+                        logger.info("Trying fallback format: %s", fallback_file.name)
                         with open(fallback_file, "r", encoding="utf-8") as f:
                             content = f.read()
                             if content.strip():
@@ -123,7 +139,7 @@ def process_outputs(
                                 format_loaded = ext
                                 logger.info(
                                     "Loaded transcript from fallback format: %s (%s chars)",
-                                    ext,
+                                    fallback_file.name,
                                     len(content),
                                 )
                                 break
