@@ -1,5 +1,5 @@
 """
-YouTube Summarizer Controller v3.1.3 - Coordinates YouTube tab + models
+YouTube Summarizer Controller v3.1.4 - Coordinates YouTube tab + models
 
 Responsibilities:
     - Listen to YouTubeSummarizerTab UI events
@@ -11,6 +11,9 @@ Responsibilities:
     - Manage threading for blocking operations
     - Error handling and user feedback
 
+New in v3.1.4:
+    - Delete transcript files after successful summarization (keeps in-memory for export)
+
 New in v3.1.3:
     - Fixed extract_summary bug - send_content already returns summary
 
@@ -21,16 +24,18 @@ New in v3.1.2:
 
 Controller is THIN - just coordinates, doesn't contain business logic.
 
-Version: 3.1.3
+Version: 3.1.4
 Created: 2025-12-07 (v3.0)
 Updated: 2025-12-07 (v3.1 - Summarize button, .docx export, Transcriber tab integration)
 Fixed: 2025-12-07 (v3.1.1 - Smart filenames, transcript persistence)
 Fixed: 2025-12-07 (v3.1.2 - Transcriber controller integration)
 Fixed: 2026-03-06 (v3.1.3 - Remove redundant extract_summary call)
+Fixed: 2026-03-08 (v3.1.4 - Delete transcript files after summarization)
 """
 import os
 import threading
 from datetime import datetime
+from pathlib import Path
 from tkinter import filedialog
 from models.transcribe_model import TranscribeModel
 from models.n8n_model import N8NModel
@@ -60,7 +65,8 @@ class YouTubeSummarizerController:
     7. N8NModel calls n8n webhook
     8. Displays summary in UI
     9. Forwards transcript to Transcriber tab (BOTH UI and controller)
-    10. User can export summary with smart filename
+    10. Deletes transcript files from disk (NEW v3.1.4 - keeps in memory)
+    11. User can export summary with smart filename
     """
     
     def __init__(self, view, transcriber_tab=None, transcriber_controller=None):
@@ -89,6 +95,7 @@ class YouTubeSummarizerController:
         self.current_transcript = None
         self.current_youtube_title = None
         self.current_transcript_format = None
+        self.current_metadata = None  # NEW v3.1.4 - Track metadata for file cleanup
         
         logger.info("YouTubeSummarizerController initialized")
     
@@ -170,6 +177,7 @@ class YouTubeSummarizerController:
             # Store transcript in memory (NEW in v3.1.1 - persists even if temp deleted)
             self.current_transcript = transcript_content
             self.current_youtube_title = metadata.get('base_name', 'youtube_video') if metadata else 'youtube_video'
+            self.current_metadata = metadata  # NEW v3.1.4 - Store for cleanup
             
             # Send to n8n for summarization
             self.view.root.after(
@@ -272,11 +280,56 @@ class YouTubeSummarizerController:
             logger.error(error_msg, exc_info=True)
             self.view.root.after(0, self._on_n8n_error, error_msg)
     
+    def _cleanup_transcript_files(self):
+        """
+        Delete transcript files from disk after successful summarization (NEW v3.1.4).
+        
+        Transcript content remains in memory and is available in Transcriber tab.
+        User can export if needed from Transcriber tab.
+        
+        This prevents old transcript files from interfering with future transcriptions.
+        """
+        if not self.current_metadata:
+            logger.warning("No metadata available for file cleanup")
+            return
+        
+        try:
+            output_dir = self.current_metadata.get('output_dir')
+            files_kept = self.current_metadata.get('files_kept', [])
+            
+            if not output_dir or not files_kept:
+                logger.warning("Missing output_dir or files_kept in metadata")
+                return
+            
+            output_path = Path(output_dir)
+            deleted_count = 0
+            
+            for filename in files_kept:
+                file_path = output_path / filename
+                try:
+                    if file_path.exists():
+                        file_path.unlink()
+                        deleted_count += 1
+                        logger.info(f"Deleted transcript file: {filename}")
+                    else:
+                        logger.debug(f"File not found (already deleted?): {filename}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete {filename}: {str(e)}")
+            
+            if deleted_count > 0:
+                logger.info(f"Cleanup complete: {deleted_count} transcript file(s) deleted")
+            else:
+                logger.info("No transcript files to delete")
+        
+        except Exception as e:
+            logger.error(f"Error during transcript file cleanup: {str(e)}", exc_info=True)
+    
     def _on_n8n_success(self):
         """
         Handle successful summarization.
         
         Displays summary and notifies user that transcript is available in Transcriber tab.
+        NEW v3.1.4: Deletes transcript files from disk after forwarding to Transcriber tab.
         """
         logger.info("Summarization succeeded")
         
@@ -299,6 +352,9 @@ class YouTubeSummarizerController:
                         self.current_transcript_format
                     )
                     logger.info("Transcript stored in Transcriber controller")
+                
+                # NEW v3.1.4: Delete transcript files from disk (keeps in-memory)
+                self._cleanup_transcript_files()
                 
                 # Show notification to user
                 self.view.show_info(
