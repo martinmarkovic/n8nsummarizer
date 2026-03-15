@@ -8,6 +8,34 @@ from typing import Dict, List, Optional, Tuple
 from utils.logger import logger
 
 
+def _safe_rename(src: Path, dst: Path) -> Path:
+    """Rename *src* to *dst*, appending _001/_002/… if *dst* already exists.
+
+    Returns the actual destination path used.
+    """
+    if not dst.exists():
+        src.rename(dst)
+        return dst
+
+    # Destination already exists – find a free numbered variant.
+    counter = 1
+    while True:
+        numbered = dst.parent / f"{dst.stem}_{counter:03d}{dst.suffix}"
+        if not numbered.exists():
+            src.rename(numbered)
+            logger.warning(
+                "Rename collision: '%s' already existed, saved as '%s' instead",
+                dst.name,
+                numbered.name,
+            )
+            return numbered
+        counter += 1
+        if counter > 9999:
+            raise FileExistsError(
+                f"Cannot find a free filename after 9999 attempts for {dst}"
+            )
+
+
 def process_outputs(
     output_dir: Path,
     base_name: str,
@@ -68,16 +96,16 @@ def process_outputs(
 
             if ext in keep_formats:
                 try:
-                    temp_file.rename(final_path)
-                    files_created.append(new_name)
-                    metadata["files_kept"].append(new_name)
+                    actual_path = _safe_rename(temp_file, final_path)
+                    files_created.append(actual_path.name)
+                    metadata["files_kept"].append(actual_path.name)
 
                     if transcript_content is None or (
                         ext in load_priority
                         and load_priority.index(ext)
                         <= load_priority.index(format_loaded or ext)
                     ):
-                        with open(final_path, "r", encoding="utf-8") as f:
+                        with open(actual_path, "r", encoding="utf-8") as f:
                             content = f.read()
                             if content.strip():
                                 transcript_content = content
@@ -112,8 +140,7 @@ def process_outputs(
             for fallback_file in output_dir.iterdir():
                 if not fallback_file.is_file():
                     continue
-                
-                # FIXED: Only read files matching expected patterns to avoid reading old unrelated transcripts
+
                 # Only consider files that are either:
                 # 1. Named with current base_name (e.g., 'VideoTitle.txt')
                 # 2. Named 'out.*' (freshly created by transcribe-anything)
@@ -127,7 +154,7 @@ def process_outputs(
                         base_name,
                     )
                     continue
-                
+
                 ext = fallback_file.suffix.lower()
                 if ext in output_extensions:
                     try:
