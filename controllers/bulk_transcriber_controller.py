@@ -14,11 +14,12 @@ Orchestrates bulk media file transcription using LOCAL transcribe-anything:
 
 *** CRITICAL: Uses LOCAL TranscribeModel (transcribe-anything), NO N8N INVOLVED ***
 
-Version: 1.1
+Version: 1.2
 Created: 2026-01-06
 Phase: v5.0 - Bulk Transcription
 Fixed: 2026-01-06 - Use TranscribeModel directly (NO N8N)
 Fixed: 2026-03-15 - Added .opus format support (v6.8.5)
+Fixed: 2026-03-15 - Case-insensitive file matching + detailed debugging (v6.8.6)
 """
 
 from pathlib import Path
@@ -93,6 +94,10 @@ class BulkTranscriberController:
             self.view.append_log("Error: At least one media format must be selected", "error")
             return
         
+        # DEBUG: Log media types received
+        logger.info(f"Media types received from view: {media_types}")
+        self.view.append_log(f"Searching for file types: {', '.join(media_types)}", "info")
+        
         # Get output formats
         output_formats = self.view.get_output_formats()
         if not any(output_formats.values()):
@@ -106,6 +111,7 @@ class BulkTranscriberController:
         files = self._discover_files(source_folder, media_types, recursive)
         if not files:
             self.view.append_log(f"Error: No media files found matching selected types: {', '.join(media_types)}", "error")
+            logger.error(f"File discovery returned empty list for folder: {source_folder}, types: {media_types}, recursive: {recursive}")
             return
         
         # Validate output location
@@ -162,6 +168,8 @@ class BulkTranscriberController:
         """
         Discover all matching media files in folder.
         
+        FIXED v6.8.6: Added case-insensitive matching and detailed debugging
+        
         Args:
             folder: Path to folder
             media_types: List of media types to search for
@@ -175,44 +183,68 @@ class BulkTranscriberController:
         folder_path = Path(folder)
         files = []
         
+        logger.info(f"Starting file discovery: folder={folder}, types={media_types}, recursive={recursive}")
+        
         try:
-            # Map media type to glob pattern
+            # Map media type to glob patterns (both lowercase and uppercase for case-insensitive matching)
+            # FIXED v6.8.6: Added both cases for each extension
             patterns = {
-                'mp4': '*.mp4',
-                'mov': '*.mov',
-                'avi': '*.avi',
-                'mkv': '*.mkv',
-                'webm': '*.webm',
-                'mp3': '*.mp3',
-                'wav': '*.wav',
-                'm4a': '*.m4a',
-                'flac': '*.flac',
-                'aac': '*.aac',
-                'wma': '*.wma',
-                'opus': '*.opus'  # FIXED: Added .opus support (v6.8.5)
+                'mp4': ['*.mp4', '*.MP4'],
+                'mov': ['*.mov', '*.MOV'],
+                'avi': ['*.avi', '*.AVI'],
+                'mkv': ['*.mkv', '*.MKV'],
+                'webm': ['*.webm', '*.WEBM', '*.WebM'],
+                'mp3': ['*.mp3', '*.MP3'],
+                'wav': ['*.wav', '*.WAV'],
+                'm4a': ['*.m4a', '*.M4A'],
+                'flac': ['*.flac', '*.FLAC'],
+                'aac': ['*.aac', '*.AAC'],
+                'wma': ['*.wma', '*.WMA'],
+                'opus': ['*.opus', '*.OPUS']  # FIXED: Added .opus support with both cases
             }
             
             # Discover files for each selected type
             for media_type in media_types:
                 if media_type in patterns:
-                    if recursive:
-                        # Use rglob for recursive scanning
-                        matching = list(folder_path.rglob(patterns[media_type]))
-                        logger.debug(f"Found {len(matching)} {media_type} files (recursive)")
-                    else:
-                        # Normal glob for current folder only
-                        matching = list(folder_path.glob(patterns[media_type]))
-                        logger.debug(f"Found {len(matching)} {media_type} files")
-                    files.extend(matching)
+                    # Try both lowercase and uppercase patterns
+                    for pattern in patterns[media_type]:
+                        if recursive:
+                            # Use rglob for recursive scanning
+                            matching = list(folder_path.rglob(pattern))
+                            if matching:
+                                logger.debug(f"Found {len(matching)} files matching {pattern} (recursive)")
+                        else:
+                            # Normal glob for current folder only
+                            matching = list(folder_path.glob(pattern))
+                            if matching:
+                                logger.debug(f"Found {len(matching)} files matching {pattern}")
+                        files.extend(matching)
+                else:
+                    logger.warning(f"Unknown media type: {media_type}")
             
             # Sort and remove duplicates
             files = sorted(set(files))
             
             logger.info(f"Discovered {len(files)} total media files matching types: {media_types}, recursive={recursive}")
+            
+            # DEBUG: Log first few files if found
+            if files:
+                sample = [f.name for f in files[:5]]
+                logger.debug(f"Sample files found: {sample}")
+            else:
+                logger.error(f"No files found! Folder contents check...")
+                # List ALL files in folder for debugging
+                all_files = list(folder_path.glob('*') if not recursive else folder_path.rglob('*'))
+                all_files = [f for f in all_files if f.is_file()]
+                logger.error(f"Total files in folder: {len(all_files)}")
+                if all_files:
+                    extensions = set(f.suffix.lower() for f in all_files[:20])
+                    logger.error(f"File extensions found (sample): {extensions}")
+            
             return files
         
         except Exception as e:
-            logger.error(f"Error discovering files: {str(e)}")
+            logger.error(f"Error discovering files: {str(e)}", exc_info=True)
             return []
     
     # Background Processing
