@@ -2,7 +2,7 @@
 Bulk Transcriber Controller - Phase 5.0 Bulk Media Transcription
 
 Orchestrates bulk media file transcription using LOCAL transcribe-anything:
-- Folder and media type validation (mp4, mp3, wav, m4a, flac, aac, wma, mov, avi, mkv, webm)
+- Folder and media type validation (mp4, mp3, wav, m4a, flac, aac, wma, opus, mov, avi, mkv, webm)
 - Background file discovery with multiple media types
 - Recursive subfolder scanning (NEW in v5.0)
 - Sequential file processing using TranscribeModel
@@ -14,10 +14,11 @@ Orchestrates bulk media file transcription using LOCAL transcribe-anything:
 
 *** CRITICAL: Uses LOCAL TranscribeModel (transcribe-anything), NO N8N INVOLVED ***
 
-Version: 1.0 FINAL
+Version: 1.1
 Created: 2026-01-06
 Phase: v5.0 - Bulk Transcription
 Fixed: 2026-01-06 - Use TranscribeModel directly (NO N8N)
+Fixed: 2026-03-15 - Added .opus format support (v6.8.5)
 """
 
 from pathlib import Path
@@ -38,7 +39,7 @@ class BulkTranscriberController:
     
     Handles:
     - Validation of source folder and media types
-    - Discovery of matching files (mp4, mp3, wav, m4a, flac, aac, wma, mov, avi, mkv, webm) with optional recursive scanning
+    - Discovery of matching files (mp4, mp3, wav, m4a, flac, aac, wma, opus, mov, avi, mkv, webm) with optional recursive scanning
     - Background processing with threading
     - Local transcription using TranscribeModel (transcribe-anything wrapper)
     - Output folder and file management
@@ -165,7 +166,7 @@ class BulkTranscriberController:
             folder: Path to folder
             media_types: List of media types to search for
                         Video: 'mp4', 'mov', 'avi', 'mkv', 'webm'
-                        Audio: 'mp3', 'wav', 'm4a', 'flac', 'aac', 'wma'
+                        Audio: 'mp3', 'wav', 'm4a', 'flac', 'aac', 'wma', 'opus'
             recursive: If True, scan subfolders recursively
         
         Returns:
@@ -187,7 +188,8 @@ class BulkTranscriberController:
                 'm4a': '*.m4a',
                 'flac': '*.flac',
                 'aac': '*.aac',
-                'wma': '*.wma'
+                'wma': '*.wma',
+                'opus': '*.opus'  # FIXED: Added .opus support (v6.8.5)
             }
             
             # Discover files for each selected type
