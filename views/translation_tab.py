@@ -238,7 +238,7 @@ class TranslationTab(BaseTab):
             # Display which endpoint is being used (via queue)
             result_queue.put(("info", f"Sending to: {endpoint}"))
 
-            prompt_template = f"Translate following text and output translation only in {target_language} language: {text}"
+            prompt_template = f"Output translation only. Translate following text to {target_language}: {text}"
 
             payload = {
                 "model": "translategemma:4b-it",
