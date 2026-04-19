@@ -13,7 +13,7 @@ Follows the same pattern as other tabs in the project.
 """
 
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 
 from views.base_tab import BaseTab
@@ -131,6 +131,14 @@ class TranslationTab(BaseTab):
         target_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.target_text.configure(yscrollcommand=target_scroll.set)
 
+        # Wire context menu for translation export
+        self._register_context_menu(
+            self.target_text,
+            [
+                {"label": "Export as .txt", "command": self._export_translation_txt},
+            ],
+        )
+
     # --- View Methods (called by controller) ---
 
     def set_file_path(self, file_path: str):
@@ -217,6 +225,40 @@ class TranslationTab(BaseTab):
     def get_target_language(self) -> str:
         """Get selected target language"""
         return self.target_language.get()
+
+    def _export_translation_txt(self):
+        """Export translated text as .txt file via context menu."""
+        # Get text from target text widget
+        text_content = self.target_text.get("1.0", tk.END).strip()
+
+        # Check if there's content to export
+        if not text_content:
+            messagebox.showwarning(
+                title="Nothing to export", message="Translated text is empty."
+            )
+            return
+
+        # Ask user for save location
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+            title="Export Translation",
+        )
+
+        # If user confirmed the save
+        if file_path:
+            try:
+                # Write the content to file
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(text_content)
+
+                # Show success message
+                messagebox.showinfo(
+                    title="Exported", message=f"Translation saved to:\n{file_path}"
+                )
+            except IOError as e:
+                # Show error if write fails
+                messagebox.showerror(title="Export Failed", message=str(e))
 
     # --- BaseTab abstract method implementations ---
 

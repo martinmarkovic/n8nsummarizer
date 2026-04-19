@@ -42,6 +42,9 @@ class TranslationController:
         self.view.on_restore_default_webhook = self.handle_restore_default_webhook
         self.view.on_clear_clicked = self.handle_clear_clicked
 
+        # Show default webhook URL in the field on startup
+        self.view.set_webhook_url(self.model.webhook_url)
+
         logger.info("TranslationController initialized")
 
     def handle_file_selected(self, file_path: str):
@@ -72,11 +75,14 @@ class TranslationController:
             )
             return
 
-        # Get current webhook URL from view
-        webhook_url = self.view.get_webhook_url()
+        # Always use webhook field value; fall back to default if empty
+        webhook_url = self.view.get_webhook_url().strip()
         if webhook_url:
-            # Update model's webhook URL
             self.model.set_webhook_url(webhook_url)
+        else:
+            default_url = self.model.restore_default_webhook()
+            self.view.set_webhook_url(default_url)
+            logger.info(f"Webhook field was empty, using default: {default_url}")
 
         # Get target language
         target_language = self.view.get_target_language()
