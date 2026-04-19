@@ -22,6 +22,12 @@ TRANSLATION_DEFAULT_URL = os.getenv(
 TRANSLATION_TIMEOUT = int(
     os.getenv("TRANSLATION_TIMEOUT", "300")
 )  # 5 minutes for large translations
+TRANSLATION_MAX_TOKENS = int(
+    os.getenv("TRANSLATION_MAX_TOKENS", "500")
+)  # Max tokens per API call
+TRANSLATION_CHUNK_SIZE = int(
+    os.getenv("TRANSLATION_CHUNK_SIZE", "2000")
+)  # Characters per chunk (approximate)
 
 # Application Settings
 APP_TITLE = "n8n Summarizer"

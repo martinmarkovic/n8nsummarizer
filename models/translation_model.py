@@ -7,6 +7,7 @@ Responsibilities:
     - Webhook URL persistence
     - Translation prompt construction
     - Error handling and validation
+    - Chunked translation for large documents
 
 This model follows the same pattern as other models in the project
 (e.g., models/n8n/client.py, models/file_model.py).
@@ -15,27 +16,70 @@ This model follows the same pattern as other models in the project
 import os
 import json
 from pathlib import Path
-from typing import Tuple, Optional
-import requests
-from config import TRANSLATION_DEFAULT_URL
+from typing import Tuple, Optional, List
+from config import (
+    TRANSLATION_DEFAULT_URL,
+    TRANSLATION_MAX_TOKENS,
+    TRANSLATION_CHUNK_SIZE,
+)
 from utils.logger import logger
+from models.translation.chunking import TranslationChunker
+from models.translation.service import TranslationService
 
 
 class TranslationModel:
     """Translation business logic and data operations."""
 
-    def __init__(self):
+    def __init__(self, max_tokens: int = None, chunk_size: int = None):
         """Initialize translation model with default configuration."""
         self.webhook_url = TRANSLATION_DEFAULT_URL
+        self.max_tokens = max_tokens or TRANSLATION_MAX_TOKENS
+        self.chunk_size = chunk_size or TRANSLATION_CHUNK_SIZE
+
+        # Initialize services
+        self.chunker = TranslationChunker(
+            max_chunk_size=self.chunk_size, max_tokens=self.max_tokens
+        )
+        self.translation_service = TranslationService(
+            webhook_url=TRANSLATION_DEFAULT_URL, max_tokens=self.max_tokens
+        )
+
         logger.info(
             f"TranslationModel initialized with default webhook: {self.webhook_url}"
         )
+        logger.info(
+            f"Translation chunking: max_tokens={self.max_tokens}, chunk_size={self.chunk_size}"
+        )
+
+    def set_max_tokens(self, max_tokens: int):
+        """Set maximum tokens for translation API calls."""
+        self.max_tokens = max_tokens
+        self.chunker.max_tokens = max_tokens
+        self.translation_service.max_tokens = max_tokens
+        logger.info(f"Updated max_tokens to {max_tokens}")
+
+    def set_chunk_size(self, chunk_size: int):
+        """Set chunk size for text splitting."""
+        self.chunk_size = chunk_size
+        self.chunker.max_chunk_size = chunk_size
+        logger.info(f"Updated chunk_size to {chunk_size}")
+
+    def get_translation_stats(self) -> dict:
+        """Get translation statistics."""
+        return {
+            "max_tokens": self.max_tokens,
+            "chunk_size": self.chunk_size,
+            "retries": self.translation_service.get_retry_stats(),
+        }
 
     def translate_text(
         self, text: str, target_language: str
     ) -> Tuple[bool, str, Optional[str]]:
         """
-        Send text to translation webhook and return translated result.
+        Translate text using chunked approach for large documents.
+
+        For small texts: Single API call
+        For large texts: Intelligent chunking with retry logic
 
         Args:
             text: Source text to translate
@@ -50,60 +94,127 @@ class TranslationModel:
         if not self.webhook_url:
             return False, "", "Translation webhook URL not configured"
 
+        # Update service with current webhook URL
+        self.translation_service.webhook_url = self.webhook_url
+
         try:
-            # Construct translation prompt
-            prompt_template = f"Output translation only. Translate following text to {target_language}: {text}"
-
-            payload = {
-                "model": "translategemma:4b-it",
-                "prompt": prompt_template,
-                "temperature": 0.3,
-                "max_tokens": 500,
-            }
-
-            logger.info(f"Sending translation request to: {self.webhook_url}")
-            logger.debug(f"Translation payload size: {len(json.dumps(payload))} bytes")
-
-            response = requests.post(
-                self.webhook_url,
-                headers={"Content-Type": "application/json"},
-                data=json.dumps(payload),
-                timeout=300,  # 5 minutes for very large texts
-            )
-
-            logger.info(f"Translation API response status: {response.status_code}")
-
-            if response.status_code in [200, 201, 202]:
-                response_data = response.json()
-                translated_text = response_data.get("choices", [{}])[0].get("text", "")
-                logger.info(
-                    f"Translation successful, received {len(translated_text)} characters"
-                )
-                return True, translated_text, None
+            # Check if text needs chunking
+            if self._needs_chunking(text):
+                logger.info(f"Text requires chunking (length: {len(text)} chars)")
+                return self._translate_with_chunking(text, target_language)
             else:
-                error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
-                logger.error(f"Translation API error: {error_msg}")
-                return False, "", error_msg
-
-        except requests.exceptions.Timeout:
-            error_msg = "Request timed out after 5 minutes"
-            logger.error(error_msg)
-            return False, "", error_msg
-
-        except requests.exceptions.ConnectionError:
-            error_msg = "Cannot connect to translation service (LM Studio)"
-            logger.error(error_msg)
-            return False, "", error_msg
-
-        except json.JSONDecodeError as e:
-            error_msg = f"Invalid JSON response from translation service: {str(e)}"
-            logger.error(error_msg)
-            return False, "", error_msg
+                logger.info(f"Text fits in single chunk (length: {len(text)} chars)")
+                return self._translate_single_chunk(text, target_language)
 
         except Exception as e:
             error_msg = f"Unexpected translation error: {str(e)}"
             logger.error(error_msg)
             return False, "", error_msg
+
+    def _needs_chunking(self, text: str) -> bool:
+        """Determine if text needs chunking based on size and token estimate."""
+        # Rough estimate: 1 token ≈ 4 characters
+        estimated_tokens = len(text) // 4
+
+        # Chunk if exceeds 80% of max_tokens to be safe
+        if estimated_tokens > self.max_tokens * 0.8:
+            return True
+
+        # Also chunk if text is very long (regardless of token estimate)
+        if len(text) > self.chunk_size:
+            return True
+
+        return False
+
+    def _translate_single_chunk(
+        self, text: str, target_language: str
+    ) -> Tuple[bool, str, Optional[str]]:
+        """Translate text in single chunk (for small texts)."""
+        success, translated_text, error, metadata = (
+            self.translation_service.translate_chunk(
+                chunk=text,
+                target_language=target_language,
+                chunk_index=1,
+                total_chunks=1,
+            )
+        )
+
+        if success:
+            logger.info(
+                f"Single chunk translation successful, {len(translated_text)} characters"
+            )
+            return True, translated_text, None
+        else:
+            logger.error(f"Single chunk translation failed: {error}")
+            return False, "", error
+
+    def _translate_with_chunking(
+        self, text: str, target_language: str
+    ) -> Tuple[bool, str, Optional[str]]:
+        """Translate text using chunked approach."""
+        logger.info(f"Starting chunked translation for {len(text)} characters")
+
+        # Split text into chunks
+        chunks = self.chunker.chunk_text(text)
+        total_chunks = len(chunks)
+
+        if total_chunks == 0:
+            return False, "", "No chunks generated from text"
+
+        translated_chunks = []
+        failed_chunks = []
+
+        # Translate each chunk
+        for i, chunk in enumerate(chunks, 1):
+            success, translated_text, error, metadata = (
+                self.translation_service.translate_chunk(
+                    chunk=chunk,
+                    target_language=target_language,
+                    chunk_index=i,
+                    total_chunks=total_chunks,
+                )
+            )
+
+            if success:
+                translated_chunks.append(translated_text)
+                logger.info(
+                    f"Chunk {i}/{total_chunks} translated successfully ({len(translated_text)} chars)"
+                )
+            else:
+                failed_chunks.append((i, error or "Unknown error"))
+                logger.error(f"Chunk {i}/{total_chunks} failed: {error}")
+
+        # Check results
+        if failed_chunks:
+            error_details = ", ".join(
+                [f"Chunk {idx}: {err}" for idx, err in failed_chunks]
+            )
+            error_msg = f"Translation partially failed. {len(failed_chunks)}/{total_chunks} chunks failed: {error_details}"
+
+            # Return partial result if we have some translations
+            if translated_chunks:
+                partial_result = "".join(translated_chunks)
+                logger.warning(
+                    f"Returning partial translation: {len(partial_result)} characters from {len(translated_chunks)}/{total_chunks} chunks"
+                )
+                return True, partial_result, error_msg
+            else:
+                return False, "", error_msg
+
+        # Combine all translated chunks
+        final_translation = "".join(translated_chunks)
+        logger.info(
+            f"Chunked translation completed. {len(chunks)} chunks → {len(final_translation)} characters"
+        )
+
+        # Log retry statistics
+        retry_stats = self.translation_service.get_retry_stats()
+        if retry_stats["total_retries"] > 0:
+            logger.info(
+                f"Translation retries: {retry_stats['total_retries']} total retries across all chunks"
+            )
+
+        return True, final_translation, None
 
     def load_file_content(self, file_path: str) -> Tuple[bool, str, Optional[str]]:
         """
