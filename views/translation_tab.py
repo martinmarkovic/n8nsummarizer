@@ -17,6 +17,7 @@ from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 
 from views.base_tab import BaseTab
+from views.resizable_panes import ResizablePanes
 
 
 class TranslationTab(BaseTab):
@@ -40,11 +41,10 @@ class TranslationTab(BaseTab):
         super().__init__(notebook, "🌐 Translation")
 
     def _setup_ui(self):
-        """Build translation UI (file picker + side-by-side textboxes + webhook field)."""
-        # Configure grid for side-by-side layout
+        """Build translation UI (file picker + resizable side-by-side textboxes + webhook field)."""
+        # Configure grid for controls and resizable panes
         self.columnconfigure(0, weight=1)
-        self.columnconfigure(1, weight=1)  # Second column for translation
-        self.rowconfigure(1, weight=1)  # Single content row for both text areas
+        self.rowconfigure(1, weight=1)  # Resizable panes row
 
         # Row 0: File selection + webhook URL
         top_frame = ttk.Frame(self)
@@ -101,15 +101,15 @@ class TranslationTab(BaseTab):
         )
         language_dropdown.grid(row=1, column=4, padx=(0, 8), pady=5, sticky=tk.W)
 
-        # Row 1, Column 0: Source text (left side)
-        source_frame = ttk.LabelFrame(self, text="Source")
-        source_frame.grid(
-            row=1,
-            column=0,
-            sticky=(tk.N, tk.S, tk.E, tk.W),
-            padx=(10, 2.5),
-            pady=(0, 10),
+        # Row 1: Resizable panes with source (left) and translation (right)
+        self.panes = ResizablePanes(self)
+        self.panes.grid(
+            row=1, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10)
         )
+
+        # Setup left pane (Source text)
+        source_frame = ttk.LabelFrame(self.panes.left_pane, text="Source")
+        source_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
         source_frame.rowconfigure(0, weight=1)
         source_frame.columnconfigure(0, weight=1)
 
@@ -120,15 +120,9 @@ class TranslationTab(BaseTab):
         source_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.source_text.configure(yscrollcommand=source_scroll.set)
 
-        # Row 1, Column 1: Translated text (right side)
-        target_frame = ttk.LabelFrame(self, text="Translation")
-        target_frame.grid(
-            row=1,
-            column=1,
-            sticky=(tk.N, tk.S, tk.E, tk.W),
-            padx=(2.5, 10),
-            pady=(0, 10),
-        )
+        # Setup right pane (Translation text)
+        target_frame = ttk.LabelFrame(self.panes.right_pane, text="Translation")
+        target_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
         target_frame.rowconfigure(0, weight=1)
         target_frame.columnconfigure(0, weight=1)
 
