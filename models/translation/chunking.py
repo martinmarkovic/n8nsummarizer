@@ -167,7 +167,7 @@ class TranslationChunker:
 
         if chunk:
             return " ".join(chunk), " ".join(remaining_sentences)
-        return "", text
+        return "", sentences
 
     def _find_hard_split_point(self, text: str) -> int:
         """Find a reasonable hard split point near max_chunk_size."""
