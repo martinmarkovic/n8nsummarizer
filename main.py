@@ -17,6 +17,7 @@ New in v6.3:
 Version: 6.3
 Updated: 2026-02-15 - Settings persistence
 """
+
 import tkinter as tk
 from views.main_window import MainWindow
 from controllers.file_controller import FileController
@@ -24,6 +25,7 @@ from controllers.youtube_summarizer_controller import YouTubeSummarizerControlle
 from controllers.transcriber_controller import TranscriberController
 from controllers.bulk_summarizer_controller import BulkSummarizerController
 from controllers.bulk_transcriber_controller import BulkTranscriberController
+from controllers.translation_controller import TranslationController
 from utils.logger import logger
 from utils.settings_manager import SettingsManager
 from config import APP_TITLE
@@ -32,7 +34,7 @@ from config import APP_TITLE
 def main():
     """
     Initialize and run the application.
-    
+
     Creates:
     - SettingsManager (persistent user preferences)
     - MainWindow (views layer with all tabs)
@@ -41,9 +43,9 @@ def main():
     - YouTubeSummarizerController (coordinates YouTubeSummarizerTab + models)
     - BulkSummarizerController (coordinates BulkSummarizerTab + models)
     - BulkTranscriberController (coordinates BulkTranscriberTab + models)
-    - TranslationTab (UI only, controller in future phase)
+    - TranslationController (coordinates TranslationTab + TranslationModel)
     - DownloaderTab with persistent settings
-    
+
     Features (v6.3):
     - File summarization (txt, srt, docx, pdf)
     - YouTube summarization with transcription
@@ -58,65 +60,71 @@ def main():
     logger.info("=" * 50)
     logger.info(f"Starting {APP_TITLE} v6.3")
     logger.info("=" * 50)
-    
+
     try:
         # Initialize settings manager FIRST
         settings = SettingsManager()
         logger.info("SettingsManager initialized")
-        
+
         # Create Tkinter root window
         root = tk.Tk()
-        
+
         # Initialize main window (creates all tabs including Translation and Downloader)
         # Pass settings manager to main window
         window = MainWindow(root, settings)
-        
+
         # Initialize File Summarizer tab controller
         # Wires: FileTab UI ↔ FileController ↔ FileModel + N8NModel
         file_controller = FileController(window.file_tab)
         logger.info("FileController initialized")
-        
+
         # Initialize Transcriber tab controller FIRST (so it's available for YouTube controller)
         # Wires: TranscriberTab UI ↔ TranscriberController ↔ TranscribeModel + N8NModel
         transcriber_controller = TranscriberController(window.transcriber_tab)
         logger.info("TranscriberController initialized")
-        
+
         # Initialize YouTube Summarizer tab controller
         # Wires: YouTubeSummarizerTab UI ↔ YouTubeSummarizerController ↔ TranscribeModel + N8NModel
         # Pass BOTH transcriber_tab reference (for UI) AND transcriber_controller
         youtube_summarizer_controller = YouTubeSummarizerController(
             window.youtube_summarizer_tab,
             transcriber_tab=window.transcriber_tab,
-            transcriber_controller=transcriber_controller
+            transcriber_controller=transcriber_controller,
         )
         logger.info("YouTubeSummarizerController initialized")
-        
+
         # Initialize Bulk Summarizer tab controller
         # Wires: BulkSummarizerTab UI ↔ BulkSummarizerController
         # With advanced options: file types, output formats, custom location
-        bulk_summarizer_controller = BulkSummarizerController(window.bulk_summarizer_tab)
+        bulk_summarizer_controller = BulkSummarizerController(
+            window.bulk_summarizer_tab
+        )
         logger.info("BulkSummarizerController initialized")
-        
+
         # Initialize Bulk Transcriber tab controller
         # Wires: BulkTranscriberTab UI ↔ BulkTranscriberController
         # With media format selection, output formats, recursive scanning
-        bulk_transcriber_controller = BulkTranscriberController(window.bulk_transcriber_tab)
+        bulk_transcriber_controller = BulkTranscriberController(
+            window.bulk_transcriber_tab
+        )
         logger.info("BulkTranscriberController initialized")
-        
-        # Translation tab has UI only (no controller yet - future phase)
-        logger.info("TranslationTab initialized (UI only)")
-        
+
+        # Initialize Translation tab controller
+        # Wires: TranslationTab UI ↔ TranslationController ↔ TranslationModel
+        translation_controller = TranslationController(window.translation_tab)
+        logger.info("TranslationController initialized")
+
         # Downloader tab controller already initialized in DownloaderTab.__init__
         # Now inject settings manager into it
-        if hasattr(window, 'downloader_tab') and window.downloader_tab.controller:
+        if hasattr(window, "downloader_tab") and window.downloader_tab.controller:
             window.downloader_tab.controller.set_settings_manager(settings)
             logger.info("DownloaderController configured with SettingsManager")
-        
+
         logger.info("Application ready")
-        
+
         # Run GUI loop
         root.mainloop()
-        
+
     except Exception as e:
         logger.error(f"Failed to start application: {str(e)}", exc_info=True)
         raise
