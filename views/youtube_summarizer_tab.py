@@ -21,6 +21,7 @@ Version: 3.1
 Created: 2025-12-07 (v3.0)
 Updated: 2025-12-07 (v3.1 - .srt to .docx, Transcribe to Summarize)
 """
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 from views.base_tab import BaseTab
@@ -29,7 +30,7 @@ from views.base_tab import BaseTab
 class YouTubeSummarizerTab(BaseTab):
     """
     Tab for transcribing YouTube videos and summarizing via n8n.
-    
+
     Features:
     - YouTube URL input with validation
     - Transcription format selection
@@ -41,29 +42,29 @@ class YouTubeSummarizerTab(BaseTab):
     - Loading indicators
     - Forwards transcript to Transcriber tab
     """
-    
+
     def __init__(self, notebook):
         """
         Initialize YouTube Summarizer tab.
-        
+
         Args:
             notebook: Parent ttk.Notebook widget
         """
         ttk.Frame.__init__(self, notebook, padding="10")
-        
+
         self.tab_name = "YouTube Summarization"
         self.root = self._get_root(notebook)
-        
+
         # Callbacks (set by controller)
         self.on_summarize_clicked = None
         self.on_export_txt_clicked = None
         self.on_export_docx_clicked = None
         self.on_copy_clipboard_clicked = None
         self.on_clear_clicked = None
-        
+
         # Setup UI
         self._setup_ui()
-    
+
     def _get_root(self, widget):
         """Get root window from any widget"""
         current = widget
@@ -72,24 +73,26 @@ class YouTubeSummarizerTab(BaseTab):
                 return current
             current = current.master
         return None
-    
+
     def _setup_ui(self):
         """
         Setup the tab UI with input and output sections.
         """
         main_frame = ttk.Frame(self)
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=10)
+        main_frame.grid(
+            row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=10
+        )
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
         main_frame.columnconfigure(0, weight=1)
         main_frame.rowconfigure(1, weight=1)
-        
+
         # Input section
         self._setup_input_section(main_frame)
-        
+
         # Output section
         self._setup_output_section(main_frame)
-    
+
     def _setup_input_section(self, parent):
         """
         Setup input section (URL + format selection + summarize button).
@@ -97,147 +100,169 @@ class YouTubeSummarizerTab(BaseTab):
         input_frame = ttk.LabelFrame(parent, text="YouTube URL", padding="10")
         input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         input_frame.columnconfigure(1, weight=1)
-        
+
         # YouTube URL label and entry
-        ttk.Label(input_frame, text="URL:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+        ttk.Label(input_frame, text="URL:").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 10)
+        )
         self.url_var = tk.StringVar()
         self.url_entry = ttk.Entry(input_frame, textvariable=self.url_var)
         self.url_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(0, 10))
         self.url_entry.insert(0, "https://")
-        
+
         # Format selection
-        ttk.Label(input_frame, text="Format:").grid(row=0, column=2, sticky=tk.W, padx=(0, 5))
+        ttk.Label(input_frame, text="Format:").grid(
+            row=0, column=2, sticky=tk.W, padx=(0, 5)
+        )
         self.format_var = tk.StringVar(value=".txt")
         format_combo = ttk.Combobox(
             input_frame,
             textvariable=self.format_var,
             values=[".txt", ".srt", ".vtt", ".json"],
             state="readonly",
-            width=10
+            width=10,
         )
         format_combo.grid(row=0, column=3, sticky=tk.W, padx=(0, 10))
-        
+
         # Summarize button (changed from Transcribe in v3.1)
         self.summarize_btn = ttk.Button(
-            input_frame,
-            text="✨ Summarize",
-            command=self._on_summarize_btn_clicked
+            input_frame, text="✨ Summarize", command=self._on_summarize_btn_clicked
         )
         self.summarize_btn.grid(row=0, column=4, sticky=tk.W)
-        
+
         # Status label
         self.input_status_var = tk.StringVar(value="Ready")
         self.input_status_label = ttk.Label(
             input_frame,
             textvariable=self.input_status_var,
             foreground="green",
-            font=("Segoe UI", 9)
+            font=("Segoe UI", 9),
         )
-        self.input_status_label.grid(row=1, column=0, columnspan=5, sticky=tk.W, pady=(5, 0))
-    
+        self.input_status_label.grid(
+            row=1, column=0, columnspan=5, sticky=tk.W, pady=(5, 0)
+        )
+
     def _setup_output_section(self, parent):
         """
         Setup output section (summary display + export buttons).
         """
         output_frame = ttk.LabelFrame(parent, text="Summary", padding="10")
-        output_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
+        output_frame.grid(
+            row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0)
+        )
         output_frame.columnconfigure(0, weight=1)
         output_frame.rowconfigure(0, weight=1)
-        
+
         # Summary text display
         text_frame = ttk.Frame(output_frame)
         text_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         text_frame.columnconfigure(0, weight=1)
         text_frame.rowconfigure(0, weight=1)
-        
+
         scrollbar = ttk.Scrollbar(text_frame)
         scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
-        
+
         self.summary_text = tk.Text(
             text_frame,
             wrap=tk.WORD,
             yscrollcommand=scrollbar.set,
             height=15,
-            font=("Segoe UI", 10)
+            font=("Segoe UI", 10),
         )
         self.summary_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         scrollbar.config(command=self.summary_text.yview)
-        
+
         # Display placeholder
-        self.summary_text.insert(tk.END, "Enter a YouTube URL and click Summarize to get started...")
+        self.summary_text.insert(
+            tk.END, "Enter a YouTube URL and click Summarize to get started..."
+        )
         self.summary_text.config(state=tk.DISABLED)
-        
+
+        # Register context menu for paste functionality
+        self._register_context_menu(
+            self.summary_text,
+            [
+                {
+                    "label": "Paste Forwarded Text",
+                    "command": self._paste_forwarded_text,
+                },
+                {"separator": True},
+                {"label": "Copy All", "command": self._copy_all_text},
+                {"label": "Clear", "command": self._clear_content},
+            ],
+        )
+
         # Button frame
         button_frame = ttk.Frame(output_frame)
         button_frame.grid(row=1, column=0, sticky=(tk.W, tk.E))
         button_frame.columnconfigure(0, weight=1)
-        
+
         # Export buttons (changed in v3.1: .srt -> .docx)
         self.export_txt_btn = ttk.Button(
             button_frame,
             text="💾 Export .txt",
             command=self._on_export_txt_clicked,
-            state=tk.DISABLED
+            state=tk.DISABLED,
         )
         self.export_txt_btn.grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
-        
+
         self.export_docx_btn = ttk.Button(
             button_frame,
             text="📄 Export .docx",
             command=self._on_export_docx_clicked,
-            state=tk.DISABLED
+            state=tk.DISABLED,
         )
         self.export_docx_btn.grid(row=0, column=1, sticky=tk.W, padx=(0, 5))
-        
+
         self.copy_btn = ttk.Button(
             button_frame,
             text="📋 Copy to Clipboard",
             command=self._on_copy_clicked,
-            state=tk.DISABLED
+            state=tk.DISABLED,
         )
         self.copy_btn.grid(row=0, column=2, sticky=tk.W)
-        
+
         # Output status label
         self.output_status_var = tk.StringVar(value="")
         self.output_status_label = ttk.Label(
             output_frame,
             textvariable=self.output_status_var,
             foreground="blue",
-            font=("Segoe UI", 9)
+            font=("Segoe UI", 9),
         )
         self.output_status_label.grid(row=2, column=0, sticky=tk.W, pady=(5, 0))
-    
+
     # User event callbacks
-    
+
     def _on_summarize_btn_clicked(self):
         """Handle summarize button click (renamed from transcribe in v3.1)."""
         if self.on_summarize_clicked:
             self.on_summarize_clicked()
-    
+
     def _on_export_txt_clicked(self):
         """Handle export .txt button click."""
         if self.on_export_txt_clicked:
             self.on_export_txt_clicked()
-    
+
     def _on_export_docx_clicked(self):
         """Handle export .docx button click (new in v3.1)."""
         if self.on_export_docx_clicked:
             self.on_export_docx_clicked()
-    
+
     def _on_copy_clicked(self):
         """Handle copy to clipboard button click."""
         if self.on_copy_clipboard_clicked:
             self.on_copy_clipboard_clicked()
-    
+
     # Abstract method implementations (required by BaseTab)
-    
+
     def get_content(self) -> str:
         """
         Get current tab content (summary text).
         Required by BaseTab abstract class.
         """
         return self.summary_text.get("1.0", tk.END).strip()
-    
+
     def clear_all(self):
         """
         Clear all fields and reset to initial state.
@@ -247,92 +272,140 @@ class YouTubeSummarizerTab(BaseTab):
         self.format_var.set(".txt")
         self.summary_text.config(state=tk.NORMAL)
         self.summary_text.delete("1.0", tk.END)
-        self.summary_text.insert(tk.END, "Enter a YouTube URL and click Summarize to get started...")
+        self.summary_text.insert(
+            tk.END, "Enter a YouTube URL and click Summarize to get started..."
+        )
         self.summary_text.config(state=tk.DISABLED)
         self.set_input_status("Ready", "green")
         self.set_output_status("", "blue")
         self.set_export_buttons_enabled(False)
         self.set_summarize_button_enabled(True)
-    
+
     # Getters
-    
+
     def get_youtube_url(self) -> str:
         """
         Get YouTube URL from input field.
-        
+
         Returns:
             URL string
         """
         return self.url_var.get().strip()
-    
+
     def get_transcription_format(self) -> str:
         """
         Get selected transcription format.
-        
+
         Returns:
             Format string (e.g., '.txt', '.srt')
         """
         return self.format_var.get()
-    
+
     def get_summary_content(self) -> str:
         """
         Get summary text content.
-        
+
         Returns:
             Summary text
         """
         return self.summary_text.get("1.0", tk.END).strip()
-    
+
     # Setters and state management
-    
+
     def set_summary_content(self, content: str):
         """
         Set summary text content.
-        
+
         Args:
             content: Summary text to display
         """
         self.summary_text.config(state=tk.NORMAL)
         self.summary_text.delete("1.0", tk.END)
         self.summary_text.insert(tk.END, content)
+        self.summary_text.config(state=tk.NORMAL)  # Keep editable for user adjustments
+
+    def _paste_forwarded_text(self):
+        """Paste forwarded text from translation tab."""
+        # Get main window to access translation tab
+        main_window = self.get_main_window()
+        if main_window and hasattr(main_window, "translation_tab"):
+            forwarded_text = main_window.translation_tab.get_forwarded_text()
+            if forwarded_text:
+                self.summary_text.config(state=tk.NORMAL)
+                self.summary_text.delete("1.0", tk.END)
+                self.summary_text.insert(tk.END, forwarded_text)
+                self.summary_text.config(state=tk.NORMAL)  # Keep editable
+                messagebox.showinfo(
+                    title="Pasted",
+                    message=f"Pasted {len(forwarded_text)} characters from translation tab",
+                )
+                return
+
+        messagebox.showinfo(
+            title="No Forwarded Text",
+            message="No forwarded text available from translation tab",
+        )
+
+    def _copy_all_text(self):
+        """Copy all text from summary to clipboard."""
+        content = self.summary_text.get("1.0", tk.END).strip()
+        if content:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(content)
+            messagebox.showinfo(
+                title="Copied", message=f"Copied {len(content)} characters to clipboard"
+            )
+        else:
+            messagebox.showinfo(
+                title="Nothing to Copy", message="Summary text is empty"
+            )
+
+    def _clear_content(self):
+        """Clear summary content."""
+        self.summary_text.config(state=tk.NORMAL)
+        self.summary_text.delete("1.0", tk.END)
+        self.summary_text.insert(
+            tk.END, "Enter a YouTube URL and click Summarize to get started..."
+        )
         self.summary_text.config(state=tk.DISABLED)
-    
+        messagebox.showinfo(title="Cleared", message="Summary content cleared")
+
     def set_input_status(self, message: str, color: str = "blue"):
         """
         Set input section status message.
-        
+
         Args:
             message: Status message
             color: Text color (blue=info, green=success, red=error)
         """
         self.input_status_var.set(message)
         self.input_status_label.config(foreground=color)
-    
+
     def set_output_status(self, message: str, color: str = "blue"):
         """
         Set output section status message.
-        
+
         Args:
             message: Status message
             color: Text color (blue=info, green=success, red=error)
         """
         self.output_status_var.set(message)
         self.output_status_label.config(foreground=color)
-    
+
     def set_summarize_button_enabled(self, enabled: bool):
         """
         Enable/disable summarize button (renamed in v3.1).
-        
+
         Args:
             enabled: True to enable, False to disable
         """
         state = tk.NORMAL if enabled else tk.DISABLED
         self.summarize_btn.config(state=state)
-    
+
     def set_export_buttons_enabled(self, enabled: bool):
         """
         Enable/disable all export buttons.
-        
+
         Args:
             enabled: True to enable, False to disable
         """
@@ -340,30 +413,30 @@ class YouTubeSummarizerTab(BaseTab):
         self.export_txt_btn.config(state=state)
         self.export_docx_btn.config(state=state)
         self.copy_btn.config(state=state)
-    
+
     def show_error(self, message: str):
         """
         Show error message to user.
-        
+
         Args:
             message: Error message
         """
         messagebox.showerror("Error", message)
         self.set_input_status("Error", "red")
-    
+
     def show_success(self, message: str):
         """
         Show success message to user.
-        
+
         Args:
             message: Success message
         """
         messagebox.showinfo("Success", message)
-    
+
     def show_info(self, title: str, message: str):
         """
         Show info message to user.
-        
+
         Args:
             title: Message title
             message: Message text

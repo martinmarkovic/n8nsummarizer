@@ -283,6 +283,29 @@ class TranslationTab(BaseTab):
         cleaned_text = text_content.replace("<think>", "").replace("</think>", "")
         cleaned_text = " ".join(cleaned_text.split()).strip()
 
+        # Get main window to access summarization tab
+        main_window = self.get_main_window()
+        if main_window and hasattr(main_window, "youtube_summarizer_tab"):
+            # Forward text directly to summarization tab
+            main_window.youtube_summarizer_tab.set_summary_content(cleaned_text)
+
+            messagebox.showinfo(
+                title="Forwarded Successfully",
+                message=f"Translation forwarded to summarization tab ({len(cleaned_text)} characters)",
+            )
+        else:
+            # Fallback: Store text for manual pasting
+            self._forwarded_text = cleaned_text
+            messagebox.showinfo(
+                title="Ready to Forward",
+                message="Text is ready. Use the 'Paste Forwarded Text' function in the summarization tab.",
+            )
+            return
+
+        # Clean the text by removing think tags
+        cleaned_text = text_content.replace("<think>", "").replace("</think>", "")
+        cleaned_text = " ".join(cleaned_text.split()).strip()
+
         # Show confirmation
         response = messagebox.askyesno(
             title="Forward to Summarization",

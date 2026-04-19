@@ -142,6 +142,21 @@ class BaseTab(ttk.Frame, ABC):
             self.clear_all()
             self.set_status("Cleared")
 
+    def get_main_window(self):
+        """
+        Get the main window instance to access other tabs.
+
+        Returns:
+            MainWindow instance or None if not found
+        """
+        # Navigate up the widget hierarchy to find MainWindow
+        current = self
+        while current is not None:
+            if hasattr(current, "youtube_summarizer_tab"):
+                return current
+            current = current.master
+        return None
+
     def _register_context_menu(self, widget: tk.Text, items: list) -> "AppContextMenu":
         """
         Register a right-click context menu on a Text widget.
