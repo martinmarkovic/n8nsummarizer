@@ -40,11 +40,11 @@ class TranslationTab(BaseTab):
         super().__init__(notebook, "🌐 Translation")
 
     def _setup_ui(self):
-        """Build translation UI (file picker + two textboxes + webhook field)."""
-        # Configure grid
+        """Build translation UI (file picker + side-by-side textboxes + webhook field)."""
+        # Configure grid for side-by-side layout
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=1)
-        self.rowconfigure(2, weight=1)
+        self.columnconfigure(1, weight=1)  # Second column for translation
+        self.rowconfigure(1, weight=1)  # Single content row for both text areas
 
         # Row 0: File selection + webhook URL
         top_frame = ttk.Frame(self)
@@ -101,10 +101,14 @@ class TranslationTab(BaseTab):
         )
         language_dropdown.grid(row=1, column=4, padx=(0, 8), pady=5, sticky=tk.W)
 
-        # Row 1: Source text (loaded content)
-        source_frame = ttk.LabelFrame(self, text="Source Text (Loaded)")
+        # Row 1, Column 0: Source text (left side)
+        source_frame = ttk.LabelFrame(self, text="Source")
         source_frame.grid(
-            row=1, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 5)
+            row=1,
+            column=0,
+            sticky=(tk.N, tk.S, tk.E, tk.W),
+            padx=(10, 2.5),
+            pady=(0, 10),
         )
         source_frame.rowconfigure(0, weight=1)
         source_frame.columnconfigure(0, weight=1)
@@ -116,10 +120,14 @@ class TranslationTab(BaseTab):
         source_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.source_text.configure(yscrollcommand=source_scroll.set)
 
-        # Row 2: Translated text (response)
-        target_frame = ttk.LabelFrame(self, text="Translated Text (Response)")
+        # Row 1, Column 1: Translated text (right side)
+        target_frame = ttk.LabelFrame(self, text="Translation")
         target_frame.grid(
-            row=2, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(5, 10)
+            row=1,
+            column=1,
+            sticky=(tk.N, tk.S, tk.E, tk.W),
+            padx=(2.5, 10),
+            pady=(0, 10),
         )
         target_frame.rowconfigure(0, weight=1)
         target_frame.columnconfigure(0, weight=1)
