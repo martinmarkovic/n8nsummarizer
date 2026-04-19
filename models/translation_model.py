@@ -140,6 +140,10 @@ class TranslationModel:
         )
 
         if success:
+            # Clean the translation output by removing think tags
+            translated_text = self.translation_service.clean_translation_output(
+                translated_text
+            )
             logger.info(
                 f"Single chunk translation successful, {len(translated_text)} characters"
             )
@@ -194,6 +198,10 @@ class TranslationModel:
             # Return partial result if we have some translations
             if translated_chunks:
                 partial_result = "".join(translated_chunks)
+                # Clean the translation output by removing think tags
+                partial_result = self.translation_service.clean_translation_output(
+                    partial_result
+                )
                 logger.warning(
                     f"Returning partial translation: {len(partial_result)} characters from {len(translated_chunks)}/{total_chunks} chunks"
                 )
@@ -203,6 +211,10 @@ class TranslationModel:
 
         # Combine all translated chunks
         final_translation = "".join(translated_chunks)
+        # Clean the translation output by removing think tags
+        final_translation = self.translation_service.clean_translation_output(
+            final_translation
+        )
         logger.info(
             f"Chunked translation completed. {len(chunks)} chunks → {len(final_translation)} characters"
         )

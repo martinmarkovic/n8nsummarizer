@@ -133,11 +133,16 @@ class TranslationTab(BaseTab):
         target_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.target_text.configure(yscrollcommand=target_scroll.set)
 
-        # Wire context menu for translation export
+        # Wire context menu for translation export and forward functionality
         self._register_context_menu(
             self.target_text,
             [
                 {"label": "Export as .txt", "command": self._export_translation_txt},
+                {"separator": True},
+                {
+                    "label": "Forward to Summarization",
+                    "command": self._forward_to_summarization,
+                },
             ],
         )
 
@@ -261,6 +266,37 @@ class TranslationTab(BaseTab):
             except IOError as e:
                 # Show error if write fails
                 messagebox.showerror(title="Export Failed", message=str(e))
+
+    def _forward_to_summarization(self):
+        """Forward translated text to summarization tab via context menu."""
+        # Get text from target text widget
+        text_content = self.target_text.get("1.0", tk.END).strip()
+
+        # Check if there's content to forward
+        if not text_content:
+            messagebox.showwarning(
+                title="Nothing to forward", message="Translated text is empty."
+            )
+            return
+
+        # Clean the text by removing think tags
+        cleaned_text = text_content.replace("<think>", "").replace("</think>", "")
+        cleaned_text = " ".join(cleaned_text.split()).strip()
+
+        # Show confirmation
+        response = messagebox.askyesno(
+            title="Forward to Summarization",
+            message=f"Forward {len(cleaned_text)} characters to summarization tab?",
+        )
+
+        if response:  # User confirmed
+            # Store the text to be forwarded
+            self._forwarded_text = cleaned_text
+
+            messagebox.showinfo(
+                title="Ready to Forward",
+                message="Text is ready. Use the 'Paste Forwarded Text' function in the summarization tab.",
+            )
 
     # --- BaseTab abstract method implementations ---
 

@@ -172,3 +172,17 @@ class BaseTab(ttk.Frame, ABC):
         menu.bind()
 
         return menu
+
+    def get_forwarded_text(self) -> str:
+        """
+        Get text that was forwarded from another tab (e.g., translation tab).
+
+        Returns:
+            Forwarded text, or empty string if none
+        """
+        return getattr(self, "_forwarded_text", "")
+
+    def clear_forwarded_text(self):
+        """Clear any forwarded text."""
+        if hasattr(self, "_forwarded_text"):
+            del self._forwarded_text

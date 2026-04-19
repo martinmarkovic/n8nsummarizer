@@ -221,6 +221,27 @@ class TranslationService:
             "max_retries_per_chunk": self.max_retries,
         }
 
-    def reset_retry_stats(self):
+    def rebuild(self):
         """Reset retry statistics."""
         self.retry_count = 0
+
+    def clean_translation_output(self, text: str) -> str:
+        """
+        Clean translation output by removing <think> and </think> tags.
+
+        Args:
+            text: Translation text that may contain think tags
+
+        Returns:
+            Cleaned text with think tags removed
+        """
+        if not text:
+            return text
+
+        # Remove <think> and </think> tags
+        cleaned = text.replace("<think>", "").replace("</think>", "")
+
+        # Clean up any extra whitespace left by removed tags
+        cleaned = " ".join(cleaned.split())  # Normalize whitespace
+
+        return cleaned.strip()
