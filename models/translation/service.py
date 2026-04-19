@@ -16,7 +16,7 @@ class TranslationService:
     """Handles translation API calls with retry and error handling."""
 
     def __init__(
-        self, webhook_url: str = None, max_tokens: int = 500, timeout: int = 300
+        self, webhook_url: str = None, max_tokens: int = 2000, timeout: int = 300
     ):
         """
         Initialize translation service.
@@ -57,13 +57,22 @@ class TranslationService:
         if not self.webhook_url:
             return False, "", "Translation webhook URL not configured", None
 
-        # Build translation prompt
-        prompt_template = f"Output translation only. Translate following text to {target_language}: {chunk}"
+        # Use local variable for max_tokens to avoid mutating instance state
+        current_max_tokens = self.max_tokens
+
+        # Build translation prompt using chat-style format for better control
+        prompt_template = (
+            "<|im_start|>system\n"
+            "You are a translator. Output ONLY the translated text. "
+            "No explanations. No commentary. No extra content.<|im_end|>\n"
+            f"<|im_start|>user\nTranslate to {target_language}:\n{chunk}<|im_end|>\n"
+            "<|im_start|>assistant\n"
+        )
 
         payload = {
             "prompt": prompt_template,
             "temperature": 0.3,
-            "max_tokens": self.max_tokens,
+            "max_tokens": current_max_tokens,
             "stream": False,
         }
 
@@ -75,7 +84,7 @@ class TranslationService:
             }
 
         logger.info(
-            f"Translating chunk {chunk_index}/{total_chunks} ({len(chunk)} chars)"
+            f"Translating chunk {chunk_index}/{total_chunks} ({len(chunk)} chars, max_tokens={current_max_tokens})"
         )
         logger.debug(f"Translation payload: {json.dumps(payload, indent=2)[:500]}...")
 
@@ -96,12 +105,12 @@ class TranslationService:
                         f"Chunk {chunk_index} hit token limit (finish_reason=length)"
                     )
 
-                    # Retry with increased max_tokens if possible
-                    if self.max_tokens < 2000 and attempt < self.max_retries:
-                        old_tokens = self.max_tokens
-                        self.max_tokens = min(self.max_tokens * 2, 2000)
+                    # Retry with increased max_tokens if possible (local variable only)
+                    if current_max_tokens < 6000 and attempt < self.max_retries:
+                        old_tokens = current_max_tokens
+                        current_max_tokens = min(current_max_tokens * 2, 6000)
                         logger.info(
-                            f"Retrying chunk {chunk_index} with increased max_tokens: {old_tokens} -> {self.max_tokens}"
+                            f"Retrying chunk {chunk_index} with increased max_tokens: {old_tokens} -> {current_max_tokens}"
                         )
                         attempt += 1
                         self.retry_count += 1
@@ -110,7 +119,7 @@ class TranslationService:
                         return (
                             False,
                             translated_text,
-                            f"Chunk {chunk_index} too large even with max_tokens={self.max_tokens}",
+                            f"Chunk {chunk_index} too large even with max_tokens={current_max_tokens}",
                             metadata,
                         )
 
