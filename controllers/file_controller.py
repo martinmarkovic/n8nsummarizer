@@ -69,15 +69,24 @@ class FileController:
             self.view.set_content("")
             self.view.set_file_info(None)
     
-    def handle_send_clicked(self):
-        """Handle Send to n8n button - starts background thread"""
+    def handle_send_clicked(self, allow_textbox_only=False):
+        """Handle Send to n8n button - starts background thread""
         logger.info("Send button clicked")
         
-        # Validate file is loaded
+        # Validate file is loaded OR allow textbox-only mode
         file_path = self.view.get_file_path()
-        if not file_path:
+        if not file_path and not allow_textbox_only:
             self.view.show_error("No file loaded. Please select a file first.")
             return
+        
+        content = self.view.get_content()
+        if not content or not content.strip():
+            self.view.show_error("File content is empty. Cannot send empty content.")
+            return
+        
+        # If no file but textbox-only mode, log the mode
+        if not file_path and allow_textbox_only:
+            logger.info("Using textbox content (no file loaded)")
         
         content = self.view.get_content()
         if not content or not content.strip():
