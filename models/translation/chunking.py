@@ -144,7 +144,7 @@ class TranslationChunker:
 
         if chunk:
             return "\n\n".join(chunk), "\n\n".join(remaining_paragraphs)
-        return "", text
+        return "", paragraphs
 
     def _build_chunk_from_sentences(self, sentences: List[str]) -> Tuple[str, str]:
         """Build chunk by adding sentences until we reach max size."""
