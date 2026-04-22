@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from utils.logger import logger
+import shutil
 
 
 def process_outputs(
@@ -49,10 +50,7 @@ def process_outputs(
 
             logger.debug("Found file: %s", temp_file.name)
 
-            if not (
-                temp_file.name.startswith("out.")
-                or temp_file.suffix in output_extensions
-            ):
+            if not (temp_file.name.startswith("out.") or temp_file.stem == base_name):
                 logger.debug("Skipping non-output file: %s", temp_file.name)
                 continue
 
@@ -64,10 +62,17 @@ def process_outputs(
             final_path = output_dir / new_name
             ext = temp_file.suffix.lower()
 
-            logger.debug("Processing %s -> %s (keep=%s)", temp_file.name, new_name, ext in keep_formats)
+            logger.debug(
+                "Processing %s -> %s (keep=%s)",
+                temp_file.name,
+                new_name,
+                ext in keep_formats,
+            )
 
             if ext in keep_formats:
                 try:
+                    if final_path.exists():
+                        final_path.unlink()
                     temp_file.rename(final_path)
                     files_created.append(new_name)
                     metadata["files_kept"].append(new_name)
@@ -103,16 +108,14 @@ def process_outputs(
                     metadata["files_deleted"].append(new_name)
                     logger.info("Deleted unwanted format: %s", new_name)
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "Failed to delete %s: %s", temp_file.name, exc
-                    )
+                    logger.warning("Failed to delete %s: %s", temp_file.name, exc)
 
         if transcript_content is None:
             logger.info("No transcript in kept formats, trying fallback…")
             for fallback_file in output_dir.iterdir():
                 if not fallback_file.is_file():
                     continue
-                
+
                 # FIXED: Only read files matching expected patterns to avoid reading old unrelated transcripts
                 # Only consider files that are either:
                 # 1. Named with current base_name (e.g., 'VideoTitle.txt')
@@ -127,7 +130,7 @@ def process_outputs(
                         base_name,
                     )
                     continue
-                
+
                 ext = fallback_file.suffix.lower()
                 if ext in output_extensions:
                     try:
@@ -144,9 +147,7 @@ def process_outputs(
                                 )
                                 break
                     except Exception as exc:  # noqa: BLE001
-                        logger.warning(
-                            "Failed to load %s: %s", fallback_file, exc
-                        )
+                        logger.warning("Failed to load %s: %s", fallback_file, exc)
 
         metadata["format_loaded"] = format_loaded
         logger.info(
