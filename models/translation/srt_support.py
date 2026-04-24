@@ -227,6 +227,30 @@ def decode_text_only_batch(response_text: str, expected_count: int = None) -> Di
         for i, line in enumerate(lines[:5], 1):
             logger.error(f"  {i}: {line[:80]}...")
     
+    # Check if we have fewer entries than expected and try position-based fallback
+    if expected_count and len(decoded) < expected_count:
+        logger.warning(f"⚠️  Potential truncation: {len(decoded)}/{expected_count} entries decoded")
+        logger.warning("Attempting position-based fallback for missing indices...")
+        
+        # Try to recover missing indices using position-based matching
+        # This handles cases where response was truncated or incomplete
+        if len(lines) == 1:
+            # Single line response - try to extract additional content
+            remaining_text = response_text
+            for idx in range(1, expected_count + 1):
+                if idx not in decoded:
+                    # Try to find content after last marker
+                    last_marker_pos = response_text.rfind(f'<T{len(decoded)}>')
+                    if last_marker_pos > 0:
+                        remaining = response_text[last_marker_pos:].strip()
+                        # Try to extract text after last marker
+                        text_match = re.search(r'<T\d+>(.*)$', remaining)
+                        if text_match:
+                            text = text_match.group(1).strip()
+                            if text:
+                                decoded[idx] = text
+                                logger.warning(f"Position fallback: Recovered index {idx} from remaining text")
+    
     return decoded
 
     # Split by lines and process each line
