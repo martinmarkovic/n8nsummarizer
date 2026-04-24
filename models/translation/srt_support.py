@@ -118,9 +118,10 @@ def encode_text_only_batch(batch: List[srt.Subtitle]) -> str:
     return '\n'.join(lines)
 
 
-def decode_text_only_batch(response_text: str) -> Dict[int, str]:
+def decode_text_only_batch(response_text: str, expected_count: int = None) -> Dict[int, str]:
     """
     Parse translated lines in the same marker format.
+    Enhanced to handle various response formats from translation services.
 
     Args:
         response_text: Translated text with markers
@@ -132,6 +133,79 @@ def decode_text_only_batch(response_text: str) -> Dict[int, str]:
 
     if not response_text:
         return decoded
+
+    # Log the complete raw response for analysis
+    logger.info(f"=== RESPONSE ANALYSIS ===")
+    logger.info(f"Response length: {len(response_text)} characters")
+    logger.info(f"Response lines: {len(response_text.split(chr(10)))} lines")
+    
+    # Show first 10 lines for diagnostic purposes
+    for i, line in enumerate(response_text.split('\n')[:10], 1):
+        logger.info(f"Line {i}: {line[:80]}...")
+    
+    if len(response_text.split('\n')) > 10:
+        logger.info(f"... and {len(response_text.split(chr(10))) - 10} more lines")
+    
+    # Clean response text by removing common wrappers
+    cleaned_text = response_text.strip()
+
+    # Remove code fences if present
+    if cleaned_text.startswith('```') and cleaned_text.endswith('```'):
+        cleaned_text = cleaned_text[3:-3].strip()
+        logger.info("Removed code fence wrapping")
+
+    # Remove common prefixes
+    for prefix in ["Sure, here's the translation:", "Here you go:", "Here's the translation:"]:
+        if cleaned_text.startswith(prefix):
+            cleaned_text = cleaned_text[len(prefix):].strip()
+            logger.info(f"Removed prefix: '{prefix}'")
+            break
+
+    # Split by lines and process each line
+    lines = cleaned_text.split('\n')
+    logger.info(f"Processing {len(lines)} cleaned lines for marker matching")
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # Try multiple marker patterns in order of likelihood
+        patterns = [
+            r'^<T(\d+)>\s*(.*)$',      # Standard: <T1> text
+            r'^\[T(\d+)>\s*(.*)$',     # Square brackets with >: [T1> text
+            r'^\[T(\d+)\]\s*(.*)$',    # Square brackets: [T1] text
+            r'^(\d+)\.\.?\s*(.*)$',   # Numbered list: 1. text or 1. text
+            r'^\*\s*<T(\d+)>\s*(.*)$', # Bullet with marker: * <T1> text
+        ]
+
+        decoded_line = False
+        for pattern in patterns:
+            match = re.match(pattern, line, re.IGNORECASE)
+            if match:
+                try:
+                    if len(match.groups()) >= 2:
+                        index = int(match.group(1))
+                        text = match.group(2).strip()
+                        decoded[index] = text
+                        decoded_line = True
+                        logger.info(f"✓ Matched pattern for index {index}: {text[:50]}...")
+                        break
+                except (ValueError, IndexError) as e:
+                    logger.debug(f"Failed to parse match: {e}")
+                    continue
+
+        if not decoded_line:
+            logger.warning(f"⚠️  Unmatched line: {line[:100]}...")
+
+    logger.info(f"✅ Decoding complete: {len(decoded)} entries from {len(lines)} lines")
+    if len(decoded) == 0 and len(lines) > 0:
+        logger.error(f"❌ No markers found in {len(lines)} lines of response")
+        logger.error("Response preview:")
+        for i, line in enumerate(lines[:5], 1):
+            logger.error(f"  {i}: {line[:80]}...")
+    
+    return decoded
 
     # Split by lines and process each line
     lines = response_text.strip().split('\n')
@@ -170,24 +244,33 @@ def validate_decoded_batch(decoded: Dict[int, str], expected_indices: List[int])
         return True, "Empty batch - validation passed"
 
     # Log detailed debugging information
-    logger.debug(f"Validation - Expected {len(expected_indices)} indices: {expected_indices}")
-    logger.debug(f"Validation - Decoded {len(decoded)} indices: {list(decoded.keys())}")
-    logger.debug(f"Validation - Decoded content preview: {str(decoded)[:200]}...")
-
+    logger.info(f"=== VALIDATION CHECK ===")
+    logger.info(f"Expected indices ({len(expected_indices)}): {expected_indices}")
+    logger.info(f"Decoded indices ({len(decoded)}): {list(decoded.keys())}")
+    
+    if len(decoded) < len(expected_indices):
+        logger.warning(f"⚠️  Potential issue: Only {len(decoded)}/{len(expected_indices)} entries decoded")
+    
+    # Check for missing indices
+    missing_indices = [idx for idx in expected_indices if idx not in decoded]
+    if missing_indices:
+        logger.error(f"❌ MISSING INDICES: {missing_indices}")
+        logger.error("This suggests the translation service returned a different format than expected")
+        logger.error("Expected marker format: <T1> text, <T2> text, etc.")
+        logger.error("Please check the response analysis logs above for actual format")
+    
     if len(decoded) != len(expected_indices):
         missing_count = len(expected_indices) - len(decoded)
         error_msg = f"Index count mismatch: expected {len(expected_indices)}, got {len(decoded)} ({missing_count} missing)"
-        logger.error(error_msg)
+        logger.error(f"❌ VALIDATION FAILED: {error_msg}")
         return False, error_msg
 
-    # Check that all expected indices are present
-    missing_indices = [idx for idx in expected_indices if idx not in decoded]
     if missing_indices:
         error_msg = f"Missing indices: {missing_indices[:10]}" + ("..." if len(missing_indices) > 10 else "")
-        logger.error(error_msg)
+        logger.error(f"❌ VALIDATION FAILED: {error_msg}")
         return False, error_msg
 
-    logger.info("Validation passed - all expected indices present")
+    logger.info("✅ VALIDATION PASSED: All expected indices present")
     return True, "Validation passed"
 
 
