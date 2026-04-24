@@ -121,7 +121,7 @@ def encode_text_only_batch(batch: List[srt.Subtitle]) -> str:
 def decode_text_only_batch(response_text: str, expected_count: int = None) -> Dict[int, str]:
     """
     Parse translated lines in the same marker format.
-    Enhanced to handle various response formats from translation services.
+    Enhanced to handle both multi-line and consolidated response formats.
 
     Args:
         response_text: Translated text with markers
@@ -161,7 +161,29 @@ def decode_text_only_batch(response_text: str, expected_count: int = None) -> Di
             logger.info(f"Removed prefix: '{prefix}'")
             break
 
-    # Split by lines and process each line
+    # Check for consolidated format (multiple markers on single line)
+    if len(cleaned_text.split('\n')) == 1 and '<T' in cleaned_text:
+        logger.info("Detected consolidated response format (multiple markers on single line)")
+        # Parse consolidated format: <T1> text1 <T2> text2 <T3> text3...
+        consolidated_pattern = r'<T(\d+)>([^<]*)'
+        matches = list(re.finditer(consolidated_pattern, cleaned_text))
+        
+        if matches and len(matches) > 1:
+            logger.info(f"Found {len(matches)} markers in consolidated format")
+            for match in matches:
+                try:
+                    index = int(match.group(1))
+                    text = match.group(2).strip()
+                    decoded[index] = text
+                    logger.info(f"✓ Consolidated match for index {index}: {text[:50]}...")
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Failed to parse consolidated match: {e}")
+            
+            if decoded:
+                logger.info(f"✅ Consolidated decoding successful: {len(decoded)} entries")
+                return decoded
+
+    # Split by lines and process each line (standard multi-line format)
     lines = cleaned_text.split('\n')
     logger.info(f"Processing {len(lines)} cleaned lines for marker matching")
 
