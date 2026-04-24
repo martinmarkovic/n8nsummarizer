@@ -138,6 +138,7 @@ class TranslationTab(BaseTab):
             self.target_text,
             [
                 {"label": "Export as .txt", "command": self._export_translation_txt},
+                {"label": "Export as .srt", "command": self._export_translation_srt},
                 {"separator": True},
                 {
                     "label": "Forward to Summarization",
@@ -233,6 +234,10 @@ class TranslationTab(BaseTab):
         """Get selected target language"""
         return self.target_language.get()
 
+    def get_file_path(self) -> str:
+        """Get the current file path"""
+        return self.source_file_path.get()
+
     def _export_translation_txt(self):
         """Export translated text as .txt file via context menu."""
         # Get text from target text widget
@@ -262,6 +267,40 @@ class TranslationTab(BaseTab):
                 # Show success message
                 messagebox.showinfo(
                     title="Exported", message=f"Translation saved to:\n{file_path}"
+                )
+            except IOError as e:
+                 # Show error if write fails
+                messagebox.showerror(title="Export Failed", message=str(e))
+
+    def _export_translation_srt(self):
+        """Export translated text as .srt file via context menu."""
+        # Get text from target text widget
+        text_content = self.target_text.get("1.0", tk.END).strip()
+
+        # Check if there's content to export
+        if not text_content:
+            messagebox.showwarning(
+                title="Nothing to export", message="Translated text is empty."
+            )
+            return
+
+        # Ask user for save location
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".srt",
+            filetypes=[("SubRip subtitles", "*.srt"), ("All files", "*.*")],
+            title="Export SRT Translation",
+        )
+
+        # If user confirmed the save
+        if file_path:
+            try:
+                # Write the content to file
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(text_content)
+
+                # Show success message
+                messagebox.showinfo(
+                    title="Exported", message=f"SRT translation saved to:\n{file_path}"
                 )
             except IOError as e:
                 # Show error if write fails

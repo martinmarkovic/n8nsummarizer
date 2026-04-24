@@ -58,10 +58,13 @@ class TranslationController:
             self.view.set_file_path(file_path)
             self.view.set_source_text(content)
             self.view.set_status(f"Loaded: {os.path.basename(file_path)}")
+            # Set current file path for SRT detection
+            self.model.set_current_file_path(file_path)
         else:
             self.view.show_error(f"Failed to load file: {error}")
             self.view.set_file_path("")
             self.view.set_source_text("")
+            self.model.set_current_file_path(None)
 
     def handle_translate_clicked(self):
         """Handle Translate button click - starts background thread"""

@@ -38,6 +38,7 @@ class TranslationService:
         target_language: str,
         chunk_index: int = None,
         total_chunks: int = None,
+        mode: str = "plain"
     ) -> Tuple[bool, str, Optional[str], Optional[Dict[str, Any]]]:
         """
         Translate a single chunk with retry logic.
@@ -60,14 +61,30 @@ class TranslationService:
         # Use local variable for max_tokens to avoid mutating instance state
         current_max_tokens = self.max_tokens
 
-        # Build translation prompt using chat-style format for better control
-        prompt_template = (
-            "<|im_start|>system\n"
-            "You are a translator. Output ONLY the translated text. "
-            "No explanations. No commentary. No extra content.<|im_end|>\n"
-            f"<|im_start|>user\nTranslate to {target_language}:\n{chunk}<|im_end|>\n"
-            "<|im_start|>assistant\n"
-        )
+        # Build translation prompt based on mode
+        if mode == "srt_text_only":
+            # Specialized prompt for SRT text-only translation
+            prompt_template = (
+                "<|im_start|>system\n"
+                "You are a subtitle translator. "
+                "Translate only the text after each <Tn> marker. "
+                "Keep every marker exactly unchanged. "
+                "Keep the same number of lines. "
+                "Keep the same order. "
+                "Output only translated lines in the same marker format. "
+                "Do not add explanations, notes, timestamps, numbering, or code fences.<|im_end|>\n"
+                f"<|im_start|>user\nTranslate the following subtitle texts to {target_language}:\n{chunk}<|im_end|>\n"
+                "<|im_start|>assistant\n"
+            )
+        else:
+            # Plain text translation (existing behavior)
+            prompt_template = (
+                "<|im_start|>system\n"
+                "You are a translator. Output ONLY the translated text. "
+                "No explanations. No commentary. No extra content.<|im_end|>\n"
+                f"<|im_start|>user\nTranslate to {target_language}:\n{chunk}<|im_end|>\n"
+                "<|im_start|>assistant\n"
+            )
 
         payload = {
             "prompt": prompt_template,
