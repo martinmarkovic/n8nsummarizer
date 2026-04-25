@@ -33,7 +33,8 @@ from models.translation.srt_support import (
     encode_text_only_batch,
     decode_text_only_batch,
     validate_decoded_batch,
-    rebuild_subtitles_with_translations
+    rebuild_subtitles_with_translations,
+    validate_rebuilt_subtitles
 )
 
 
@@ -187,9 +188,62 @@ class TranslationModel:
                     else:
                         error_msg = f"Validation failed for batch {batch_idx}: {validation_msg}"
                         logger.error(error_msg)
-                        failed_batches.append((batch_idx, error_msg))
-                        # Still update global offset to maintain correct indexing for subsequent batches
-                        global_offset += len(batch)
+                        
+                        # Enhanced error recovery: retry with smaller batch size
+                        if recovery_percentage < 30:  # Only retry if recovery is very low
+                            logger.info(f"Attempting retry for batch {batch_idx} with smaller size...")
+                            
+                            # Split the failed batch into smaller chunks
+                            retry_batches = batch_subtitles(batch, max_items=8, max_chars=800)
+                            logger.info(f"Split failed batch into {len(retry_batches)} smaller batches for retry")
+                            
+                            # Process each retry batch
+                            for retry_idx, retry_batch in enumerate(retry_batches, 1):
+                                logger.info(f"  Retry {retry_idx}/{len(retry_batches)}: {len(retry_batch)} subtitles")
+                                
+                                # Encode retry batch
+                                retry_encoded = encode_text_only_batch(retry_batch, global_offset)
+                                
+                                # Translate retry batch
+                                retry_success, retry_text, retry_error, retry_metadata = (
+                                    self.translation_service.translate_chunk(
+                                        chunk=retry_encoded,
+                                        target_language=target_language,
+                                        chunk_index=batch_idx,
+                                        total_chunks=len(batches),
+                                        mode="srt_text_only"
+                                    )
+                                )
+                                
+                                if retry_success:
+                                    retry_cleaned = self.translation_service.clean_translation_output(retry_text)
+                                    retry_decoded = decode_text_only_batch(retry_cleaned, global_offset)
+                                    
+                                    # Validate retry batch
+                                    retry_expected = list(range(global_offset + 1, global_offset + len(retry_batch) + 1))
+                                    retry_valid, retry_msg = validate_decoded_batch(retry_decoded, retry_expected)
+                                    
+                                    if retry_valid:
+                                        all_translations.update(retry_decoded)
+                                        logger.info(f"  Retry {retry_idx} successful: {len(retry_decoded)} translations")
+                                    else:
+                                        logger.warning(f"  Retry {retry_idx} also failed: {retry_msg}")
+                                else:
+                                    logger.error(f"  Retry {retry_idx} translation failed: {retry_error}")
+                                
+                                # Update global offset for next retry batch
+                                global_offset += len(retry_batch)
+                            
+                            # Update failure tracking
+                            retry_success_count = sum(1 for k in all_translations.keys() if k in expected_indices)
+                            if retry_success_count > 0:
+                                logger.info(f"Batch {batch_idx} partial recovery: {retry_success_count}/{len(batch)} translations after retry")
+                            else:
+                                failed_batches.append((batch_idx, error_msg))
+                        else:
+                            failed_batches.append((batch_idx, error_msg))
+                            # Still update global offset to maintain correct indexing for subsequent batches
+                            global_offset += len(batch)
                 else:
                     error_msg = f"Translation failed for batch {batch_idx}: {error}"
                     logger.error(error_msg)
@@ -215,11 +269,32 @@ class TranslationModel:
             logger.info(f"Successfully translated {len(all_translations)}/{len(subtitles)} subtitles")
             logger.info(f"Validation result: {validation_msg}")
 
-            # Return partial success if some batches failed
+            # Enhanced user feedback for partial successes
             if failed_batches:
                 error_details = ", ".join([f"Batch {idx}: {err}" for idx, err in failed_batches])
                 logger.warning(f"Partial success - some batches failed: {error_details}")
-                return True, final_srt, f"Partial translation - {len(failed_batches)} batches failed"
+                
+                # Calculate detailed statistics
+                success_rate = (len(all_translations) / len(subtitles)) * 100
+                missing_count = len(subtitles) - len(all_translations)
+                
+                # Generate user-friendly feedback
+                feedback_msg = f"Partial translation completed\n"
+                feedback_msg += f"✅ Success: {len(all_translations)}/{len(subtitles)} subtitles ({success_rate:.1f}%)\n"
+                feedback_msg += f"⚠️  Missing: {missing_count} subtitles\n"
+                feedback_msg += f"🔍 Failed batches: {len(failed_batches)}\n"
+                
+                # Add specific advice based on failure patterns
+                if len(failed_batches) > 1:
+                    feedback_msg += "💡 Multiple batches failed - consider checking translation service status\n"
+                
+                if success_rate < 50:
+                    feedback_msg += "💡 Low success rate - try smaller files or simpler content\n"
+                
+                feedback_msg += "📋 Missing translations use placeholders: [TRANSLATION MISSING FOR SUBTITLE X]"
+                
+                logger.info(f"User feedback prepared: {feedback_msg.replace(chr(10), ' | ')}")
+                return True, final_srt, feedback_msg
 
             return True, final_srt, None
 

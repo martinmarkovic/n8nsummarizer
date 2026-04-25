@@ -59,14 +59,14 @@ def compose_srt(subtitles: List[srt.Subtitle]) -> str:
         return ""
 
 
-def batch_subtitles(subtitles: List[srt.Subtitle], max_items: int = 20, max_chars: int = 2000) -> List[List[srt.Subtitle]]:
+def batch_subtitles(subtitles: List[srt.Subtitle], max_items: int = 15, max_chars: int = 1500) -> List[List[srt.Subtitle]]:
     """
     Batch consecutive subtitle cues.
 
     Args:
         subtitles: List of srt.Subtitle objects
-        max_items: Maximum number of subtitles per batch (reduced from 40 to 20)
-        max_chars: Maximum total characters per batch (reduced from 4000 to 2000)
+        max_items: Maximum number of subtitles per batch (reduced from 20 to 15)
+        max_chars: Maximum total characters per batch (reduced from 2000 to 1500)
 
     Returns:
         List of subtitle batches
