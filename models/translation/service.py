@@ -16,7 +16,7 @@ class TranslationService:
     """Handles translation API calls with retry and error handling."""
 
     def __init__(
-        self, webhook_url: str = None, max_tokens: int = 2000, timeout: int = 300
+        self, webhook_url: str = None, max_tokens: int = 6000, timeout: int = 300
     ):
         """
         Initialize translation service.
@@ -64,15 +64,20 @@ class TranslationService:
         # Build translation prompt based on mode
         if mode == "srt_text_only":
             # Specialized prompt for SRT text-only translation
+            # Enhanced to be more explicit about marker preservation
             prompt_template = (
                 "<|im_start|>system\n"
                 "You are a subtitle translator. "
-                "Translate only the text after each <Tn> marker. "
-                "Keep every marker exactly unchanged. "
-                "Keep the same number of lines. "
-                "Keep the same order. "
-                "Output only translated lines in the same marker format. "
-                "Do not add explanations, notes, timestamps, numbering, or code fences.<|im_end|>\n"
+                "CRITICAL: Preserve ALL <Tn> markers exactly as they appear. "
+                "Translate ONLY the text after each <Tn> marker. "
+                "Keep every marker unchanged. "
+                "Keep the same number of markers. "
+                "Keep the same order of markers. "
+                "Output MUST contain ALL markers from <T1> to the highest <Tn> in the input. "
+                "Do not add explanations, notes, timestamps, numbering, or code fences. "
+                "Do not omit any markers. "
+                "Do not combine markers. "
+                "Do not modify marker format.<|im_end|>\n"
                 f"<|im_start|>user\nTranslate the following subtitle texts to {target_language}:\n{chunk}<|im_end|>\n"
                 "<|im_start|>assistant\n"
             )

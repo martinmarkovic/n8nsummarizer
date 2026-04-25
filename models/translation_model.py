@@ -140,20 +140,21 @@ class TranslationModel:
 
             logger.info(f"Parsed {len(subtitles)} subtitles from SRT")
 
-            # Batch subtitles for translation
-            batches = batch_subtitles(subtitles)
-            logger.info(f"Created {len(batches)} batches for translation")
+            # Batch subtitles for translation (using smaller batches to prevent marker loss)
+            batches = batch_subtitles(subtitles, max_items=20, max_chars=2000)
+            logger.info(f"Created {len(batches)} batches for translation (max 20 items, 2000 chars per batch)")
 
             # Track translations by subtitle index
             all_translations = {}
             failed_batches = []
+            global_offset = 0  # Track global subtitle index offset
 
             # Process each batch
             for batch_idx, batch in enumerate(batches, 1):
-                logger.info(f"Processing batch {batch_idx}/{len(batches)} with {len(batch)} subtitles")
+                logger.info(f"Processing batch {batch_idx}/{len(batches)} with {len(batch)} subtitles (global offset: {global_offset})")
 
-                # Encode batch as text-only with markers
-                encoded_batch = encode_text_only_batch(batch)
+                # Encode batch as text-only with markers and global offset
+                encoded_batch = encode_text_only_batch(batch, global_offset)
 
                 # Translate this batch
                 success, translated_text, error, metadata = (
@@ -169,11 +170,11 @@ class TranslationModel:
                 if success:
                     # Clean and decode the translated text back into segments
                     cleaned_text = self.translation_service.clean_translation_output(translated_text)
-                    decoded = decode_text_only_batch(cleaned_text)
+                    decoded = decode_text_only_batch(cleaned_text, global_offset)
                     logger.info(f"Batch {batch_idx} decoded {len(decoded)} entries from response")
 
-                    # Get expected indices for this batch
-                    expected_indices = list(range(1, len(batch) + 1))
+                    # Get expected indices for this batch (global indices)
+                    expected_indices = list(range(global_offset + 1, global_offset + len(batch) + 1))
 
                     # Validate decoded response
                     valid, validation_msg = validate_decoded_batch(decoded, expected_indices)
@@ -181,10 +182,14 @@ class TranslationModel:
                         # Merge translations
                         all_translations.update(decoded)
                         logger.info(f"Batch {batch_idx} translated successfully: {len(decoded)} subtitles")
+                        # Update global offset for next batch
+                        global_offset += len(batch)
                     else:
                         error_msg = f"Validation failed for batch {batch_idx}: {validation_msg}"
                         logger.error(error_msg)
                         failed_batches.append((batch_idx, error_msg))
+                        # Still update global offset to maintain correct indexing for subsequent batches
+                        global_offset += len(batch)
                 else:
                     error_msg = f"Translation failed for batch {batch_idx}: {error}"
                     logger.error(error_msg)
@@ -198,10 +203,17 @@ class TranslationModel:
             # Rebuild subtitles with translations
             translated_subtitles = rebuild_subtitles_with_translations(subtitles, all_translations)
 
+            # Validate rebuilt subtitles
+            validation_passed, validation_msg = validate_rebuilt_subtitles(subtitles, translated_subtitles)
+            if not validation_passed:
+                logger.error(f"Subtitle reconstruction validation failed: {validation_msg}")
+                # Continue with partial result rather than failing completely
+
             # Compose final SRT
             final_srt = compose_srt(translated_subtitles)
 
             logger.info(f"Successfully translated {len(all_translations)}/{len(subtitles)} subtitles")
+            logger.info(f"Validation result: {validation_msg}")
 
             # Return partial success if some batches failed
             if failed_batches:
