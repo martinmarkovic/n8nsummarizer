@@ -1,15 +1,18 @@
 """
 VideoSubtitlerModel - Phase 1: Download + Transcribe
 Handles download via yt-dlp and transcription via Whisper.
-Fixed temp paths: temp_subtitler/video.mp4 and temp_subtitler/video.srt
+Fixed temp paths: temp_subtitler/video.mp4 and temp_subtit极ler/video.srt
 """
 from pathlib import Path
 import yt_dlp
-import whisper
 
 TEMP_DIR = Path("temp_subtitler")
 VIDEO_PATH = TEMP_DIR / "video.mp4"
 SRT_PATH = TEMP_DIR / "video.srt"
+
+# Whisper will be imported lazily to avoid startup issues
+_whisper_available = None
+_whisper_import_error = None
 
 class VideoSubtitlerModel:
     def __init__(self):
@@ -44,10 +47,40 @@ class VideoSubtitlerModel:
             return candidates[0]
         raise FileNotFoundError("yt-dlp did not produce a video file in temp_subtitler/")
 
+    def process_local_video(self, file_path: Path, progress_cb=None) -> Path:
+        """Process local video file for transcription."""
+        if progress_cb:
+            progress_cb(0, "Validating file...")
+        
+        # Validate file exists and is readable
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+        
+        # Check file format
+        supported_formats = ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.mp3', '.wav', '.flac', '.m4a']
+        if file_path.suffix.lower() not in supported_formats:
+            raise ValueError(f"Unsupported file format: {file_path.suffix}. Supported: {', '.join(supported_formats)}")
+        
+        if progress_cb:
+            progress_cb(50, "Copying file for processing...")
+        
+        # Copy to temp folder with unique name to avoid conflicts
+        import shutil
+        import uuid
+        temp_filename = f"local_{uuid.uuid4().hex[:8]}{file_path.suffix}"
+        target_path = TEMP_DIR / temp_filename
+        shutil.copy2(file_path, target_path)
+        
+        if progress_cb:
+            progress_cb(100, "File ready for transcription.")
+        
+        return target_path
+
     def transcribe_video(self, video_path: Path, whisper_model: str = "base", language: str = None, progress_cb=None) -> Path:
         """Transcribe video_path with Whisper and write SRT_PATH. Returns SRT_PATH."""
         if progress_cb:
             progress_cb(0, "Loading Whisper model...")
+        whisper = self._ensure_whisper_available()
         model = whisper.load_model(whisper_model)
         if progress_cb:
             progress_cb(50, "Transcribing...")
@@ -66,6 +99,24 @@ class VideoSubtitlerModel:
             end = self._fmt_time(seg["end"])
             lines.append(f"{i}\n{start} --> {end}\n{seg['text'].strip()}\n")
         return "\n".join(lines)
+
+    def _ensure_whisper_available(self):
+        """Lazy import whisper and handle import errors."""
+        global _whisper_available, _whisper_import_error
+        
+        if _whisper_available is None:
+            try:
+                import whisper
+                _whisper_available = whisper
+            except Exception as e:
+                _whisper_import_error = e
+                _whisper_available = False
+                raise ImportError(f"Whisper not available: {e}")
+        
+        if _whisper_available is False:
+            raise ImportError(f"Whisper not available: {_whisper_import_error}")
+        
+        return _whisper_available
 
     def _fmt_time(self, seconds: float) -> str:
         h = int(seconds // 3600)

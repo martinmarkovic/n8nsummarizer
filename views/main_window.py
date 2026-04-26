@@ -371,7 +371,7 @@ class MainWindow:
         self.video_subtitler_tab = VideoSubtitlerTab(self.notebook)
         self.notebook.add(self.video_subtitler_tab, text="🎞 Video Subtitler")
 
-        logger.info("All tabs initialized (v8.1 - Video Subtitler)")
+        logger.info("All tabs initialized (v8.2 - Video Subtitler with Local Files)")
 
     def _setup_status_bar(self, parent):
         """

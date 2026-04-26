@@ -5,7 +5,7 @@ Follows the same pattern as DownloaderTab with BaseTab subclass.
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, filedialog, messagebox
 import os
 from pathlib import Path
 
@@ -19,6 +19,8 @@ class VideoSubtitlerTab(BaseTab):
         
         # State variables
         self.url_var = tk.StringVar()
+        self.input_mode = tk.StringVar(value="url")  # "url" or "local"
+        self.local_file_path = tk.StringVar()
         self.model_var = tk.StringVar(value="base")
         self.language_var = tk.StringVar(value="auto")
         self.progress_var = tk.StringVar(value="Ready")
@@ -36,17 +38,36 @@ class VideoSubtitlerTab(BaseTab):
         self.rowconfigure(2, weight=1)  # SRT area expands
         
         # === Row 0: Download & Transcribe Settings ===
-        settings_frame = ttk.LabelFrame(self, text="Download & Transcribe Settings", padding=15)
+        settings_frame = ttk.LabelFrame(self, text="Video Source Settings", padding=15)
         settings_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         settings_frame.columnconfigure(1, weight=1)
         
-        # URL Input
-        ttk.Label(settings_frame, text="Video URL:").grid(
-            row=0, column=0, sticky=tk.W, padx=(0, 10), pady=5
-        )
+        # Mode selection (URL vs Local File)
+        mode_frame = ttk.Frame(settings_frame)
+        mode_frame.grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 10))
+        ttk.Radiobutton(mode_frame, text="URL", variable=self.input_mode, value="url").pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Radiobutton(mode_frame, text="Local File", variable=self.input_mode, value="local").pack(side=tk.LEFT)
         
-        url_entry = ttk.Entry(settings_frame, textvariable=self.url_var)
-        url_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=5)
+        # URL Input Frame
+        self.url_frame = ttk.Frame(settings_frame)
+        self.url_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        
+        ttk.Label(self.url_frame, text="Video URL:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        url_entry = ttk.Entry(self.url_frame, textvariable=self.url_var)
+        url_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        
+        # Local File Input Frame (initially hidden)
+        self.local_frame = ttk.Frame(settings_frame)
+        self.local_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        self.local_frame.grid_remove()  # Hidden by default
+        
+        ttk.Label(self.local_frame, text="Local File:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        local_file_entry = ttk.Entry(self.local_frame, textvariable=self.local_file_path, state="readonly")
+        local_file_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        
+        ttk.Button(self.local_frame, text="Browse", command=self._browse_local_file, width=8).pack(side=tk.LEFT)
         
         # Start button
         self.start_btn = ttk.Button(
@@ -55,11 +76,14 @@ class VideoSubtitlerTab(BaseTab):
             command=self._on_start,
             width=8
         )
-        self.start_btn.grid(row=0, column=2, padx=(5, 0), pady=5)
+        self.start_btn.grid(row=2, column=2, sticky=tk.E, padx=(5, 0), pady=5)
+        
+        # Mode change handler
+        self.input_mode.trace("w", self._on_mode_change)
         
         # Whisper Model
         ttk.Label(settings_frame, text="Whisper Model:").grid(
-            row=1, column=0, sticky=tk.W, padx=(0, 10), pady=5
+            row=3, column=0, sticky=tk.W, padx=(0, 10), pady=5
         )
         
         model_combo = ttk.Combobox(
@@ -69,25 +93,25 @@ class VideoSubtitlerTab(BaseTab):
             state="readonly",
             width=10
         )
-        model_combo.grid(row=1, column=1, sticky=tk.W, pady=5)
+        model_combo.grid(row=3, column=1, sticky=tk.W, pady=5)
         
         # Language
         ttk.Label(settings_frame, text="Language:").grid(
-            row=1, column=2, sticky=tk.W, padx=(10, 10), pady=5
+            row=3, column=2, sticky=tk.W, padx=(10, 10), pady=5
         )
         
         language_combo = ttk.Combobox(
             settings_frame,
             textvariable=self.language_var,
-            values=["auto", "en", "hr", "de", "fr", "es", "it", "pt", "ru", "ja", "zh"],
+            values=["auto", "en", "hr", "de", "fr", "es", "it", "pt", "极ru", "ja", "zh"],
             state="readonly",
             width=8
         )
-        language_combo.grid(row=1, column=3, sticky=tk.W, padx=(0, 10), pady=5)
+        language_combo.grid(row=3, column=3, sticky=tk.W, padx=(0, 10), pady=5)
         
         # === Row 1: Progress ===
         progress_frame = ttk.LabelFrame(self, text="Progress", padding=10)
-        progress_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), padx=10, pady=(0, 10))
+        progress_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=10, pady=(0, 10))
         progress_frame.columnconfigure(1, weight=1)
         
         # Progress bar
@@ -111,9 +135,9 @@ class VideoSubtitlerTab(BaseTab):
         )
         status_label.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
         
-        # === Row 2: Transcription (SRT) ===
+        # === Row 5: Transcription (SRT) ===
         srt_frame = ttk.LabelFrame(self, text="Transcription (SRT)", padding=10)
-        srt_frame.grid(row=2, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
+        srt_frame.grid(row=5, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
         srt_frame.rowconfigure(0, weight=1)
         srt_frame.columnconfigure(0, weight=1)
         
@@ -157,6 +181,29 @@ class VideoSubtitlerTab(BaseTab):
         if self.controller:
             self.controller.on_start()
     
+    def _on_mode_change(self, *args):
+        """Handle input mode change (URL vs Local File)."""
+        if self.input_mode.get() == "url":
+            self.url_frame.grid()
+            self.local_frame.grid_remove()
+        else:
+            self.url_frame.grid_remove()
+            self.local_frame.grid()
+    
+    def _browse_local_file(self):
+        """Browse for local video file."""
+        supported_formats = [
+            ("Video Files", "*.mp4 *.avi *.mov *.mkv *.webm"),
+            ("Audio Files", "*.mp3 *.wav *.flac *.m4a"),
+            ("All Files", "*.*")
+        ]
+        file_path = filedialog.askopenfilename(
+            title="Select video/audio file",
+            filetypes=supported_formats
+        )
+        if file_path:
+            self.local_file_path.set(file_path)
+    
     def _open_temp_folder(self):
         """Open temp_subtitler folder."""
         try:
@@ -179,6 +226,14 @@ class VideoSubtitlerTab(BaseTab):
     def get_url(self) -> str:
         """Get current URL from input field."""
         return self.url_var.get().strip()
+    
+    def get_local_file_path(self) -> str:
+        """Get selected local file path."""
+        return self.local_file_path.get().strip()
+    
+    def get_input_mode(self) -> str:
+        """Get current input mode."""
+        return self.input_mode.get()
     
     def get_whisper_model(self) -> str:
         """Get selected Whisper model."""

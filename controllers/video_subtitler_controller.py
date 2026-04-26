@@ -20,19 +20,35 @@ class VideoSubtitlerController:
         if self._thread and self._thread.is_alive():
             self.tab.show_error("Already running. Please wait.")
             return
-        url = self.tab.get_url()
-        if not url:
-            self.tab.show_error("Please enter a video URL.")
-            return
-        whisper_model = self.tab.get_whisper_model()
-        language = self.tab.get_language()
-        self.tab.set_busy(True)
-        self._thread = threading.Thread(
-            target=self._run, args=(url, whisper_model, language), daemon=True
-        )
+        
+        input_mode = self.tab.get_input_mode()
+        
+        if input_mode == "url":
+            url = self.tab.get_url()
+            if not url:
+                self.tab.show_error("Please enter a video URL.")
+                return
+            self.tab.set_busy(True)
+            self._thread = threading.Thread(
+                target=self._run_url, args=(url,), daemon=True
+            )
+        else:
+            file_path = self.tab.get_local_file_path()
+            if not file_path:
+                self.tab.show_error("Please select a local video file.")
+                return
+            self.tab.set_busy(True)
+            self._thread = threading.Thread(
+                target=self._run_local, args=(file_path,), daemon=True
+            )
+        
         self._thread.start()
 
-    def _run(self, url, whisper_model, language):
+    def _run_url(self, url):
+        """Process URL-based video."""
+        whisper_model = self.tab.get_whisper_model()
+        language = self.tab.get_language()
+        
         try:
             self.tab.after(0, lambda: self.tab.update_status("⬇ Downloading video..."))
             self.tab.after(0, lambda: self.tab.update_progress(0, "Downloading..."))
@@ -44,10 +60,43 @@ class VideoSubtitlerController:
 
             video_path = self.model.download_video(url, progress_cb=dl_progress)
             self.tab.after(0, lambda: self.tab.update_progress(100, "Download complete."))
+            self.tab._run_transcription(video_path, whisper_model, language)
+        except Exception as e:
+            logger.error(f"VideoSubtitler URL error: {e}", exc_info=True)
+            self.tab.after(0, lambda e=e: self.tab.update_status(f"❌ Error: {e}"))
+            self.tab.after(0, lambda e=e: self.tab.show_error(str(e)))
+        finally:
+            self.tab.after(0, lambda: self.tab.set_busy(False))
+
+    def _run_local(self, file_path):
+        """Process local video file."""
+        whisper_model = self.tab.get_whisper_model()
+        language = self.tab.get_language()
+        
+        try:
+            self.tab.after(0, lambda: self.tab.update_status("📁 Processing local file..."))
+            self.tab.after(0, lambda: self.tab.update_progress(0, "Processing..."))
+
+            def file_progress(pct, msg):
+                self.tab.after(0, lambda p=pct, m=msg: self.tab.update_progress(p, m))
+
+            video_path = self.model.process_local_video(Path(file_path), progress_cb=file_progress)
+            self.tab.after(0, lambda: self.tab.update_progress(100, "File processing complete."))
+            self.tab._run_transcription(video_path, whisper_model, language)
+        except Exception as e:
+            logger.error(f"VideoSubtitler Local File error: {e}", exc_info=True)
+            self.tab.after(0, lambda e=e: self.tab.update_status(f"❌ Error: {e}"))
+            self.tab.after(0, lambda e=e: self.tab.show_error(str(e)))
+        finally:
+            self.tab.after(0, lambda: self.tab.set_busy(False))
+
+    def _run_transcription(self, video_path, whisper_model, language):
+        """Run transcription on prepared video file."""
+        try:
             self.tab.after(0, lambda: self.tab.update_status("🎙 Transcribing..."))
 
             def tx_progress(pct, msg):
-                self.tab.after(0, lambda p=pct, m=msg: self极.tab.update_progress(p, m))
+                self.tab.after(0, lambda p=pct, m=msg: self.tab.update_progress(p, m))
 
             srt_path = self.model.transcribe_video(
                 video_path, whisper_model=whisper_model,
@@ -61,8 +110,6 @@ class VideoSubtitlerController:
                 f"✅ Done. SRT saved to: {srt_path}"
             ))
         except Exception as e:
-            logger.error(f"VideoSubtitler Phase 1 error: {e}", exc_info=True)
-            self.tab.after(0, lambda: self.tab.update_status(f"❌ Error: {e}"))
-            self.tab.after(0, lambda: self.tab.show_error(str(e)))
-        finally:
-            self.tab.after(0, lambda: self.tab.set_busy(False))
+            logger.error(f"VideoSubtitler Transcription error: {e}", exc_info=True)
+            self.tab.after(0, lambda e=e: self.tab.update_status(f"❌ Error: {e}"))
+            raise  # Re-raise to handle in outer except

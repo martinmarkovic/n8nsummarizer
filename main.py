@@ -1,5 +1,5 @@
 """
-Main entry point for n8n Summarizer application (v8.1)
+Main entry point for n8n Summarizer application (v8.2)
 
 Wires up views and controllers:
 - FileTab ↔ FileController
