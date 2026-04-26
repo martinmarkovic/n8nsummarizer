@@ -249,21 +249,29 @@ class TranslationService:
 
     def clean_translation_output(self, text: str) -> str:
         """
-        Clean translation output by removing <think> and </think> tags.
+        Clean translation output by removing <think>...</think> blocks and
+        normalising whitespace without destroying structural newlines used
+        by the marker-based SRT decoder.
 
         Args:
             text: Translation text that may contain think tags
 
         Returns:
-            Cleaned text with think tags removed
+            Cleaned text with think blocks removed
         """
+        import re as _re
         if not text:
             return text
 
-        # Remove <think> and </think> tags
-        cleaned = text.replace("<think>", "").replace("</think>", "")
+        # Remove full <think>...</think> blocks (including their content)
+        # These are reasoning traces emitted by models like Qwen-3 and DeepSeek
+        cleaned = _re.sub(r'<think>[\s\S]*?</think>', '', text)
 
-        # Clean up any extra whitespace left by removed tags
-        cleaned = " ".join(cleaned.split())  # Normalize whitespace
+        # Remove any stray open/close think tags that weren't part of a complete block
+        cleaned = cleaned.replace("<think>", "").replace("</think>", "")
+
+        # Collapse runs of blank lines to a single newline, but preserve
+        # meaningful newlines so the multi-line marker decoder still works
+        cleaned = _re.sub(r'\n{3,}', '\n\n', cleaned)
 
         return cleaned.strip()

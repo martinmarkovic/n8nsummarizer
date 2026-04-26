@@ -178,6 +178,13 @@ def decode_text_only_batch(response_text: str, global_offset: int = 0, expected_
             logger.info(f"Removed prefix: '{prefix}'")
             break
 
+    # Normalize malformed markers: LM Studio sometimes emits <T3:28) instead of <T3:28>
+    # Replace any closing ) or ] after a marker number with the canonical >
+    cleaned_text = re.sub(r'(<T\d+(?::\d+)?)[)\]]', r'\1>', cleaned_text)
+
+    # Remove <think>...</think> reasoning blocks that some models prepend
+    cleaned_text = re.sub(r'<think>[\s\S]*?</think>', '', cleaned_text).strip()
+
     # Check for consolidated format (single line with multiple markers)
     if len(cleaned_text.split('\n')) == 1 and '<T' in cleaned_text:
         logger.info("Detected consolidated response format (multiple markers on single line)")
