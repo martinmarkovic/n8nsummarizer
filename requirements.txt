@@ -7,3 +7,4 @@ python-docx>=0.8.11
 tkinter-tooltip>=2.1.0
 yt-dlp>=2024.0.0
 srt>=0.0.6
+openai-whisper>=2024.0.0

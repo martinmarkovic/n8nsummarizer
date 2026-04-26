@@ -1,5 +1,5 @@
 """
-Main entry point for n8n Summarizer application (v6.3)
+Main entry point for n8n Summarizer application (v8.1)
 
 Wires up views and controllers:
 - FileTab ↔ FileController
@@ -7,15 +7,16 @@ Wires up views and controllers:
 - TranscriberTab ↔ TranscriberController
 - BulkSummarizerTab ↔ BulkSummarizerController
 - BulkTranscriberTab ↔ BulkTranscriberController
-- TranslationTab (UI only, no controller yet)
+- TranslationTab ↔ TranslationController
 - DownloaderTab ↔ DownloaderController
+- VideoSubtitlerTab ↔ VideoSubtitlerController
 
-New in v6.3:
-- Settings persistence (remembers last tab, downloader path/quality)
-- SettingsManager integration
+New in v8.1:
+- Video Subtitler tab with download + transcription functionality
+- Whisper integration for video transcription
 
-Version: 6.3
-Updated: 2026-02-15 - Settings persistence
+Version: 8.1
+Updated: 2026-04-26 - Video Subtitler feature
 """
 
 import tkinter as tk
@@ -26,6 +27,7 @@ from controllers.transcriber_controller import TranscriberController
 from controllers.bulk_summarizer_controller import BulkSummarizerController
 from controllers.bulk_transcriber_controller import BulkTranscriberController
 from controllers.translation_controller import TranslationController
+from controllers.video_subtitler_controller import VideoSubtitlerController
 from utils.logger import logger
 from utils.settings_manager import SettingsManager
 from config import APP_TITLE
@@ -113,6 +115,11 @@ def main():
         # Wires: TranslationTab UI ↔ TranslationController ↔ TranslationModel
         translation_controller = TranslationController(window.translation_tab)
         logger.info("TranslationController initialized")
+
+        # Initialize Video Subtitler tab controller
+        # Wires: VideoSubtitlerTab UI ↔ VideoSubtitlerController ↔ VideoSubtitlerModel
+        video_subtitler_controller = VideoSubtitlerController(window.video_subtitler_tab)
+        logger.info("VideoSubtitlerController initialized")
 
         # Downloader tab controller already initialized in DownloaderTab.__init__
         # Now inject settings manager into it

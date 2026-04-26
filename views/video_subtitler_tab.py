@@ -1,0 +1,235 @@
+"""
+Video Subtitler Tab - Phase 1: Download video + transcribe to SRT
+
+Follows the same pattern as DownloaderTab with BaseTab subclass.
+"""
+
+import tkinter as tk
+from tkinter import ttk, messagebox
+import os
+from pathlib import Path
+
+from views.base_tab import BaseTab
+
+class VideoSubtitlerTab(BaseTab):
+    """Video Subtitler tab with download + transcription UI."""
+
+    def __init__(self, notebook):
+        self.notebook = notebook
+        
+        # State variables
+        self.url_var = tk.StringVar()
+        self.model_var = tk.StringVar(value="base")
+        self.language_var = tk.StringVar(value="auto")
+        self.progress_var = tk.StringVar(value="Ready")
+        self.progress_pct_var = tk.StringVar(value="0%")
+        
+        # Controller will be initialized after UI setup
+        self.controller = None
+        
+        super().__init__(notebook, "🎞 Video Subtitler")
+        
+    def _setup_ui(self):
+        """Build Video Subtitler UI with input controls and progress display."""
+        # Configure grid - 3 main rows
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(2, weight=1)  # SRT area expands
+        
+        # === Row 0: Download & Transcribe Settings ===
+        settings_frame = ttk.LabelFrame(self, text="Download & Transcribe Settings", padding=15)
+        settings_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
+        settings_frame.columnconfigure(1, weight=1)
+        
+        # URL Input
+        ttk.Label(settings_frame, text="Video URL:").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 10), pady=5
+        )
+        
+        url_entry = ttk.Entry(settings_frame, textvariable=self.url_var)
+        url_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=5)
+        
+        # Start button
+        self.start_btn = ttk.Button(
+            settings_frame,
+            text="▶ Start",
+            command=self._on_start,
+            width=8
+        )
+        self.start_btn.grid(row=0, column=2, padx=(5, 0), pady=5)
+        
+        # Whisper Model
+        ttk.Label(settings_frame, text="Whisper Model:").grid(
+            row=1, column=0, sticky=tk.W, padx=(0, 10), pady=5
+        )
+        
+        model_combo = ttk.Combobox(
+            settings_frame,
+            textvariable=self.model_var,
+            values=["tiny", "base", "small", "medium", "large"],
+            state="readonly",
+            width=10
+        )
+        model_combo.grid(row=1, column=1, sticky=tk.W, pady=5)
+        
+        # Language
+        ttk.Label(settings_frame, text="Language:").grid(
+            row=1, column=2, sticky=tk.W, padx=(10, 10), pady=5
+        )
+        
+        language_combo = ttk.Combobox(
+            settings_frame,
+            textvariable=self.language_var,
+            values=["auto", "en", "hr", "de", "fr", "es", "it", "pt", "ru", "ja", "zh"],
+            state="readonly",
+            width=8
+        )
+        language_combo.grid(row=1, column=3, sticky=tk.W, padx=(0, 10), pady=5)
+        
+        # === Row 1: Progress ===
+        progress_frame = ttk.LabelFrame(self, text="Progress", padding=10)
+        progress_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), padx=10, pady=(0, 10))
+        progress_frame.columnconfigure(1, weight=1)
+        
+        # Progress bar
+        self.progress_bar = ttk.Progressbar(
+            progress_frame,
+            mode="determinate",
+            length=400
+        )
+        self.progress_bar.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 10), pady=5)
+        
+        # Progress percentage
+        ttk.Label(progress_frame, textvariable=self.progress_pct_var).grid(
+            row=0, column=1, sticky=tk.W, pady=5
+        )
+        
+        # Status label
+        status_label = ttk.Label(
+            progress_frame,
+            textvariable=self.progress_var,
+            foreground="blue"
+        )
+        status_label.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        
+        # === Row 2: Transcription (SRT) ===
+        srt_frame = ttk.LabelFrame(self, text="Transcription (SRT)", padding=10)
+        srt_frame.grid(row=2, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
+        srt_frame.rowconfigure(0, weight=1)
+        srt_frame.columnconfigure(0, weight=1)
+        
+        # SRT text widget
+        self.srt_text = tk.Text(srt_frame, wrap=tk.WORD, height=15)
+        self.srt_text.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.E, tk.W))
+        
+        srt_scroll = ttk.Scrollbar(srt_frame, command=self.srt_text.yview)
+        srt_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        self.srt_text.configure(yscrollcommand=srt_scroll.set)
+        
+        # Button frame
+        button_frame = ttk.Frame(srt_frame)
+        button_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(5, 0))
+        
+        # Open temp folder button
+        open_btn = ttk.Button(
+            button_frame,
+            text="📂 Open Temp Folder",
+            command=self._open_temp_folder,
+            width=15
+        )
+        open_btn.grid(row=0, column=0, padx=(0, 5))
+        
+        # Copy SRT path button
+        copy_btn = ttk.Button(
+            button_frame,
+            text="📋 Copy SRT Path",
+            command=self._copy_srt_path,
+            width=15
+        )
+        copy_btn.grid(row=0, column=1)
+    
+    def set_controller(self, controller):
+        """Set the controller for this view."""
+        self.controller = controller
+    
+    # === UI Event Handlers ===
+    def _on_start(self):
+        """Handle start button click."""
+        if self.controller:
+            self.controller.on_start()
+    
+    def _open_temp_folder(self):
+        """Open temp_subtitler folder."""
+        try:
+            temp_dir = Path("temp_subtitler")
+            if temp_dir.exists():
+                os.startfile(str(temp_dir))
+            else:
+                messagebox.showinfo("Info", "Temp folder does not exist yet.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open folder: {e}")
+    
+    def _copy_srt_path(self):
+        """Copy SRT path to clipboard."""
+        srt_path = "temp_subtitler/video.srt"
+        self.clipboard_clear()
+        self.clipboard_append(srt_path)
+        self.log_message(f"Copied to clipboard: {srt_path}")
+    
+    # === View Helper Methods (called by controller) ===
+    def get_url(self) -> str:
+        """Get current URL from input field."""
+        return self.url_var.get().strip()
+    
+    def get_whisper_model(self) -> str:
+        """Get selected Whisper model."""
+        return self.model_var.get()
+    
+    def get_language(self) -> str:
+        """Get selected language."""
+        return self.language_var.get()
+    
+    def update_progress(self, pct: float, message: str):
+        """Update progress bar and status."""
+        self.progress_bar["value"] = pct
+        self.progress_pct_var.set(f"{pct:.1f}%")
+        self.progress_var.set(message)
+    
+    def update_status(self, message: str):
+        """Update status message."""
+        self.progress_var.set(message)
+    
+    def display_srt(self, text: str):
+        """Display SRT text in the text widget."""
+        self.srt_text.delete("1.0", tk.END)
+        self.srt_text.insert(tk.END, text)
+    
+    def set_busy(self, is_busy: bool):
+        """Enable or disable start button."""
+        self.start_btn.config(state=tk.DISABLED if is_busy else tk.NORMAL)
+    
+    def show_error(self, message: str):
+        """Show error dialog."""
+        messagebox.showerror("Error", message)
+    
+    def log_message(self, message: str):
+        """Add message to status (for simple logging)."""
+        current = self.progress_var.get()
+        if current != "Ready":
+            self.progress_var.set(f"{current} | {message}")
+        else:
+            self.progress_var.set(message)
+    
+    # === BaseTab Abstract Method Implementations ===
+    def get_content(self) -> str:
+        """Return current SRT content."""
+        return self.srt_text.get("1.0", tk.END)
+    
+    def clear_all(self):
+        """Clear all input fields and SRT text."""
+        self.url_var.set("")
+        self.model_var.set("base")
+        self.language_var.set("auto")
+        self.progress_bar["value"] = 0
+        self.progress_pct_var.set("0%")
+        self.progress_var.set("Ready")
+        self.srt_text.delete("1.0", tk.END)

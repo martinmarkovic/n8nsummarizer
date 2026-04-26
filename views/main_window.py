@@ -55,6 +55,7 @@ from views.bulk_summarizer_tab import BulkSummarizerTab
 from views.bulk_transcriber_tab import BulkTranscriberTab
 from views.translation_tab import TranslationTab
 from views.downloader_tab import DownloaderTab
+from views.video_subtitler_tab import VideoSubtitlerTab
 
 # Load environment variables
 load_dotenv()
@@ -142,8 +143,8 @@ class MainWindow:
         """
         try:
             last_tab = self.settings.get_last_active_tab()
-            # Validate tab index (0-6 for 7 tabs)
-            if 0 <= last_tab <= 6:
+            # Validate tab index (0-7 for 8 tabs)
+            if 0 <= last_tab <= 7:
                 self.notebook.select(last_tab)
                 logger.info(f"Restored last active tab: {last_tab}")
             else:
@@ -319,7 +320,7 @@ class MainWindow:
         """
         Setup tab notebook with all tabs.
 
-        Tab order (v6.3):
+        Tab order (v8.1):
         0. File Summarizer
         1. YouTube Summarization
         2. Transcriber
@@ -327,6 +328,7 @@ class MainWindow:
         4. Bulk Transcriber
         5. Translation
         6. Downloader
+        7. Video Subtitler
 
         Args:
             parent: Parent frame
@@ -365,7 +367,11 @@ class MainWindow:
         self.downloader_tab = DownloaderTab(self.notebook)
         self.notebook.add(self.downloader_tab, text="📥 Downloader")
 
-        logger.info("All tabs initialized (v6.3 - Settings persistence)")
+        # Tab 7: Video Subtitler
+        self.video_subtitler_tab = VideoSubtitlerTab(self.notebook)
+        self.notebook.add(self.video_subtitler_tab, text="🎞 Video Subtitler")
+
+        logger.info("All tabs initialized (v8.1 - Video Subtitler)")
 
     def _setup_status_bar(self, parent):
         """
@@ -491,6 +497,12 @@ class MainWindow:
         # Downloader tab
         if hasattr(self, "downloader_tab"):
             self.downloader_tab.status_log.configure(
+                bg=text_bg, fg=text_fg, insertbackground=text_fg
+            )
+
+        # Video Subtitler tab
+        if hasattr(self, "video_subtitler_tab"):
+            self.video_subtitler_tab.srt_text.configure(
                 bg=text_bg, fg=text_fg, insertbackground=text_fg
             )
 
@@ -637,6 +649,12 @@ class MainWindow:
         # Apply to Downloader tab
         if hasattr(self, "downloader_tab"):
             self.downloader_tab.status_log.configure(
+                font=("Segoe UI", self.current_font_size)
+            )
+
+        # Apply to Video Subtitler tab
+        if hasattr(self, "video_subtitler_tab"):
+            self.video_subtitler_tab.srt_text.configure(
                 font=("Segoe UI", self.current_font_size)
             )
 
