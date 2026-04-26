@@ -91,6 +91,7 @@ class DownloaderTab(BaseTab):
         
         url_entry = ttk.Entry(controls_frame, textvariable=self.url_var)
         url_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=5)
+        url_entry.bind('<KeyRelease>', self._on_url_change)
         
         # Info button
         info_btn = ttk.Button(
@@ -164,9 +165,61 @@ class DownloaderTab(BaseTab):
             controls_frame,
             text="❓ Help",
             width=12,
-            command=self._show_po_token_help
+        command=self._show_po_token_help
         )
         help_btn.grid(row=3, column=2, padx=(5, 0), pady=5)
+        
+        # === Row 4: Instagram Settings (initially hidden) ===
+        self.instagram_frame = ttk.LabelFrame(controls_frame, text="Instagram Settings")
+        self.instagram_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(20, 5))
+        self.instagram_frame.columnconfigure(1, weight=1)
+        self.instagram_frame.grid_remove()  # Hidden by default
+        
+        # Cookie File Path
+        ttk.Label(self.instagram_frame, text="Cookie File:").grid(
+            row=0, column=0, sticky=tk.W, padx=(10, 5), pady=5
+        )
+        
+        self.cookie_file_var = tk.StringVar()
+        cookie_file_entry = ttk.Entry(
+            self.instagram_frame,
+            textvariable=self.cookie_file_var
+        )
+        cookie_file_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(0, 5), pady=5)
+        cookie_file_entry.bind('<FocusOut>', self._on_cookie_file_change)
+        
+        cookie_browse_btn = ttk.Button(
+            self.instagram_frame,
+            text="Browse...",
+            width=10,
+            command=self._browse_cookie_file
+        )
+        cookie_browse_btn.grid(row=0, column=2, padx=(0, 10), pady=5)
+        
+        # Cookie Browser
+        ttk.Label(self.instagram_frame, text="Cookie Browser:").grid(
+            row=1, column=0, sticky=tk.W, padx=(10, 5), pady=5
+        )
+        
+        self.cookie_browser_var = tk.StringVar()
+        cookie_browser_combo = ttk.Combobox(
+            self.instagram_frame,
+            textvariable=self.cookie_browser_var,
+            values=["", "chrome", "firefox", "edge", "safari", "chromium"],
+            state="readonly",
+            width=15
+        )
+        cookie_browser_combo.grid(row=1, column=1, sticky=tk.W, padx=(0, 5), pady=5)
+        cookie_browser_combo.bind('<<ComboboxSelected>>', self._on_cookie_browser_change)
+        
+        # Help text
+        help_label = ttk.Label(
+            self.instagram_frame,
+            text="Required for Stories and private content",
+            foreground="gray",
+            font=("TkDefaultFont", 8)
+        )
+        help_label.grid(row=2, column=0, columnspan=3, sticky=tk.W, padx=10, pady=(0, 5))
         
         # === Row 1: Video Info Display ===
         info_frame = ttk.LabelFrame(self, text="Video Information", padding=10)
@@ -257,6 +310,49 @@ class DownloaderTab(BaseTab):
             "Manual extraction: See docs/YOUTUBE_PO_TOKEN_GUIDE.md"
         )
         messagebox.showinfo("PO Token Help", help_text)
+            
+    # Instagram cookie methods
+    def _browse_cookie_file(self):
+        """Open file dialog for selecting cookie file."""
+        file_path = filedialog.askopenfilename(
+            title="Select Instagram Cookie File",
+            filetypes=[("Netscape Cookie Files", "*.txt"), ("All Files", "*.*")]
+        )
+        if file_path:
+            self.cookie_file_var.set(file_path)
+            if self.controller:
+                self.controller.set_instagram_cookie_file(file_path)
+                self.log_message(f"Instagram cookie file set: {file_path}")
+    
+    def _on_cookie_file_change(self, event=None):
+        """Handle cookie file input change."""
+        path = self.cookie_file_var.get().strip()
+        if self.controller:
+            self.controller.set_instagram_cookie_file(path)
+            if path:
+                self.log_message(f"Instagram cookie file set: {path}")
+            else:
+                self.log_message("Instagram cookie file cleared")
+    
+    def _on_cookie_browser_change(self, event=None):
+        """Handle cookie browser selection change."""
+        browser = self.cookie_browser_var.get()
+        if self.controller:
+            self.controller.set_instagram_cookie_browser(browser)
+            if browser:
+                self.log_message(f"Instagram cookie browser set: {browser}")
+            else:
+                self.log_message("Instagram cookie browser cleared")
+    
+    def _on_url_change(self, event=None):
+        """Handle URL change - show Instagram settings if Instagram URL detected."""
+        url = self.url_var.get().strip()
+        is_instagram = "instagram.com" in url.lower() or "instagr.am" in url.lower()
+        
+        if is_instagram:
+            self.instagram_frame.grid()
+        else:
+            self.instagram_frame.grid_remove()
             
     def _fetch_video_info(self):
         """Fetch and display video information."""

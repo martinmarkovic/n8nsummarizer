@@ -114,6 +114,17 @@ class VideoDownloader:
     def has_po_token(self) -> bool:
         return self.youtube.has_po_token()
 
+    # Instagram cookie authentication methods
+    def set_instagram_cookie_file(self, path: str) -> None:
+        """Set cookie file path for Instagram story downloads."""
+        self.instagram.set_cookie_file(path)
+        logger.info(f"Instagram cookie file configured: {path}")
+
+    def set_instagram_cookie_browser(self, browser: str) -> None:
+        """Set browser name for Instagram cookie extraction."""
+        self.instagram.set_cookie_browser(browser)
+        logger.info(f"Instagram cookie browser configured: {browser}")
+
     def set_progress_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None:
         self.progress_callback = callback
         self._sync_progress_callback()

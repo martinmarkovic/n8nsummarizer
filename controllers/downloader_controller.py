@@ -85,6 +85,17 @@ class DownloaderController:
             self.model.set_po_token(saved_token)
             logger.info("Restored PO Token (stored)")
         
+        # Restore Instagram cookie settings
+        saved_cookie_file = self.settings.get("instagram_cookie_file", "")
+        if saved_cookie_file:
+            self.model.set_instagram_cookie_file(saved_cookie_file)
+            logger.info(f"Restored Instagram cookie file: {saved_cookie_file}")
+            
+        saved_cookie_browser = self.settings.get("instagram_cookie_browser", "")
+        if saved_cookie_browser:
+            self.model.set_instagram_cookie_browser(saved_cookie_browser)
+            logger.info(f"Restored Instagram cookie browser: {saved_cookie_browser}")
+        
         logger.info("SettingsManager configured")
         
     def validate_url(self, url: str) -> tuple[bool, str]:
@@ -123,7 +134,7 @@ class DownloaderController:
     
     def set_po_token(self, token: str) -> None:
         """Set PO Token and save to settings (stored for future use on YouTube backend).
-        
+
         Args:
             token: PO Token string
         """
@@ -138,6 +149,42 @@ class DownloaderController:
                 logger.info("PO Token cleared")
         else:
             logger.info("PO Token set")
+
+    def set_instagram_cookie_file(self, path: str) -> None:
+        """Set Instagram cookie file path and save to settings.
+
+        Args:
+            path: Path to cookie file
+        """
+        self.model.set_instagram_cookie_file(path)
+        
+        # Save to settings if available
+        if self.settings:
+            self.settings.set("instagram_cookie_file", path)
+            if path:
+                logger.info(f"Instagram cookie file saved: {path}")
+            else:
+                logger.info("Instagram cookie file cleared")
+        else:
+            logger.info("Instagram cookie file set")
+
+    def set_instagram_cookie_browser(self, browser: str) -> None:
+        """Set Instagram cookie browser and save to settings.
+
+        Args:
+            browser: Browser name (chrome, firefox, edge, safari, chromium)
+        """
+        self.model.set_instagram_cookie_browser(browser)
+        
+        # Save to settings if available
+        if self.settings:
+            self.settings.set("instagram_cookie_browser", browser)
+            if browser:
+                logger.info(f"Instagram cookie browser saved: {browser}")
+            else:
+                logger.info("Instagram cookie browser cleared")
+        else:
+            logger.info("Instagram cookie browser set")
         
     def get_available_resolutions(self) -> list[str]:
         """Get list of available resolution presets.
@@ -207,6 +254,19 @@ Views: {views_str}
         po_token = self.view.get_po_token()
         if po_token:
             self.model.set_po_token(po_token)
+            
+        # Check if this is an Instagram story and log cookie status
+        try:
+            if self.model.instagram.is_instagram_story(url):
+                self.view.log_message("Story URL detected — using cookie-based authentication")
+                cookie_source = self.model.instagram.get_cookie_source()
+                self.view.log_message(f"Cookie authentication: {cookie_source}")
+                
+                # Log warning if no cookie configured for story
+                if not (self.model.instagram.cookie_file or self.model.instagram.cookie_browser):
+                    self.view.log_message("⚠ Warning: No cookie authentication configured - download may fail")
+        except Exception as exc:
+            logger.error(f"Error checking Instagram story status: {exc}")
             
         # Check if already downloading
         if self.download_thread and self.download_thread.is_alive():
