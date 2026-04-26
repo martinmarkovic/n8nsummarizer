@@ -21,6 +21,8 @@ from config import (
     TRANSLATION_DEFAULT_URL,
     TRANSLATION_MAX_TOKENS,
     TRANSLATION_CHUNK_SIZE,
+    TRANSLATION_BATCH_MAX_ITEMS,
+    TRANSLATION_BATCH_MAX_CHARS,
 )
 from utils.logger import logger
 from models.translation.chunking import TranslationChunker
@@ -41,11 +43,13 @@ from models.translation.srt_support import (
 class TranslationModel:
     """Translation business logic and data operations."""
 
-    def __init__(self, max_tokens: int = None, chunk_size: int = None):
+    def __init__(self, max_tokens: int = None, chunk_size: int = None, batch_max_items: int = None, batch_max_chars: int = None):
         """Initialize translation model with default configuration."""
         self.webhook_url = TRANSLATION_DEFAULT_URL
         self.max_tokens = max_tokens or TRANSLATION_MAX_TOKENS
         self.chunk_size = chunk_size or TRANSLATION_CHUNK_SIZE
+        self.batch_max_items = batch_max_items or TRANSLATION_BATCH_MAX_ITEMS
+        self.batch_max_chars = batch_max_chars or TRANSLATION_BATCH_MAX_CHARS
         self.current_file_path = None
 
         # Initialize services
@@ -61,6 +65,9 @@ class TranslationModel:
         )
         logger.info(
             f"Translation chunking: max_tokens={self.max_tokens}, chunk_size={self.chunk_size}"
+        )
+        logger.info(
+            f"SRT batching: max_items={self.batch_max_items}, max_chars={self.batch_max_chars} (reduced for better reliability)"
         )
 
     def set_current_file_path(self, path: str):
@@ -111,12 +118,21 @@ class TranslationModel:
         self.chunk_size = chunk_size
         self.chunker.max_chunk_size = chunk_size
         logger.info(f"Updated chunk_size to {chunk_size}")
+        
+    def set_batch_size(self, max_items: int = None, max_chars: int = None):
+        """Set batch size for SRT translation."""
+        if max_items is not None:
+            self.batch_max_items = max_items
+        if max_chars is not None:
+            self.batch_max_chars = max_chars
+        logger.info(f"Updated batch size to max_items={self.batch_max_items}, max_chars={self.batch_max_chars}")
 
     def get_translation_stats(self) -> dict:
         """Get translation statistics."""
         return {
             "max_tokens": self.max_tokens,
             "chunk_size": self.chunk_size,
+            "batch_size": {"max_items": self.batch_max_items, "max_chars": self.batch_max_chars},
             "retries": self.translation_service.get_retry_stats(),
         }
 
@@ -141,9 +157,9 @@ class TranslationModel:
 
             logger.info(f"Parsed {len(subtitles)} subtitles from SRT")
 
-            # Batch subtitles for translation (using smaller batches to prevent marker loss)
-            batches = batch_subtitles(subtitles, max_items=20, max_chars=2000)
-            logger.info(f"Created {len(batches)} batches for translation (max 20 items, 2000 chars per batch)")
+            # Batch subtitles for translation (using smaller batches to prevent LM Studio truncation)
+            batches = batch_subtitles(subtitles, max_items=self.batch_max_items, max_chars=self.batch_max_chars)
+            logger.info(f"Created {len(batches)} batches for translation (max {self.batch_max_items} items, {self.batch_max_chars} chars per batch)")
 
             # Track translations by subtitle index
             all_translations = {}
@@ -189,12 +205,38 @@ class TranslationModel:
                         error_msg = f"Validation failed for batch {batch_idx}: {validation_msg}"
                         logger.error(error_msg)
                         
-                        # Enhanced error recovery: retry with smaller batch size
-                        if recovery_percentage < 30:  # Only retry if recovery is very low
+                        # Calculate recovery percentage for this batch
+                        recovery_percentage = (len(decoded) / len(expected_indices)) * 100 if expected_indices else 0
+                        logger.warning(f"Batch {batch_idx} recovery rate: {recovery_percentage:.1f}% ({len(decoded)}/{len(expected_indices)})")
+                        
+                        # Check if this looks like LM Studio truncation (missing end translations)
+                        if self._is_likely_truncation(decoded, expected_indices):
+                            logger.info(f"🔧 Attempting LM Studio truncation recovery for batch {batch_idx}")
+                             
+                            # Try to recover missing translations
+                            recovered_translations = self._retry_missing_translations(
+                                batch, decoded, target_language, global_offset
+                            )
+                             
+                            if recovered_translations:
+                                all_translations.update(recovered_translations)
+                                final_recovery = len(decoded) + len(recovered_translations)
+                                logger.info(f"✅ Recovery successful: {final_recovery}/{len(expected_indices)} translations after retry")
+                                 
+                                # Check if we now have sufficient recovery
+                                if final_recovery >= len(expected_indices) * 0.7:  # Reduced from 80% to 70% recovery
+                                    logger.info(f"🎯 Batch {batch_idx} sufficiently recovered: {final_recovery}/{len(expected_indices)} ({final_recovery/len(expected_indices)*100:.1f}%)")
+                                    global_offset += len(batch)
+                                    continue  # Skip the failure processing
+                            else:
+                                logger.warning(f"⚠️  Partial recovery: {len(recovered_translations)} additional translations recovered")
+                        
+                        # Enhanced error recovery: retry with smaller batch size if recovery is very low
+                        if recovery_percentage < 40:  # Reduced from 50% to 40% recovery
                             logger.info(f"Attempting retry for batch {batch_idx} with smaller size...")
                             
                             # Split the failed batch into smaller chunks
-                            retry_batches = batch_subtitles(batch, max_items=8, max_chars=800)
+                            retry_batches = batch_subtitles(batch, max_items=2, max_chars=500)
                             logger.info(f"Split failed batch into {len(retry_batches)} smaller batches for retry")
                             
                             # Process each retry batch
@@ -291,7 +333,11 @@ class TranslationModel:
                 if success_rate < 50:
                     feedback_msg += "💡 Low success rate - try smaller files or simpler content\n"
                 
-                feedback_msg += "📋 Missing translations use placeholders: [TRANSLATION MISSING FOR SUBTITLE X]"
+                if success_rate < 80:
+                    feedback_msg += "💡 Some translations may be missing or incomplete. Consider retrying with smaller batches.\n"
+                
+                feedback_msg += "📋 Missing translations use placeholders: [TRANSLATION MISSING FOR SUBTITLE X]\n"
+                feedback_msg += "🔄 You can retry the translation to recover missing subtitles."
                 
                 logger.info(f"User feedback prepared: {feedback_msg.replace(chr(10), ' | ')}")
                 return True, final_srt, feedback_msg
@@ -302,6 +348,148 @@ class TranslationModel:
             error_msg = f"SRT translation error: {str(e)}"
             logger.error(error_msg)
             return False, "", error_msg
+
+    def _is_likely_truncation(self, decoded: Dict[int, str], expected_indices: List[int]) -> bool:
+        """
+        Detect if missing translations follow LM Studio truncation pattern.
+        Truncation typically removes translations from the END of batches.
+        """
+        if not decoded or not expected_indices:
+            return False
+            
+        decoded_indices = sorted(decoded.keys())
+        missing_indices = [idx for idx in expected_indices if idx not in decoded_indices]
+        
+        if not missing_indices:
+            return False
+            
+        # Check if missing indices are at the end (truncation pattern)
+        max_decoded = max(decoded_indices)
+        min_missing = min(missing_indices)
+        
+        # If all missing indices are > max decoded index, it's likely truncation
+        if min_missing > max_decoded:
+            return True
+            
+        # Check if missing indices form a consecutive block at the end
+        expected_set = set(expected_indices)
+        decoded_set = set(decoded_indices)
+        missing_set = expected_set - decoded_set
+        
+        if missing_set:
+            max_expected = max(expected_indices)
+            missing_sorted = sorted(missing_set)
+            
+            # Check if missing indices are consecutive and at the end
+            if missing_sorted == list(range(min(missing_sorted), max(missing_sorted) + 1)):
+                if max(missing_sorted) == max_expected:
+                    return True
+        
+        return False
+
+    def _retry_missing_translations(self, batch: List[srt.Subtitle], decoded: Dict[int, str], 
+                                   target_language: str, global_offset: int) -> Dict[int, str]:
+        """
+        Attempt to recover translations that were truncated by LM Studio.
+        
+        Args:
+            batch: Original batch of subtitles
+            decoded: Successfully decoded translations
+            target_language: Target language for translation
+            global_offset: Global index offset for this batch
+            
+        Returns:
+            Dictionary of recovered translations
+        """
+        recovered = {}
+        
+        # Identify missing indices
+        expected_indices = list(range(global_offset + 1, global_offset + len(batch) + 1))
+        missing_indices = [idx for idx in expected_indices if idx not in decoded]
+        
+        if not missing_indices:
+            return recovered
+            
+        logger.warning(f"🔧 Attempting to recover {len(missing_indices)} missing translations")
+        
+        # Strategy: Retry missing translations in small groups of 2
+        for i in range(0, len(missing_indices), 2):
+            group_indices = missing_indices[i:i+2]
+            
+            # Create mini-batch with just the missing subtitles
+            mini_batch = []
+            for local_idx in range(len(batch)):
+                global_idx = global_offset + local_idx + 1
+                if global_idx in group_indices:
+                    mini_batch.append(batch[local_idx])
+            
+            if mini_batch:
+                # Encode the mini-batch
+                mini_encoded = encode_text_only_batch(mini_batch, group_indices[0] - 1)
+                
+                # Retry translation with smaller chunk
+                retry_success, retry_text, retry_error, _ = (
+                    self.translation_service.translate_chunk(
+                        chunk=mini_encoded,
+                        target_language=target_language,
+                        chunk_index=99,  # Special index for retries
+                        total_chunks=1,
+                        mode="srt_retry"
+                    )
+                )
+                
+                if retry_success:
+                    # Decode the retry response
+                    retry_cleaned = self.translation_service.clean_translation_output(retry_text)
+                    retry_decoded = decode_text_only_batch(retry_cleaned, group_indices[0] - 1, expected_count=len(group_indices))
+                    
+                    # Merge recovered translations
+                    for idx, translation in retry_decoded.items():
+                        if idx not in recovered:
+                            recovered[idx] = translation
+                            logger.info(f"✅ Recovered translation {idx} in retry")
+                else:
+                    logger.warning(f"❌ Retry failed for indices {group_indices}: {retry_error}")
+        
+        # If no translations were recovered, try a fallback approach
+        if not recovered:
+            logger.warning("⚠️  No translations recovered, attempting fallback approach...")
+            
+            # Fallback: Try to recover translations one by one
+            for missing_idx in missing_indices:
+                # Find the subtitle corresponding to the missing index
+                local_idx = missing_idx - global_offset - 1
+                if 0 <= local_idx < len(batch):
+                    subtitle = batch[local_idx]
+                    
+                    # Encode the single subtitle
+                    single_encoded = encode_text_only_batch([subtitle], missing_idx - 1)
+                    
+                    # Retry translation with a single subtitle
+                    single_success, single_text, single_error, _ = (
+                        self.translation_service.translate_chunk(
+                            chunk=single_encoded,
+                            target_language=target_language,
+                            chunk_index=99,  # Special index for retries
+                            total_chunks=1,
+                            mode="srt_single_retry"
+                        )
+                    )
+                    
+                    if single_success:
+                        # Decode the single subtitle response
+                        single_cleaned = self.translation_service.clean_translation_output(single_text)
+                        single_decoded = decode_text_only_batch(single_cleaned, missing_idx - 1, expected_count=1)
+                        
+                        # Merge recovered translation
+                        for idx, translation in single_decoded.items():
+                            if idx not in recovered:
+                                recovered[idx] = translation
+                                logger.info(f"✅ Recovered translation {idx} in single retry")
+                    else:
+                        logger.debug(f"❌ Single retry failed for index {missing_idx}: {single_error}")
+        
+        return recovered
 
     def translate_text(
         self, text: str, target_language: str

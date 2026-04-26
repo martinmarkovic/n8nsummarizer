@@ -16,7 +16,7 @@ class TranslationService:
     """Handles translation API calls with retry and error handling."""
 
     def __init__(
-        self, webhook_url: str = None, max_tokens: int = 6000, timeout: int = 300
+        self, webhook_url: str = None, max_tokens: int = 70000, timeout: int = 300
     ):
         """
         Initialize translation service.
@@ -128,9 +128,9 @@ class TranslationService:
                     )
 
                     # Retry with increased max_tokens if possible (local variable only)
-                    if current_max_tokens < 6000 and attempt < self.max_retries:
-                        old_tokens = current_max_tokens
-                        current_max_tokens = min(current_max_tokens * 2, 6000)
+                     if current_max_tokens < 70000 and attempt < self.max_retries:
+                         old_tokens = current_max_tokens
+                         current_max_tokens = min(current_max_tokens * 2, 70000)
                         logger.info(
                             f"Retrying chunk {chunk_index} with increased max_tokens: {old_tokens} -> {current_max_tokens}"
                         )

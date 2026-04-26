@@ -23,11 +23,17 @@ TRANSLATION_TIMEOUT = int(
     os.getenv("TRANSLATION_TIMEOUT", "300")
 )  # 5 minutes for large translations
 TRANSLATION_MAX_TOKENS = int(
-    os.getenv("TRANSLATION_MAX_TOKENS", "6000")
-)  # Max tokens per API call (increased from 500)
+    os.getenv("TRANSLATION_MAX_TOKENS", "70000")
+)  # Max tokens per API call (increased to 70000)
 TRANSLATION_CHUNK_SIZE = int(
-    os.getenv("TRANSLATION_CHUNK_SIZE", "2000")
+    os.getenv("TRANSLATION_CHUNK_SIZE", "4500")
 )  # Characters per chunk (approximate)
+TRANSLATION_BATCH_MAX_ITEMS = int(
+    os.getenv("TRANSLATION_BATCH_MAX_ITEMS", "5")
+)  # Max subtitles per batch (reduced for reliability)
+TRANSLATION_BATCH_MAX_CHARS = int(
+    os.getenv("TRANSLATION_BATCH_MAX_CHARS", "800")
+)  # Max characters per batch (reduced for reliability)
 
 # Application Settings
 APP_TITLE = "n8n Summarizer"

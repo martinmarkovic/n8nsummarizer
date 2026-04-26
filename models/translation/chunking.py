@@ -13,7 +13,7 @@ from utils.logger import logger
 class TranslationChunker:
     """Intelligent text chunking for translation."""
 
-    def __init__(self, max_chunk_size: int = 2000, max_tokens: int = 6000):
+    def __init__(self, max_chunk_size: int = 4500, max_tokens: int = 70000):
         """
         Initialize chunker with configuration.
 
