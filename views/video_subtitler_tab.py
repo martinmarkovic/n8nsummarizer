@@ -281,14 +281,22 @@ class VideoSubtitlerTab(BaseTab):
         burn_frame.grid(row=4, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
         burn_frame.columnconfigure(1, weight=1)
         
+        # Use original name checkbox
+        self.use_original_name_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            burn_frame,
+            text="Name output file after original video title",
+            variable=self.use_original_name_var
+        ).grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        
         # Subtitle source selection
         ttk.Label(burn_frame, text="Subtitle source:").grid(
-            row=0, column=0, sticky=tk.W, padx=(0, 5), pady=5
+            row=1, column=0, sticky=tk.W, padx=(0, 5), pady=5
         )
         
         self.subtitle_source_var = tk.StringVar(value="translated")
         source_frame = ttk.Frame(burn_frame)
-        source_frame.grid(row=0, column=1, sticky=tk.W, pady=5)
+        source_frame.grid(row=1, column=1, sticky=tk.W, pady=5)
         
         ttk.Radiobutton(source_frame, text="Translated SRT", variable=self.subtitle_source_var, value="translated").pack(side=tk.LEFT, padx=(0, 10))
         ttk.Radiobutton(source_frame, text="Original SRT", variable=self.subtitle_source_var, value="original").pack(side=tk.LEFT)
@@ -334,7 +342,7 @@ class VideoSubtitlerTab(BaseTab):
             state=tk.DISABLED,
             width=20
         )
-        self.burn_btn.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(5, 5))
+        self.burn_btn.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=(5, 5))
         
         # FFmpeg status
         self.ffmpeg_status_var = tk.StringVar(value="")
@@ -343,7 +351,7 @@ class VideoSubtitlerTab(BaseTab):
             textvariable=self.ffmpeg_status_var,
             foreground="blue"
         )
-        status_label.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        status_label.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
         
         # Open output file button
         self.open_output_btn = ttk.Button(
@@ -353,7 +361,7 @@ class VideoSubtitlerTab(BaseTab):
             state=tk.DISABLED,
             width=20
         )
-        self.open_output_btn.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        self.open_output_btn.grid(row=6, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
         
     def set_controller(self, controller):
         """Set the controller for this view."""
@@ -570,6 +578,10 @@ class VideoSubtitlerTab(BaseTab):
             self.output_dir_var.set(chosen)
             if self.controller:
                 self.controller.set_output_dir(chosen)
+    
+    def get_use_original_name(self) -> bool:
+        """Get use original name setting."""
+        return self.use_original_name_var.get()
     
     def get_dark_bg(self) -> bool:
         """Get dark background setting."""

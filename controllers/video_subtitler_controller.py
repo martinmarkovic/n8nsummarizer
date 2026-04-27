@@ -83,6 +83,7 @@ class VideoSubtitlerController:
         self.translated_srt_path = None
         self.output_video_path = None
         self._output_dir = None
+        self._original_video_title = None
         
         # Load saved output directory
         saved_dir = _get_output_dir()
@@ -374,7 +375,7 @@ class VideoSubtitlerController:
             self.translation_model.set_current_file_path(str(self.srt_path))
             
             # Translate the SRT
-            success, translated, error = self.translation_model.translate_text(srt_text, lang)
+            success, translated, error = self.translation_model.translate_srt(srt_text, lang)
             
             if success:
                 # Display translated SRT and save to file
@@ -431,7 +432,13 @@ class VideoSubtitlerController:
                 return
             
             # Set output path
-            output_path = self._output_dir / "video_subtitled.mp4"
+            use_original_name = self.tab.get_use_original_name()
+            title = self._original_video_title or 'video_output'
+            if use_original_name:
+                output_filename = f"{title}_subtitled.mp4"
+            else:
+                output_filename = "video_subtitled.mp4"
+            output_path = self._output_dir / output_filename
             self.output_video_path = output_path
             
             # Build FFmpeg command with forward slashes for Windows compatibility
@@ -529,7 +536,7 @@ class VideoSubtitlerController:
             lang = self.tab.get_target_language()
             srt_text = self.srt_path.read_text(encoding="utf-8")
             self.translation_model.set_current_file_path(str(self.srt_path))
-            success, translated, error = self.translation_model.translate_text(srt_text, lang)
+            success, translated, error = self.translation_model.translate_srt(srt_text, lang)
             if success:
                 self.translated_srt_path = TEMP_DIR / "video_translated.srt"
                 self.translated_srt_path.write_text(translated, encoding="utf-8")
