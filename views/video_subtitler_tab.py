@@ -33,12 +33,38 @@ class VideoSubtitlerTab(BaseTab):
         
     def _setup_ui(self):
         """Build Video Subtitler UI with input controls and progress display."""
-        # Configure grid - 3 main rows
+        # Configure grid - make all content scrollable
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(2, weight=1)  # SRT area expands
+        self.rowconfigure(0, weight=1)  # Main area expands
+        
+        # Create a canvas with scrollbar for the entire tab
+        canvas = tk.Canvas(self)
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        # Add mouse wheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        
+        canvas.bind("<MouseWheel>", _on_mousewheel)
+        scrollable_frame.bind("<MouseWheel>", _on_mousewheel)
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.E, tk.W))
+        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        # Configure scrollable frame grid
+        scrollable_frame.columnconfigure(0, weight=1)
         
         # === Row 0: Download & Transcribe Settings ===
-        settings_frame = ttk.LabelFrame(self, text="Video Source Settings", padding=15)
+        settings_frame = ttk.LabelFrame(scrollable_frame, text="Video Source Settings", padding=15)
         settings_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         settings_frame.columnconfigure(1, weight=1)
         
@@ -110,8 +136,8 @@ class VideoSubtitlerTab(BaseTab):
         language_combo.grid(row=3, column=3, sticky=tk.W, padx=(0, 10), pady=5)
         
         # === Row 1: Progress ===
-        progress_frame = ttk.LabelFrame(self, text="Progress", padding=10)
-        progress_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=10, pady=(0, 10))
+        progress_frame = ttk.LabelFrame(scrollable_frame, text="Progress", padding=10)
+        progress_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), padx=10, pady=(0, 10))
         progress_frame.columnconfigure(1, weight=1)
         
         # Progress bar
@@ -135,9 +161,9 @@ class VideoSubtitlerTab(BaseTab):
         )
         status_label.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
         
-        # === Row 5: Transcription (SRT) ===
-        srt_frame = ttk.LabelFrame(self, text="Transcription (SRT)", padding=10)
-        srt_frame.grid(row=5, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
+        # === Row 2: Transcription (SRT) ===
+        srt_frame = ttk.LabelFrame(scrollable_frame, text="Transcription (SRT)", padding=10)
+        srt_frame.grid(row=2, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
         srt_frame.rowconfigure(0, weight=1)
         srt_frame.columnconfigure(0, weight=1)
         
@@ -171,9 +197,9 @@ class VideoSubtitlerTab(BaseTab):
         )
         copy_btn.grid(row=0, column=1)
         
-        # === Row 6: Translation ===
-        translation_frame = ttk.LabelFrame(self, text="Translation", padding=10)
-        translation_frame.grid(row=6, column=0, sticky=(tk.W, tk.E), padx=10, pady=(0, 10))
+        # === Row 3: Translation ===
+        translation_frame = ttk.LabelFrame(scrollable_frame, text="Translation", padding=10)
+        translation_frame.grid(row=3, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
         translation_frame.columnconfigure(1, weight=1)
         
         # Target language selection
