@@ -246,6 +246,52 @@ class VideoSubtitlerTab(BaseTab):
         # Configure row weights for expansion
         translation_frame.rowconfigure(1, weight=1)
         
+        # === Row 4: Burn Subtitles (FFmpeg) ===
+        burn_frame = ttk.LabelFrame(scrollable_frame, text="Burn Subtitles (FFmpeg)", padding=10)
+        burn_frame.grid(row=4, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
+        burn_frame.columnconfigure(1, weight=1)
+        
+        # Subtitle source selection
+        ttk.Label(burn_frame, text="Subtitle source:").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 5), pady=5
+        )
+        
+        self.subtitle_source_var = tk.StringVar(value="translated")
+        source_frame = ttk.Frame(burn_frame)
+        source_frame.grid(row=0, column=1, sticky=tk.W, pady=5)
+        
+        ttk.Radiobutton(source_frame, text="Translated SRT", variable=self.subtitle_source_var, value="translated").pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Radiobutton(source_frame, text="Original SRT", variable=self.subtitle_source_var, value="original").pack(side=tk.LEFT)
+        
+        # Burn button
+        self.burn_btn = ttk.Button(
+            burn_frame,
+            text="🔥 Burn Subtitles into Video",
+            command=self._on_burn_clicked,
+            state=tk.DISABLED,
+            width=20
+        )
+        self.burn_btn.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(5, 5))
+        
+        # FFmpeg status
+        self.ffmpeg_status_var = tk.StringVar(value="")
+        status_label = ttk.Label(
+            burn_frame,
+            textvariable=self.ffmpeg_status_var,
+            foreground="blue"
+        )
+        status_label.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        
+        # Open output file button
+        self.open_output_btn = ttk.Button(
+            burn_frame,
+            text="📂 Open Output File",
+            command=self._open_output_file,
+            state=tk.DISABLED,
+            width=20
+        )
+        self.open_output_btn.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        
     def set_controller(self, controller):
         """Set the controller for this view."""
         self.controller = controller
@@ -369,6 +415,14 @@ class VideoSubtitlerTab(BaseTab):
             self.translated_srt_text.delete("1.0", tk.END)
         if hasattr(self, "translate_btn"):
             self.translate_btn.config(state=tk.DISABLED)
+        
+        # Clear FFmpeg section
+        if hasattr(self, "burn_btn"):
+            self.burn_btn.config(state=tk.DISABLED)
+        if hasattr(self, "open_output_btn"):
+            self.open_output_btn.config(state=tk.DISABLED)
+        if hasattr(self, "ffmpeg_status_var"):
+            self.ffmpeg_status_var.set("")
     
     # === Translation Methods ===
     def get_target_language(self) -> str:
@@ -413,3 +467,35 @@ class VideoSubtitlerTab(BaseTab):
                 messagebox.showinfo("Success", f"Translated SRT saved to:\n{file_path}")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save file: {e}")
+    
+    # === FFmpeg Methods ===
+    def get_subtitle_source(self) -> str:
+        """Get subtitle source selection."""
+        return self.subtitle_source_var.get()
+    
+    def enable_burn_btn(self):
+        """Enable burn button."""
+        self.burn_btn.config(state=tk.NORMAL)
+    
+    def enable_open_btn(self):
+        """Enable open output file button."""
+        self.open_output_btn.config(state=tk.NORMAL)
+    
+    def update_ffmpeg_status(self, msg: str):
+        """Update FFmpeg status message."""
+        self.ffmpeg_status_var.set(msg)
+    
+    def _on_burn_clicked(self):
+        """Handle burn button click."""
+        if self.controller and hasattr(self.controller, 'on_burn'):
+            self.controller.on_burn()
+    
+    def _open_output_file(self):
+        """Open output video file."""
+        if self.controller and hasattr(self.controller, 'output_video_path'):
+            try:
+                os.startfile(str(self.controller.output_video_path))
+            except Exception as e:
+                messagebox.showerror("Error", f"Could not open file: {e}")
+        else:
+            messagebox.showinfo("Info", "No output file available yet.")

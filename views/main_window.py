@@ -509,6 +509,9 @@ class MainWindow:
                 self.video_subtitler_tab.translated_srt_text.configure(
                     bg=text_bg, fg=text_fg, insertbackground=text_fg
                 )
+            if hasattr(self.video_subtitler_tab, "ffmpeg_status_var"):
+                # FFmpeg status label uses the same colors as other status labels
+                pass  # The label automatically inherits from theme configuration
 
         # Title label
         if hasattr(self, "title_label"):
