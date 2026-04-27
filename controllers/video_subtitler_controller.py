@@ -11,6 +11,7 @@ from models.transcription import TranscribeModel
 from utils.logger import logger
 
 TEMP_DIR = Path("temp_subtitler")
+TRANSCRIBE_OUT_DIR = TEMP_DIR / "out"
 
 
 class VideoSubtitlerController:
@@ -140,17 +141,27 @@ class VideoSubtitlerController:
         try:
             self.tab.after(0, lambda: self.tab.update_status("🎙 Transcribing..."))
 
-            # Call transcribe_file with exact parameters from instructions
-            # Keep video formats to preserve video file for other processing steps
+            # Ensure output directory exists and is clean
+            TRANSCRIBE_OUT_DIR.mkdir(parents=True, exist_ok=True)
+            for f in TRANSCRIBE_OUT_DIR.iterdir():
+                if f.is_file():
+                    f.unlink()
+
+            # Call transcribe_file with separate output directory
             success, srt_content, error_msg, metadata = self.transcribe_model.transcribe_file(
                 file_path=video_path,
                 device="cuda",
-                output_dir=str(TEMP_DIR),
-                keep_formats=[".srt", ".mp4", ".webm", ".mkv", ".avi", ".mov", ".wmv"]
+                output_dir=str(TRANSCRIBE_OUT_DIR),
+                keep_formats=[".srt"]
             )
             
             if not success:
                 raise Exception(error_msg)
+            
+            # Copy SRT file from output directory to main temp directory
+            srt_source = TRANSCRIBE_OUT_DIR / "video.srt"
+            if srt_source.exists():
+                shutil.copy2(srt_source, TEMP_DIR / "video.srt")
             
             # Store SRT path for Phase 2 use
             self.srt_path = TEMP_DIR / "video.srt"
