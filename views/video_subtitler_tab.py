@@ -63,8 +63,8 @@ class VideoSubtitlerTab(BaseTab):
         scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         
         # Configure scrollable frame grid
-        scrollable_frame.columnconfigure(0, weight=1)
-        scrollable_frame.columnconfigure(1, weight=1)
+        scrollable_frame.columnconfigure(0, weight=2)  # More weight for left column
+        scrollable_frame.columnconfigure(1, weight=1)  # Less weight for right column
         
         # === Row 0: Download & Transcribe Settings ===
         settings_frame = ttk.LabelFrame(scrollable_frame, text="Video Source Settings", padding=15)
@@ -280,7 +280,10 @@ class VideoSubtitlerTab(BaseTab):
         # === Row 0, Column 1: Burn Subtitles (FFmpeg) ===
         burn_frame = ttk.LabelFrame(scrollable_frame, text="Burn Subtitles (FFmpeg)", padding=10)
         burn_frame.grid(row=0, column=1, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=10)
-        burn_frame.columnconfigure(1, weight=1)
+        # Configure burn frame columns to expand
+        burn_frame.columnconfigure(0, weight=0)  # Labels don't expand
+        burn_frame.columnconfigure(1, weight=2)  # Controls expand more
+        burn_frame.columnconfigure(2, weight=1)  # Value labels expand less
         
         # Use original name checkbox
         self.use_original_name_var = tk.BooleanVar(value=True)
@@ -288,16 +291,16 @@ class VideoSubtitlerTab(BaseTab):
             burn_frame,
             text="Name output file after original video title",
             variable=self.use_original_name_var
-        ).grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        ).grid(row=0, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
         
         # Subtitle source selection
         ttk.Label(burn_frame, text="Subtitle source:").grid(
-            row=2, column=0, sticky=tk.W, padx=(0, 5), pady=5
+            row=2, column=0, sticky=(tk.W, tk.E), padx=(0, 5), pady=5
         )
         
         self.subtitle_source_var = tk.StringVar(value="translated")
         source_frame = ttk.Frame(burn_frame)
-        source_frame.grid(row=2, column=1, sticky=tk.W, pady=5)
+        source_frame.grid(row=2, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=5)
         
         ttk.Radiobutton(source_frame, text="Translated SRT", variable=self.subtitle_source_var, value="translated").pack(side=tk.LEFT, padx=(0, 10))
         ttk.Radiobutton(source_frame, text="Original SRT", variable=self.subtitle_source_var, value="original").pack(side=tk.LEFT)
@@ -308,11 +311,11 @@ class VideoSubtitlerTab(BaseTab):
             burn_frame,
             text="Darkened background behind subtitles",
             variable=self.dark_bg_var
-        ).grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(5, 5))
+        ).grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 5))
         
         # Opacity slider
         ttk.Label(burn_frame, text="Background opacity:").grid(
-            row=4, column=0, sticky=tk.W, padx=(0, 5), pady=(0, 5)
+            row=4, column=0, sticky=(tk.W, tk.E), padx=(0, 5), pady=(0, 5)
         )
         self.bg_opacity_var = tk.DoubleVar(value=0.6)
         opacity_slider = ttk.Scale(
@@ -320,14 +323,14 @@ class VideoSubtitlerTab(BaseTab):
             from_=0.1, to=0.7,
             orient=tk.HORIZONTAL,
             variable=self.bg_opacity_var,
-            length=160
+            length=250
         )
-        opacity_slider.grid(row=4, column=1, sticky=tk.W, pady=(0, 5))
+        opacity_slider.grid(row=4, column=1, sticky=(tk.W, tk.E), pady=(0, 5))
 
         # Show numeric value
         self.opacity_label_var = tk.StringVar(value="0.60")
         ttk.Label(burn_frame, textvariable=self.opacity_label_var).grid(
-            row=4, column=2, sticky=tk.W, padx=(5, 0), pady=(0, 5)
+            row=4, column=2, sticky=(tk.W, tk.E), padx=(5, 0), pady=(0, 5)
         )
         
         # Update label when slider moves
@@ -343,7 +346,7 @@ class VideoSubtitlerTab(BaseTab):
             state=tk.DISABLED,
             width=20
         )
-        self.burn_btn.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=(5, 5))
+        self.burn_btn.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 5))
         
         # FFmpeg status
         self.ffmpeg_status_var = tk.StringVar(value="")
@@ -352,7 +355,7 @@ class VideoSubtitlerTab(BaseTab):
             textvariable=self.ffmpeg_status_var,
             foreground="blue"
         )
-        status_label.grid(row=6, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        status_label.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
         
         # Open output file button
         self.open_output_btn = ttk.Button(
@@ -362,7 +365,7 @@ class VideoSubtitlerTab(BaseTab):
             state=tk.DISABLED,
             width=20
         )
-        self.open_output_btn.grid(row=7, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        self.open_output_btn.grid(row=7, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
         
     def set_controller(self, controller):
         """Set the controller for this view."""
