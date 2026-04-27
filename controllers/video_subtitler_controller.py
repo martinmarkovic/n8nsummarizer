@@ -1,18 +1,24 @@
 """
 VideoSubtitlerController - Phase 1
-Wires VideoSubtitlerTab UI to VideoSubtitlerModel.
+Wires VideoSubtitlerTab UI to existing transcription models.
 Runs download + transcription in a single daemon thread.
 """
 import threading
-from models.video_subtitler_model import VideoSubtitlerModel
+import shutil
+import yt_dlp
+from pathlib import Path
+from models.transcription import TranscribeModel
 from utils.logger import logger
+
+TEMP_DIR = Path("temp_subtitler")
 
 
 class VideoSubtitlerController:
     def __init__(self, tab):
         self.tab = tab
-        self.model = VideoSubtitlerModel()
+        self.transcribe_model = TranscribeModel()
         self._thread = None
+        self.srt_path = None
         tab.set_controller(self)
         logger.info("VideoSubtitlerController initialized")
 
@@ -45,22 +51,40 @@ class VideoSubtitlerController:
         self._thread.start()
 
     def _run_url(self, url):
-        """Process URL-based video."""
-        whisper_model = self.tab.get_whisper_model()
-        language = self.tab.get_language()
-        
+        """Process URL-based video using yt-dlp direct download."""
         try:
             self.tab.after(0, lambda: self.tab.update_status("⬇ Downloading video..."))
             self.tab.after(0, lambda: self.tab.update_progress(0, "Downloading..."))
 
-            def dl_progress(pct, speed, eta):
-                speed_mb = (speed or 0) / (1024 * 1024)
-                msg = f"Downloading: {pct:.1f}% — {speed_mb:.2f} MB/s — ETA: {eta}s"
-                self.tab.after(0, lambda p=pct, m=msg: self.tab.update_progress(p, m))
-
-            video_path = self.model.download_video(url, progress_cb=dl_progress)
+            # Ensure temp directory exists
+            TEMP_DIR.mkdir(exist_ok=True)
+            
+            # yt-dlp options with fixed output filename "video.%(ext)s"
+            ydl_opts = {
+                'format': 'bv*+ba/b',  # Best video + best audio / best fallback
+                'outtmpl': str(TEMP_DIR / 'video.%(ext)s'),  # Fixed filename pattern
+                'progress_hooks': [self._download_progress_hook],
+                'quiet': True,
+                'no_warnings': True,
+            }
+            
+            # Download the video
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+            
             self.tab.after(0, lambda: self.tab.update_progress(100, "Download complete."))
-            self.tab._run_transcription(video_path, whisper_model, language)
+            
+            # Find the downloaded video file
+            downloaded_files = list(TEMP_DIR.glob("video.*"))
+            if not downloaded_files:
+                raise FileNotFoundError("No video file found after download")
+            
+            # Use the first matching file (should be video.mp4, video.webm, etc.)
+            video_path = downloaded_files[0]
+            
+            # Run transcription (video file remains in temp directory for other steps)
+            self._run_transcription(str(video_path))
+            
         except Exception as e:
             logger.error(f"VideoSubtitler URL error: {e}", exc_info=True)
             self.tab.after(0, lambda e=e: self.tab.update_status(f"❌ Error: {e}"))
@@ -68,21 +92,42 @@ class VideoSubtitlerController:
         finally:
             self.tab.after(0, lambda: self.tab.set_busy(False))
 
+    def _download_progress_hook(self, progress_info):
+        """Progress hook for yt-dlp downloads."""
+        status = progress_info.get('status')
+        if status == 'downloading':
+            downloaded = progress_info.get('downloaded_bytes', 0)
+            total = progress_info.get('total_bytes') or progress_info.get('total_bytes_estimate', 0)
+            speed = progress_info.get('speed', 0)
+            eta = progress_info.get('eta', 0)
+            
+            if total > 0:
+                percent = (downloaded / total) * 100
+                speed_mb = (speed or 0) / (1024 * 1024)
+                msg = f"Downloading: {percent:.1f}% — {speed_mb:.2f} MB/s — ETA: {eta}s"
+                self.tab.after(0, lambda p=percent, m=msg: self.tab.update_progress(p, m))
+
     def _run_local(self, file_path):
         """Process local video file."""
-        whisper_model = self.tab.get_whisper_model()
-        language = self.tab.get_language()
-        
         try:
             self.tab.after(0, lambda: self.tab.update_status("📁 Processing local file..."))
             self.tab.after(0, lambda: self.tab.update_progress(0, "Processing..."))
 
-            def file_progress(pct, msg):
-                self.tab.after(0, lambda p=pct, m=msg: self.tab.update_progress(p, m))
-
-            video_path = self.model.process_local_video(Path(file_path), progress_cb=file_progress)
+            # Ensure temp directory exists
+            TEMP_DIR.mkdir(exist_ok=True)
+            
+            # Copy file to temp directory with fixed filename pattern
+            source_path = Path(file_path)
+            final_video_path = TEMP_DIR / "video.mp4"  # Always use .mp4 for consistency
+            if final_video_path.exists():
+                final_video_path.unlink()
+            
+            shutil.copy2(source_path, final_video_path)
             self.tab.after(0, lambda: self.tab.update_progress(100, "File processing complete."))
-            self.tab._run_transcription(video_path, whisper_model, language)
+            
+            # Run transcription (video file remains in temp directory for other steps)
+            self._run_transcription(str(final_video_path))
+            
         except Exception as e:
             logger.error(f"VideoSubtitler Local File error: {e}", exc_info=True)
             self.tab.after(0, lambda e=e: self.tab.update_status(f"❌ Error: {e}"))
@@ -90,26 +135,33 @@ class VideoSubtitlerController:
         finally:
             self.tab.after(0, lambda: self.tab.set_busy(False))
 
-    def _run_transcription(self, video_path, whisper_model, language):
+    def _run_transcription(self, video_path):
         """Run transcription on prepared video file."""
         try:
             self.tab.after(0, lambda: self.tab.update_status("🎙 Transcribing..."))
 
-            def tx_progress(pct, msg):
-                self.tab.after(0, lambda p=pct, m=msg: self.tab.update_progress(p, m))
-
-            srt_path = self.model.transcribe_video(
-                video_path, whisper_model=whisper_model,
-                language=None if language == "auto" else language,
-                progress_cb=tx_progress
+            # Call transcribe_file with exact parameters from instructions
+            success, srt_content, error_msg, metadata = self.transcribe_model.transcribe_file(
+                file_path=video_path,
+                device="cuda",
+                output_dir=str(TEMP_DIR),
+                keep_formats=[".srt"]
             )
-            srt_text = srt_path.read_text(encoding="utf-8")
-            self.tab.after(0, lambda t=srt_text: self.tab.display_srt(t))
+            
+            if not success:
+                raise Exception(error_msg)
+            
+            # Store SRT path for Phase 2 use
+            self.srt_path = TEMP_DIR / "video.srt"
+            
+            # Display SRT content
+            self.tab.after(0, lambda t=srt_content: self.tab.display_srt(t))
             self.tab.after(0, lambda: self.tab.update_progress(100, "Done."))
             self.tab.after(0, lambda: self.tab.update_status(
-                f"✅ Done. SRT saved to: {srt_path}"
+                f"✅ Done. SRT saved to: {self.srt_path}"
             ))
+            
         except Exception as e:
             logger.error(f"VideoSubtitler Transcription error: {e}", exc_info=True)
             self.tab.after(0, lambda e=e: self.tab.update_status(f"❌ Error: {e}"))
-            raise  # Re-raise to handle in outer except
+            raise
