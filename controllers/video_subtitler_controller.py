@@ -6,8 +6,10 @@ Runs download + transcription in a single daemon thread.
 import threading
 import shutil
 import yt_dlp
+import tkinter as tk
 from pathlib import Path
 from models.transcription import TranscribeModel
+from models.translation_model import TranslationModel
 from utils.logger import logger
 
 TEMP_DIR = Path("temp_subtitler")
@@ -18,8 +20,10 @@ class VideoSubtitlerController:
     def __init__(self, tab):
         self.tab = tab
         self.transcribe_model = TranscribeModel()
+        self.translation_model = TranslationModel()
         self._thread = None
         self.srt_path = None
+        self.translated_srt_path = None
         tab.set_controller(self)
         logger.info("VideoSubtitlerController initialized")
 
@@ -168,6 +172,7 @@ class VideoSubtitlerController:
             
             # Display SRT content
             self.tab.after(0, lambda t=srt_content: self.tab.display_srt(t))
+            self.tab.after(0, lambda: self.tab.enable_translate_btn())  # Enable translation
             self.tab.after(0, lambda: self.tab.update_progress(100, "Done."))
             self.tab.after(0, lambda: self.tab.update_status(
                 f"✅ Done. SRT saved to: {self.srt_path}"
@@ -177,3 +182,47 @@ class VideoSubtitlerController:
             logger.error(f"VideoSubtitler Transcription error: {e}", exc_info=True)
             self.tab.after(0, lambda e=e: self.tab.update_status(f"❌ Error: {e}"))
             raise
+    
+    def on_translate(self):
+        """Handle translation request from view."""
+        # Disable translate button during translation
+        self.tab.translate_btn.config(state=tk.DISABLED)
+        
+        # Run translation in background thread
+        translation_thread = threading.Thread(target=self._run_translation, daemon=True)
+        translation_thread.start()
+    
+    def _run_translation(self):
+        """Run translation in background thread."""
+        try:
+            # Get target language and SRT content
+            lang = self.tab.get_target_language()
+            srt_text = self.srt_path.read_text(encoding="utf-8")
+            
+            # Set file path so TranslationModel detects SRT mode
+            self.translation_model.set_current_file_path(str(self.srt_path))
+            
+            # Translate the SRT
+            success, translated, error = self.translation_model.translate_text(srt_text, lang)
+            
+            if success:
+                # Display translated SRT and save to file
+                self.tab.after(0, lambda t=translated: self.tab.display_translated_srt(t))
+                
+                # Save translated SRT file
+                self.translated_srt_path = TEMP_DIR / "video_translated.srt"
+                self.translated_srt_path.write_text(translated, encoding="utf-8")
+                
+                self.tab.after(0, lambda: self.tab.update_status(
+                    f"✅ Translation complete. Saved to: {self.translated_srt_path}"
+                ))
+            else:
+                self.tab.after(0, lambda e=error: self.tab.show_error(f"Translation failed: {e}"))
+                
+        except Exception as e:
+            logger.error(f"VideoSubtitler Translation error: {e}", exc_info=True)
+            self.tab.after(0, lambda e=e: self.tab.show_error(f"Translation error: {e}"))
+            
+        finally:
+            # Re-enable translate button
+            self.tab.after(0, lambda: self.tab.translate_btn.config(state=tk.NORMAL))
