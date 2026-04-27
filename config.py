@@ -36,7 +36,7 @@ TRANSLATION_BATCH_MAX_CHARS = int(
 )  # Max characters per batch (reduced for reliability)
 
 # Application Settings
-APP_TITLE = "n8n Summarizer"
+APP_TITLE = "Media SwissKnife"
 APP_WIDTH = 1400
 APP_HEIGHT = 800
 DEFAULT_ENCODING = "utf-8"

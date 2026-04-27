@@ -60,7 +60,7 @@ def main():
     - Preference persistence in .env (tab, path, quality)
     """
     logger.info("=" * 50)
-    logger.info(f"Starting {APP_TITLE} v6.3")
+    logger.info(f"Starting {APP_TITLE}")
     logger.info("=" * 50)
 
     try:

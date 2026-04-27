@@ -99,7 +99,7 @@ class MainWindow:
             settings_manager: SettingsManager instance for persistent preferences
         """
         self.root = root
-        self.root.title(f"{APP_TITLE} v6.3")
+        self.root.title(f"{APP_TITLE}")
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
 
@@ -279,7 +279,7 @@ class MainWindow:
         header_frame.columnconfigure(0, weight=1)
 
         self.title_label = ttk.Label(
-            header_frame, text=f"{APP_TITLE} v6.3", font=("Segoe UI", 14, "bold")
+            header_frame, text=f"{APP_TITLE}", font=("Segoe UI", 14, "bold")
         )
         self.title_label.grid(row=0, column=0, sticky=tk.W)
 
