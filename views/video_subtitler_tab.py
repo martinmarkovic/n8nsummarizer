@@ -56,7 +56,12 @@ class VideoSubtitlerTab(BaseTab):
         canvas.bind("<MouseWheel>", _on_mousewheel)
         scrollable_frame.bind("<MouseWheel>", _on_mousewheel)
         
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        
+        def _on_canvas_configure(event):
+            canvas.itemconfig(canvas_window, width=event.width)
+        
+        canvas.bind("<Configure>", _on_canvas_configure)
         canvas.configure(yscrollcommand=scrollbar.set)
         
         canvas.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.E, tk.W))
