@@ -291,12 +291,12 @@ class VideoSubtitlerTab(BaseTab):
         
         # Subtitle source selection
         ttk.Label(burn_frame, text="Subtitle source:").grid(
-            row=1, column=0, sticky=tk.W, padx=(0, 5), pady=5
+            row=2, column=0, sticky=tk.W, padx=(0, 5), pady=5
         )
         
         self.subtitle_source_var = tk.StringVar(value="translated")
         source_frame = ttk.Frame(burn_frame)
-        source_frame.grid(row=1, column=1, sticky=tk.W, pady=5)
+        source_frame.grid(row=2, column=1, sticky=tk.W, pady=5)
         
         ttk.Radiobutton(source_frame, text="Translated SRT", variable=self.subtitle_source_var, value="translated").pack(side=tk.LEFT, padx=(0, 10))
         ttk.Radiobutton(source_frame, text="Original SRT", variable=self.subtitle_source_var, value="original").pack(side=tk.LEFT)
@@ -307,7 +307,7 @@ class VideoSubtitlerTab(BaseTab):
             burn_frame,
             text="Darkened background behind subtitles",
             variable=self.dark_bg_var
-        ).grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(5, 5))
+        ).grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(5, 5))
         
         # Opacity slider
         ttk.Label(burn_frame, text="Background opacity:").grid(
