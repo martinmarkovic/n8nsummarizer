@@ -9,12 +9,27 @@ import yt_dlp
 import tkinter as tk
 import re
 from pathlib import Path
+from tkinter import filedialog
 from models.transcription import TranscribeModel
 from models.translation_model import TranslationModel
+from utils.settings_manager import SettingsManager
 from utils.logger import logger
 
 TEMP_DIR = Path("temp_subtitler")
 TRANSCRIBE_OUT_DIR = TEMP_DIR / "out"
+
+# Settings for output folder persistence
+settings = SettingsManager()
+
+
+def _get_output_dir():
+    """Get saved output directory from settings."""
+    return settings.get("SUBTITLER_OUTPUT_DIR", "")
+
+
+def _set_output_dir(path: str):
+    """Save output directory to settings."""
+    settings.set("SUBTITLER_OUTPUT_DIR", path)
 
 
 def _clean_temp_folder():
@@ -42,6 +57,14 @@ class VideoSubtitlerController:
         self.srt_path = None
         self.translated_srt_path = None
         self.output_video_path = None
+        self._output_dir = None
+        
+        # Load saved output directory
+        saved_dir = _get_output_dir()
+        if saved_dir:
+            self._output_dir = Path(saved_dir)
+            tab.output_dir_var.set(saved_dir)
+        
         tab.set_controller(self)
         logger.info("VideoSubtitlerController initialized")
 
@@ -49,6 +72,16 @@ class VideoSubtitlerController:
         if self._thread and self._thread.is_alive():
             self.tab.show_error("Already running. Please wait.")
             return
+        
+        # Check output directory
+        output_dir = _get_output_dir()
+        if not output_dir or not Path(output_dir).is_dir():
+            chosen = filedialog.askdirectory(title="Select output folder for subtitled video")
+            if not chosen:
+                return  # User cancelled — abort everything
+            _set_output_dir(chosen)
+            output_dir = chosen
+        self._output_dir = Path(output_dir)
         
         input_mode = self.tab.get_input_mode()
         
@@ -72,6 +105,92 @@ class VideoSubtitlerController:
             )
         
         self._thread.start()
+    
+    def _run_auto_url(self, url):
+        """Run complete pipeline for URL input: Download → Transcribe → Translate → Burn."""
+        try:
+            # Clean temp folder before starting
+            _clean_temp_folder()
+            
+            self.tab.after(0, lambda: self.tab.update_status("⬇ Downloading video..."))
+            self.tab.after(0, lambda: self.tab.update_progress(0, "Downloading..."))
+
+            # Ensure temp directory exists
+            TEMP_DIR.mkdir(exist_ok=True)
+            
+            # yt-dlp options with fixed output filename "video.%(ext)s"
+            ydl_opts = {
+                'format': 'bv*+ba/b',  # Best video + best audio / best fallback
+                'outtmpl': str(TEMP_DIR / 'video.%(ext)s'),  # Fixed filename pattern
+                'progress_hooks': [self._download_progress_hook],
+                'quiet': True,
+                'no_warnings': True,
+            }
+            
+            # Download the video
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+            
+            self.tab.after(0, lambda: self.tab.update_progress(100, "Download complete."))
+            
+            # Find the downloaded video file
+            downloaded_files = list(TEMP_DIR.glob("video.*"))
+            if not downloaded_files:
+                raise FileNotFoundError("No video file found after download")
+            
+            # Use the first matching file (should be video.mp4, video.webm, etc.)
+            video_path = downloaded_files[0]
+            
+            # Run transcription
+            self._run_transcription(str(video_path))
+            
+            # Run translation
+            ok = self._run_translation_sync()
+            if ok:
+                self._run_ffmpeg()
+            
+        except Exception as e:
+            logger.error(f"VideoSubtitler Auto URL error: {e}", exc_info=True)
+            self.tab.after(0, lambda e=e: self.tab.update_status(f"❌ Error: {e}"))
+            self.tab.after(0, lambda e=e: self.tab.show_error(str(e)))
+        finally:
+            self.tab.after(0, lambda: self.tab.set_busy(False))
+    
+    def _run_auto_local(self, file_path):
+        """Run complete pipeline for local file: Copy → Transcribe → Translate → Burn."""
+        try:
+            # Clean temp folder before starting
+            _clean_temp_folder()
+            
+            self.tab.after(0, lambda: self.tab.update_status("📁 Processing local file..."))
+            self.tab.after(0, lambda: self.tab.update_progress(0, "Processing..."))
+
+            # Ensure temp directory exists
+            TEMP_DIR.mkdir(exist_ok=True)
+            
+            # Copy file to temp directory with fixed filename pattern
+            source_path = Path(file_path)
+            final_video_path = TEMP_DIR / "video.mp4"  # Always use .mp4 for consistency
+            if final_video_path.exists():
+                final_video_path.unlink()
+            
+            shutil.copy2(source_path, final_video_path)
+            self.tab.after(0, lambda: self.tab.update_progress(100, "File processing complete."))
+            
+            # Run transcription
+            self._run_transcription(str(final_video_path))
+            
+            # Run translation
+            ok = self._run_translation_sync()
+            if ok:
+                self._run_ffmpeg()
+            
+        except Exception as e:
+            logger.error(f"VideoSubtitler Auto Local error: {e}", exc_info=True)
+            self.tab.after(0, lambda e=e: self.tab.update_status(f"❌ Error: {e}"))
+            self.tab.after(0, lambda e=e: self.tab.show_error(str(e)))
+        finally:
+            self.tab.after(0, lambda: self.tab.set_busy(False))
 
     def _run_url(self, url):
         """Process URL-based video using极行程 yt-dlp direct download."""
@@ -284,7 +403,7 @@ class VideoSubtitlerController:
                 return
             
             # Set output path
-            output_path = TEMP_DIR / "video_subtitled.mp4"
+            output_path = self._output_dir / "video_subtitled.mp4"
             self.output_video_path = output_path
             
             # Build FFmpeg command with forward slashes for Windows compatibility
@@ -357,3 +476,64 @@ class VideoSubtitlerController:
         finally:
             # Re-enable burn button
             self.tab.after(0, lambda: self.tab.burn_btn.config(state=tk.NORMAL))
+    
+    def _run_translation_sync(self) -> bool:
+        """Run translation synchronously for auto pipeline."""
+        try:
+            lang = self.tab.get_target_language()
+            srt_text = self.srt_path.read_text(encoding="utf-8")
+            self.translation_model.set_current_file_path(str(self.srt_path))
+            success, translated, error = self.translation_model.translate_text(srt_text, lang)
+            if success:
+                self.translated_srt_path = TEMP_DIR / "video_translated.srt"
+                self.translated_srt_path.write_text(translated, encoding="utf-8")
+                self.tab.after(0, lambda t=translated: self.tab.display_translated_srt(t))
+                return True
+            else:
+                self.tab.after(0, lambda e=error: self.tab.update_status(f"❌ Translation failed: {e}"))
+                return False
+        except Exception as e:
+            logger.error(f"Auto translation error: {e}", exc_info=True)
+            self.tab.after(0, lambda e=e: self.tab.update_status(f"❌ Translation error: {e}"))
+            return False
+    
+    def set_output_dir(self, path: str):
+        """Set output directory and save to settings."""
+        _set_output_dir(path)
+        self._output_dir = Path(path)
+    
+    def on_auto(self):
+        """Handle auto pipeline request."""
+        if self._thread and self._thread.is_alive():
+            self.tab.show_error("Already running. Please wait.")
+            return
+        
+        # Check output directory
+        output_dir = _get_output_dir()
+        if not output_dir or not Path(output_dir).is_dir():
+            chosen = filedialog.askdirectory(title="Select output folder")
+            if not chosen:
+                return
+            _set_output_dir(chosen)
+            self._output_dir = Path(chosen)
+        
+        input_mode = self.tab.get_input_mode()
+        if input_mode == "url":
+            url = self.tab.get_url()
+            if not url:
+                self.tab.show_error("Please enter a video URL.")
+                return
+            self.tab.set_busy(True)
+            self._thread = threading.Thread(
+                target=self._run_auto_url, args=(url,), daemon=True
+            )
+        else:
+            file_path = self.tab.get_local_file_path()
+            if not file_path:
+                self.tab.show_error("Please select a local video file.")
+                return
+            self.tab.set_busy(True)
+            self._thread = threading.Thread(
+                target=self._run_auto_local, args=(file_path,), daemon=True
+            )
+        self._thread.start()

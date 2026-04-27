@@ -25,6 +25,8 @@ class VideoSubtitlerTab(BaseTab):
         self.language_var = tk.StringVar(value="auto")
         self.progress_var = tk.StringVar(value="Ready")
         self.progress_pct_var = tk.StringVar(value="0%")
+        self.output_dir_var = tk.StringVar(value="")
+        self.translate_lang_var = tk.StringVar(value="English")
         
         # Controller will be initialized after UI setup
         self.controller = None
@@ -104,6 +106,35 @@ class VideoSubtitlerTab(BaseTab):
         )
         self.start_btn.grid(row=2, column=2, sticky=tk.E, padx=(5, 0), pady=5)
         
+        # Auto button
+        self.auto_btn = ttk.Button(
+            settings_frame,
+            text="⚡ Auto",
+            command=self._on_auto,
+            width=8
+        )
+        self.auto_btn.grid(row=2, column=3, sticky=tk.W, padx=(5, 0), pady=5)
+        
+        # Output folder selection
+        ttk.Label(settings_frame, text="Output folder:").grid(
+            row=4, column=0, sticky=tk.W, padx=(0, 5), pady=(10, 5)
+        )
+        
+        output_entry = ttk.Entry(
+            settings_frame,
+            textvariable=self.output_dir_var,
+            state="readonly"
+        )
+        output_entry.grid(row=4, column=1, sticky=(tk.W, tk.E), padx=(0, 5), pady=(10, 5))
+        settings_frame.columnconfigure(1, weight=1)
+        
+        ttk.Button(
+            settings_frame,
+            text="Change…",
+            command=self._on_change_output_folder,
+            width=8
+        ).grid(row=4, column=2, sticky=tk.W, padx=(5, 0), pady=(10, 5))
+        
         # Mode change handler
         self.input_mode.trace("w", self._on_mode_change)
         
@@ -129,11 +160,25 @@ class VideoSubtitlerTab(BaseTab):
         language_combo = ttk.Combobox(
             settings_frame,
             textvariable=self.language_var,
-            values=["auto", "en", "hr", "de", "fr", "es", "it", "pt", "极ru", "ja", "zh"],
+            values=["auto", "en", "hr", "de", "fr", "es", "it", "pt", "ru", "ja", "zh"],
             state="readonly",
             width=8
         )
         language_combo.grid(row=3, column=3, sticky=tk.W, padx=(0, 10), pady=5)
+        
+        # Translation language selection
+        ttk.Label(settings_frame, text="Translate to:").grid(
+            row=4, column=2, sticky=tk.W, padx=(10, 10), pady=5
+        )
+        
+        lang_combo = ttk.Combobox(
+            settings_frame,
+            textvariable=self.translate_lang_var,
+            values=["English", "Croatian", "German", "French", "Spanish", "Italian", "Portuguese", "Russian", "Japanese", "Chinese"],
+            state="readonly",
+            width=12
+        )
+        lang_combo.grid(row=4, column=3, sticky=tk.W, padx=(0, 10), pady=5)
         
         # === Row 1: Progress ===
         progress_frame = ttk.LabelFrame(scrollable_frame, text="Progress", padding=10)
@@ -201,21 +246,6 @@ class VideoSubtitlerTab(BaseTab):
         translation_frame = ttk.LabelFrame(scrollable_frame, text="Translation", padding=10)
         translation_frame.grid(row=3, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
         translation_frame.columnconfigure(1, weight=1)
-        
-        # Target language selection
-        ttk.Label(translation_frame, text="Translate to:").grid(
-            row=0, column=0, sticky=tk.W, padx=(0, 5), pady=5
-        )
-        
-        self.translate_lang_var = tk.StringVar(value="English")
-        lang_combo = ttk.Combobox(
-            translation_frame,
-            textvariable=self.translate_lang_var,
-            values=["English", "Croatian", "German", "French", "Spanish", "Italian", "Portuguese", "Russian", "Japanese", "Chinese"],
-            state="readonly",
-            width=12
-        )
-        lang_combo.grid(row=0, column=1, sticky=tk.W, padx=(0, 10), pady=5)
         
         # Translate button
         self.translate_btn = ttk.Button(
@@ -499,3 +529,16 @@ class VideoSubtitlerTab(BaseTab):
                 messagebox.showerror("Error", f"Could not open file: {e}")
         else:
             messagebox.showinfo("Info", "No output file available yet.")
+    
+    def _on_change_output_folder(self):
+        """Handle change output folder button click."""
+        chosen = filedialog.askdirectory(title="Select output folder")
+        if chosen:
+            self.output_dir_var.set(chosen)
+            if self.controller:
+                self.controller.set_output_dir(chosen)
+    
+    def _on_auto(self):
+        """Handle auto button click."""
+        if self.controller:
+            self.controller.on_auto()
