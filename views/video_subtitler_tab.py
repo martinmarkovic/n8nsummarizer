@@ -305,7 +305,7 @@ class VideoSubtitlerTab(BaseTab):
         ttk.Label(burn_frame, text="Background opacity:").grid(
             row=2, column=0, sticky=tk.W, padx=(0, 5), pady=(0, 5)
         )
-        self.bg_opacity_var = tk.DoubleVar(value=0.4)
+        self.bg_opacity_var = tk.DoubleVar(value=0.6)
         opacity_slider = ttk.Scale(
             burn_frame,
             from_=0.1, to=0.7,
@@ -316,7 +316,7 @@ class VideoSubtitlerTab(BaseTab):
         opacity_slider.grid(row=2, column=1, sticky=tk.W, pady=(0, 5))
         
         # Show numeric value
-        self.opacity_label_var = tk.StringVar(value="0.40")
+        self.opacity_label_var = tk.StringVar(value="0.60")
         ttk.Label(burn_frame, textvariable=self.opacity_label_var).grid(
             row=2, column=2, sticky=tk.W, padx=(5, 0), pady=(0, 5)
         )

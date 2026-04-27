@@ -26,6 +26,20 @@ def _sanitize_filename(title: str) -> str:
     return safe[:80] if safe else 'video'
 
 
+def _extract_youtube_title(url: str) -> str:
+    """Extract and sanitize YouTube video title."""
+    try:
+        import yt_dlp
+        info_opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
+        with yt_dlp.YoutubeDL(info_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if info and 'title' in info:
+                return _sanitize_filename(info['title'])
+    except Exception as e:
+        logger.warning(f"Failed to extract YouTube title: {e}")
+    return 'video'
+
+
 TEMP_DIR = Path("temp_subtitler")
 TRANSCRIBE_OUT_DIR = TEMP_DIR / "out"
 
@@ -125,13 +139,16 @@ class VideoSubtitlerController:
             
             self.tab.after(0, lambda: self.tab.update_status("⬇ Downloading video..."))
             self.tab.after(0, lambda: self.tab.update_progress(0, "Downloading..."))
-
+            
+            # Extract video title first
+            self._original_video_title = _extract_youtube_title(url)
+            
             # Ensure temp directory exists
             TEMP_DIR.mkdir(exist_ok=True)
             
             # yt-dlp options with fixed output filename "video.%(ext)s"
             ydl_opts = {
-                'format': 'bv*+ba/b',  # Best video + best audio / best fallback
+                'format': 'bv*+ba/b',  # Best video + best fallback
                 'outtmpl': str(TEMP_DIR / 'video.%(ext)s'),  # Fixed filename pattern
                 'progress_hooks': [self._download_progress_hook],
                 'quiet': True,
