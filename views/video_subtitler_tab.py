@@ -293,6 +293,39 @@ class VideoSubtitlerTab(BaseTab):
         ttk.Radiobutton(source_frame, text="Translated SRT", variable=self.subtitle_source_var, value="translated").pack(side=tk.LEFT, padx=(0, 10))
         ttk.Radiobutton(source_frame, text="Original SRT", variable=self.subtitle_source_var, value="original").pack(side=tk.LEFT)
         
+        # Dark background checkbox
+        self.dark_bg_var = tk.BooleanVar(value=True)  # ON by default
+        ttk.Checkbutton(
+            burn_frame,
+            text="Darkened background behind subtitles",
+            variable=self.dark_bg_var
+        ).grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(5, 5))
+        
+        # Opacity slider
+        ttk.Label(burn_frame, text="Background opacity:").grid(
+            row=2, column=0, sticky=tk.W, padx=(0, 5), pady=(0, 5)
+        )
+        self.bg_opacity_var = tk.DoubleVar(value=0.4)
+        opacity_slider = ttk.Scale(
+            burn_frame,
+            from_=0.1, to=0.7,
+            orient=tk.HORIZONTAL,
+            variable=self.bg_opacity_var,
+            length=160
+        )
+        opacity_slider.grid(row=2, column=1, sticky=tk.W, pady=(0, 5))
+        
+        # Show numeric value
+        self.opacity_label_var = tk.StringVar(value="0.40")
+        ttk.Label(burn_frame, textvariable=self.opacity_label_var).grid(
+            row=2, column=2, sticky=tk.W, padx=(5, 0), pady=(0, 5)
+        )
+        
+        # Update label when slider moves
+        def _update_opacity_label(*args):
+            self.opacity_label_var.set(f"{self.bg_opacity_var.get():.2f}")
+        self.bg_opacity_var.trace("w", _update_opacity_label)
+        
         # Burn button
         self.burn_btn = ttk.Button(
             burn_frame,
@@ -301,7 +334,7 @@ class VideoSubtitlerTab(BaseTab):
             state=tk.DISABLED,
             width=20
         )
-        self.burn_btn.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(5, 5))
+        self.burn_btn.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(5, 5))
         
         # FFmpeg status
         self.ffmpeg_status_var = tk.StringVar(value="")
@@ -537,6 +570,14 @@ class VideoSubtitlerTab(BaseTab):
             self.output_dir_var.set(chosen)
             if self.controller:
                 self.controller.set_output_dir(chosen)
+    
+    def get_dark_bg(self) -> bool:
+        """Get dark background setting."""
+        return self.dark_bg_var.get()
+    
+    def get_bg_opacity(self) -> float:
+        """Get background opacity setting."""
+        return round(self.bg_opacity_var.get(), 2)
     
     def _on_auto(self):
         """Handle auto button click."""

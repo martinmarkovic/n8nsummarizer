@@ -15,6 +15,17 @@ from models.translation_model import TranslationModel
 from utils.settings_manager import SettingsManager
 from utils.logger import logger
 
+
+def _sanitize_filename(title: str) -> str:
+    """Sanitize filename for filesystem safety."""
+    # Remove special chars, keep alphanumeric, spaces, hyphens, underscores
+    safe = re.sub(r'[^\w\s\-\_]', '', title).strip()
+    # Replace spaces with underscores
+    safe = re.sub(r'\s+', '_', safe)
+    # Limit to 80 characters
+    return safe[:80] if safe else 'video'
+
+
 TEMP_DIR = Path("temp_subtitler")
 TRANSCRIBE_OUT_DIR = TEMP_DIR / "out"
 
@@ -408,10 +419,28 @@ class VideoSubtitlerController:
             
             # Build FFmpeg command with forward slashes for Windows compatibility
             srt_path_fixed = str(srt_file).replace("\\", "/")
+            
+            # Check if dark background is enabled
+            use_dark_bg = self.tab.get_dark_bg()
+            opacity = self.tab.get_bg_opacity()
+            
+            if use_dark_bg:
+                # subtitles filter with force_style to add a semi-transparent box behind text
+                # BackColour uses AABBGGRR hex format — AA is alpha (00=opaque, FF=transparent)
+                alpha_hex = format(int((1.0 - opacity) * 255), '02X')
+                back_colour = f"&H{alpha_hex}000000&"
+                vf_filter = (
+                    f"subtitles={srt_path_fixed}:force_style="
+                    f"'BackColour={back_colour},BorderStyle=4,"
+                    f"Outline=0,Shadow=0,MarginV=20'"
+                )
+            else:
+                vf_filter = f"subtitles={srt_path_fixed}"
+            
             cmd = [
                 "ffmpeg", "-y",
                 "-i", str(input_video),
-                "-vf", f"subtitles={srt_path_fixed}",
+                "-vf", vf_filter,
                 "-c:a", "copy",
                 str(output_path)
             ]
