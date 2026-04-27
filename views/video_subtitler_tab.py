@@ -170,7 +170,56 @@ class VideoSubtitlerTab(BaseTab):
             width=15
         )
         copy_btn.grid(row=0, column=1)
-    
+        
+        # === Row 6: Translation ===
+        translation_frame = ttk.LabelFrame(self, text="Translation", padding=10)
+        translation_frame.grid(row=6, column=0, sticky=(tk.W, tk.E), padx=10, pady=(0, 10))
+        translation_frame.columnconfigure(1, weight=1)
+        
+        # Target language selection
+        ttk.Label(translation_frame, text="Translate to:").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 5), pady=5
+        )
+        
+        self.translate_lang_var = tk.StringVar(value="English")
+        lang_combo = ttk.Combobox(
+            translation_frame,
+            textvariable=self.translate_lang_var,
+            values=["English", "Croatian", "German", "French", "Spanish", "Italian", "Portuguese", "Russian", "Japanese", "Chinese"],
+            state="readonly",
+            width=12
+        )
+        lang_combo.grid(row=0, column=1, sticky=tk.W, padx=(0, 10), pady=5)
+        
+        # Translate button
+        self.translate_btn = ttk.Button(
+            translation_frame,
+            text="🌐 Translate SRT",
+            command=self._on_translate_clicked,
+            state=tk.DISABLED,
+            width=15
+        )
+        self.translate_btn.grid(row=0, column=2, padx=(5, 0), pady=5)
+        
+        # Translated SRT text widget
+        self.translated_srt_text = tk.Text(translation_frame, wrap=tk.WORD, height=12)
+        self.translated_srt_text.grid(row=1, column=0, columnspan=3, sticky=(tk.N, tk.S, tk.E, tk.W), pady=(5, 5))
+        
+        translated_scroll = ttk.Scrollbar(translation_frame, command=self.translated_srt_text.yview)
+        translated_scroll.grid(row=1, column=3, sticky=(tk.N, tk.S))
+        self.translated_srt_text.configure(yscrollcommand=translated_scroll.set)
+        
+        # Save translated SRT button
+        ttk.Button(
+            translation_frame,
+            text="💾 Save Translated SRT",
+            command=self._on_save_translated,
+            width=15
+        ).grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        
+        # Configure row weights for expansion
+        translation_frame.rowconfigure(1, weight=1)
+        
     def set_controller(self, controller):
         """Set the controller for this view."""
         self.controller = controller
@@ -288,3 +337,53 @@ class VideoSubtitlerTab(BaseTab):
         self.progress_pct_var.set("0%")
         self.progress_var.set("Ready")
         self.srt_text.delete("1.0", tk.END)
+        
+        # Clear translation section
+        if hasattr(self, "translated_srt_text"):
+            self.translated_srt_text.delete("1.0", tk.END)
+        if hasattr(self, "translate_btn"):
+            self.translate_btn.config(state=tk.DISABLED)
+    
+    # === Translation Methods ===
+    def get_target_language(self) -> str:
+        """Get target language for translation."""
+        return self.translate_lang_var.get()
+    
+    def display_translated_srt(self, text: str):
+        """Display translated SRT text."""
+        self.translated_srt_text.delete("1.0", tk.END)
+        self.translated_srt_text.insert(tk.END, text)
+    
+    def enable_translate_btn(self):
+        """Enable translate button."""
+        self.translate_btn.config(state=tk.NORMAL)
+    
+    def get_translated_srt(self) -> str:
+        """Get translated SRT content."""
+        return self.translated_srt_text.get("1.0", tk.END).strip()
+    
+    def _on_translate_clicked(self):
+        """Handle translate button click."""
+        if self.controller and hasattr(self.controller, 'on_translate'):
+            self.controller.on_translate()
+    
+    def _on_save_translated(self):
+        """Save translated SRT to file."""
+        translated_srt = self.get_translated_srt()
+        if not translated_srt:
+            messagebox.showinfo("Info", "No translated SRT content to save.")
+            return
+        
+        file_path = filedialog.asksaveasfilename(
+            title="Save Translated SRT",
+            defaultextension=".srt",
+            filetypes=[("SRT Files", "*.srt"), ("All Files", "*.*")]
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(translated_srt)
+                messagebox.showinfo("Success", f"Translated SRT saved to:\n{file_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save file: {e}")

@@ -505,6 +505,10 @@ class MainWindow:
             self.video_subtitler_tab.srt_text.configure(
                 bg=text_bg, fg=text_fg, insertbackground=text_fg
             )
+            if hasattr(self.video_subtitler_tab, "translated_srt_text"):
+                self.video_subtitler_tab.translated_srt_text.configure(
+                    bg=text_bg, fg=text_fg, insertbackground=text_fg
+                )
 
         # Title label
         if hasattr(self, "title_label"):
@@ -657,6 +661,10 @@ class MainWindow:
             self.video_subtitler_tab.srt_text.configure(
                 font=("Segoe UI", self.current_font_size)
             )
+            if hasattr(self.video_subtitler_tab, "translated_srt_text"):
+                self.video_subtitler_tab.translated_srt_text.configure(
+                    font=("Segoe UI", self.current_font_size)
+                )
 
         logger.debug(
             f"Applied font size {self.current_font_size}px to all text widgets"
