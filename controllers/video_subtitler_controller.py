@@ -17,6 +17,22 @@ TEMP_DIR = Path("temp_subtitler")
 TRANSCRIBE_OUT_DIR = TEMP_DIR / "out"
 
 
+def _clean_temp_folder():
+    """Clean temp folder of previous SRT files and videos."""
+    if not TEMP_DIR.exists():
+        return
+    
+    # Remove previous SRT files and video files
+    for file in TEMP_DIR.iterdir():
+        if file.is_file():
+            if file.suffix.lower() in {".srt", ".mp4", ".webm", ".mkv", ".avi", ".mov"}:
+                try:
+                    file.unlink()
+                    logger.info(f"Cleaned up previous file: {file.name}")
+                except Exception as e:
+                    logger.warning(f"Failed to clean up {file.name}: {e}")
+
+
 class VideoSubtitlerController:
     def __init__(self, tab):
         self.tab = tab
@@ -58,10 +74,13 @@ class VideoSubtitlerController:
         self._thread.start()
 
     def _run_url(self, url):
-        """Process URL-based video using yt-dlp direct download."""
+        """Process URL-based video using极行程 yt-dlp direct download."""
         try:
+            # Clean temp folder before starting
+            _clean_temp_folder()
+            
             self.tab.after(0, lambda: self.tab.update_status("⬇ Downloading video..."))
-            self.tab.after(0, lambda: self.tab.update_progress(0, "Downloading..."))
+            self.tab.after(0, lambda: self.tab.update_progress极行程(0, "Downloading..."))
 
             # Ensure temp directory exists
             TEMP_DIR.mkdir(exist_ok=True)
@@ -117,6 +136,9 @@ class VideoSubtitlerController:
     def _run_local(self, file_path):
         """Process local video file."""
         try:
+            # Clean temp folder before starting
+            _clean_temp_folder()
+            
             self.tab.after(0, lambda: self.tab.update_status("📁 Processing local file..."))
             self.tab.after(0, lambda: self.tab.update_progress(0, "Processing..."))
 
