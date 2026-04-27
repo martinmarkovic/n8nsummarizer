@@ -141,11 +141,12 @@ class VideoSubtitlerController:
             self.tab.after(0, lambda: self.tab.update_status("🎙 Transcribing..."))
 
             # Call transcribe_file with exact parameters from instructions
+            # Keep video formats to preserve video file for other processing steps
             success, srt_content, error_msg, metadata = self.transcribe_model.transcribe_file(
                 file_path=video_path,
                 device="cuda",
                 output_dir=str(TEMP_DIR),
-                keep_formats=[".srt"]
+                keep_formats=[".srt", ".mp4", ".webm", ".mkv", ".avi", ".mov", ".wmv"]
             )
             
             if not success:
