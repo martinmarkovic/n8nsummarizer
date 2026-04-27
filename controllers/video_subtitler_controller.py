@@ -7,6 +7,7 @@ import threading
 import shutil
 import yt_dlp
 import tkinter as tk
+import re
 from pathlib import Path
 from models.transcription import TranscribeModel
 from models.translation_model import TranslationModel
@@ -24,6 +25,7 @@ class VideoSubtitlerController:
         self._thread = None
         self.srt_path = None
         self.translated_srt_path = None
+        self.output_video_path = None
         tab.set_controller(self)
         logger.info("VideoSubtitlerController initialized")
 
@@ -216,6 +218,7 @@ class VideoSubtitlerController:
                 self.tab.after(0, lambda: self.tab.update_status(
                     f"✅ Translation complete. Saved to: {self.translated_srt_path}"
                 ))
+                self.tab.after(0, lambda: self.tab.enable_burn_btn())  # Enable burn button
             else:
                 self.tab.after(0, lambda e=error: self.tab.show_error(f"Translation failed: {e}"))
                 
@@ -226,3 +229,104 @@ class VideoSubtitlerController:
         finally:
             # Re-enable translate button
             self.tab.after(0, lambda: self.tab.translate_btn.config(state=tk.NORMAL))
+    
+    def on_burn(self):
+        """Handle burn request from view."""
+        # Disable burn button during processing
+        self.tab.burn_btn.config(state=tk.DISABLED)
+        
+        # Run FFmpeg in background thread
+        ffmpeg_thread = threading.Thread(target=self._run_ffmpeg, daemon=True)
+        ffmpeg_thread.start()
+    
+    def _run_ffmpeg(self):
+        """Run FFmpeg subtitle burning in background thread."""
+        try:
+            # Determine subtitle file
+            source = self.tab.get_subtitle_source()
+            srt_file = TEMP_DIR / ("video_translated.srt" if source == "translated" else "video.srt")
+            
+            if not srt_file.exists():
+                self.tab.after(0, lambda: self.tab.show_error(f"Subtitle file not found: {srt_file}"))
+                return
+            
+            # Find input video file
+            input_video = next(TEMP_DIR.glob("video.*"), None)
+            if not input_video or input_video.suffix.lower() not in [".mp4", ".webm", ".mkv", ".avi"]:
+                self.tab.after(0, lambda: self.tab.show_error("No video file found in temp folder"))
+                return
+            
+            # Set output path
+            output_path = TEMP_DIR / "video_subtitled.mp4"
+            self.output_video_path = output_path
+            
+            # Build FFmpeg command with forward slashes for Windows compatibility
+            srt_path_fixed = str(srt_file).replace("\\", "/")
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", str(input_video),
+                "-vf", f"subtitles={srt_path_fixed}",
+                "-c:a", "copy",
+                str(output_path)
+            ]
+            
+            self.tab.after(0, lambda: self.tab.update_ffmpeg_status("🔄 Starting FFmpeg..."))
+            self.tab.after(0, lambda: self.tab.update_progress(0, "FFmpeg: Starting"))
+            
+            # Run FFmpeg with progress parsing
+            import subprocess
+            
+            # First get total duration using ffprobe
+            duration_cmd = [
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", str(input_video)
+            ]
+            
+            try:
+                duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, timeout=30)
+                total_duration = float(duration_result.stdout.strip()) if duration_result.returncode == 0 else 0
+            except (subprocess.TimeoutExpired, ValueError):
+                total_duration = 0
+            
+            # Run FFmpeg and parse progress
+            process = subprocess.Popen(cmd, stderr=subprocess.PIPE, universal_newlines=True)
+            
+            while True:
+                line = process.stderr.readline()
+                if not line and process.poll() is not None:
+                    break
+                
+                # Parse time progress from FFmpeg output
+                if "time=" in line:
+                    time_match = re.search(r"time=([0-9:.]+)", line)
+                    if time_match:
+                        time_str = time_match.group(1)
+                        # Convert HH:MM:SS.ms to seconds
+                        time_parts = time_str.split(":")
+                        if len(time_parts) == 3:
+                            hours, minutes, seconds = map(float, time_parts)
+                            elapsed_seconds = hours * 3600 + minutes * 60 + seconds
+                            
+                            if total_duration > 0:
+                                percent = (elapsed_seconds / total_duration) * 100
+                                self.tab.after(0, lambda p=percent: self.tab.update_progress(p, f"FFmpeg: {p:.1f}%"))
+            
+            returncode = process.wait()
+            
+            if returncode == 0:
+                self.tab.after(0, lambda: self.tab.update_ffmpeg_status("✅ Done! Subtitles burned."))
+                self.tab.after(0, lambda: self.tab.enable_open_btn())
+                self.tab.after(0, lambda: self.tab.update_progress(100, "Burn complete."))
+            else:
+                # Get last 500 chars of stderr for error message
+                stderr_output = process.stderr.read() if process.stderr else ""
+                error_msg = stderr_output[-500:] if len(stderr_output) > 500 else stderr_output
+                self.tab.after(0, lambda: self.tab.show_error(f"FFmpeg failed: {error_msg}"))
+                
+        except Exception as e:
+            logger.error(f"VideoSubtitler FFmpeg error: {e}", exc_info=True)
+            self.tab.after(0, lambda e=e: self.tab.show_error(f"FFmpeg error: {e}"))
+            
+        finally:
+            # Re-enable burn button
+            self.tab.after(0, lambda: self.tab.burn_btn.config(state=tk.NORMAL))
