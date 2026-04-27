@@ -168,7 +168,7 @@ class VideoSubtitlerTab(BaseTab):
         
         # Translation language selection
         ttk.Label(settings_frame, text="Translate to:").grid(
-            row=4, column=2, sticky=tk.W, padx=(10, 10), pady=5
+            row=5, column=0, sticky=tk.W, padx=(0, 5), pady=5
         )
         
         lang_combo = ttk.Combobox(
@@ -178,7 +178,7 @@ class VideoSubtitlerTab(BaseTab):
             state="readonly",
             width=12
         )
-        lang_combo.grid(row=4, column=3, sticky=tk.W, padx=(0, 10), pady=5)
+        lang_combo.grid(row=5, column=1, columnspan=2, sticky=tk.W, pady=5)
         
         # === Row 1: Progress ===
         progress_frame = ttk.LabelFrame(scrollable_frame, text="Progress", padding=10)
