@@ -26,7 +26,7 @@ class VideoSubtitlerTab(BaseTab):
         self.progress_var = tk.StringVar(value="Ready")
         self.progress_pct_var = tk.StringVar(value="0%")
         self.output_dir_var = tk.StringVar(value="")
-        self.translate_lang_var = tk.StringVar(value="English")
+        self.translate_lang_var = tk.StringVar(value="Croatian")
         
         # Controller will be initialized after UI setup
         self.controller = None
