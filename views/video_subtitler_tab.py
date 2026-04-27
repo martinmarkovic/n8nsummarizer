@@ -307,7 +307,7 @@ class VideoSubtitlerTab(BaseTab):
             burn_frame,
             text="Darkened background behind subtitles",
             variable=self.dark_bg_var
-        ).grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=(5, 5))
+        ).grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(5, 5))
         
         # Opacity slider
         ttk.Label(burn_frame, text="Background opacity:").grid(
