@@ -250,9 +250,14 @@ class VideoSubtitlerController:
                 self.tab.after(0, lambda: self.tab.show_error(f"Subtitle file not found: {srt_file}"))
                 return
             
-            # Find input video file
-            input_video = next(TEMP_DIR.glob("video.*"), None)
-            if not input_video or input_video.suffix.lower() not in [".mp4", ".webm", ".mkv", ".avi"]:
+            # Find input video file (only video extensions, exclude SRT files)
+            VIDEO_EXTENSIONS = {".mp4", ".webm", ".mkv", ".avi", ".mov"}
+            input_video = next(
+                (f for f in TEMP_DIR.iterdir()
+                 if f.is_file() and f.stem == "video" and f.suffix.lower() in VIDEO_EXTENSIONS),
+                None
+            )
+            if not input_video:
                 self.tab.after(0, lambda: self.tab.show_error("No video file found in temp folder"))
                 return
             
