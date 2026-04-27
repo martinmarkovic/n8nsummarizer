@@ -64,10 +64,11 @@ class VideoSubtitlerTab(BaseTab):
         
         # Configure scrollable frame grid
         scrollable_frame.columnconfigure(0, weight=1)
+        scrollable_frame.columnconfigure(1, weight=1)
         
         # === Row 0: Download & Transcribe Settings ===
         settings_frame = ttk.LabelFrame(scrollable_frame, text="Video Source Settings", padding=15)
-        settings_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
+        settings_frame.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=10)
         settings_frame.columnconfigure(1, weight=1)
         
         # Mode selection (URL vs Local File)
@@ -182,7 +183,7 @@ class VideoSubtitlerTab(BaseTab):
         
         # === Row 1: Progress ===
         progress_frame = ttk.LabelFrame(scrollable_frame, text="Progress", padding=10)
-        progress_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), padx=10, pady=(0, 10))
+        progress_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=10, pady=(0, 10))
         progress_frame.columnconfigure(1, weight=1)
         
         # Progress bar
@@ -208,7 +209,7 @@ class VideoSubtitlerTab(BaseTab):
         
         # === Row 2: Transcription (SRT) ===
         srt_frame = ttk.LabelFrame(scrollable_frame, text="Transcription (SRT)", padding=10)
-        srt_frame.grid(row=2, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
+        srt_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
         srt_frame.rowconfigure(0, weight=1)
         srt_frame.columnconfigure(0, weight=1)
         
@@ -244,7 +245,7 @@ class VideoSubtitlerTab(BaseTab):
         
         # === Row 3: Translation ===
         translation_frame = ttk.LabelFrame(scrollable_frame, text="Translation", padding=10)
-        translation_frame.grid(row=3, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
+        translation_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
         translation_frame.columnconfigure(1, weight=1)
         
         # Translate button
@@ -276,9 +277,9 @@ class VideoSubtitlerTab(BaseTab):
         # Configure row weights for expansion
         translation_frame.rowconfigure(1, weight=1)
         
-        # === Row 4: Burn Subtitles (FFmpeg) ===
+        # === Row 0, Column 1: Burn Subtitles (FFmpeg) ===
         burn_frame = ttk.LabelFrame(scrollable_frame, text="Burn Subtitles (FFmpeg)", padding=10)
-        burn_frame.grid(row=4, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
+        burn_frame.grid(row=0, column=1, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=10)
         burn_frame.columnconfigure(1, weight=1)
         
         # Use original name checkbox
@@ -311,7 +312,7 @@ class VideoSubtitlerTab(BaseTab):
         
         # Opacity slider
         ttk.Label(burn_frame, text="Background opacity:").grid(
-            row=2, column=0, sticky=tk.W, padx=(0, 5), pady=(0, 5)
+            row=4, column=0, sticky=tk.W, padx=(0, 5), pady=(0, 5)
         )
         self.bg_opacity_var = tk.DoubleVar(value=0.6)
         opacity_slider = ttk.Scale(
@@ -321,12 +322,12 @@ class VideoSubtitlerTab(BaseTab):
             variable=self.bg_opacity_var,
             length=160
         )
-        opacity_slider.grid(row=2, column=1, sticky=tk.W, pady=(0, 5))
-        
+        opacity_slider.grid(row=4, column=1, sticky=tk.W, pady=(0, 5))
+
         # Show numeric value
         self.opacity_label_var = tk.StringVar(value="0.60")
         ttk.Label(burn_frame, textvariable=self.opacity_label_var).grid(
-            row=2, column=2, sticky=tk.W, padx=(5, 0), pady=(0, 5)
+            row=4, column=2, sticky=tk.W, padx=(5, 0), pady=(0, 5)
         )
         
         # Update label when slider moves
@@ -342,7 +343,7 @@ class VideoSubtitlerTab(BaseTab):
             state=tk.DISABLED,
             width=20
         )
-        self.burn_btn.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=(5, 5))
+        self.burn_btn.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=(5, 5))
         
         # FFmpeg status
         self.ffmpeg_status_var = tk.StringVar(value="")
@@ -351,7 +352,7 @@ class VideoSubtitlerTab(BaseTab):
             textvariable=self.ffmpeg_status_var,
             foreground="blue"
         )
-        status_label.grid(row=5, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        status_label.grid(row=6, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
         
         # Open output file button
         self.open_output_btn = ttk.Button(
@@ -361,7 +362,7 @@ class VideoSubtitlerTab(BaseTab):
             state=tk.DISABLED,
             width=20
         )
-        self.open_output_btn.grid(row=6, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
+        self.open_output_btn.grid(row=7, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
         
     def set_controller(self, controller):
         """Set the controller for this view."""
