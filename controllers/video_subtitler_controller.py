@@ -12,6 +12,7 @@ from pathlib import Path
 from tkinter import filedialog
 from models.transcribe_model import TranscribeModel
 from models.translation_model import TranslationModel
+from models.transcription.youtube import get_youtube_title
 from utils.settings_manager import SettingsManager
 from utils.logger import logger
 
@@ -118,7 +119,7 @@ class VideoSubtitlerController:
             self.tab.after(0, lambda: self.tab.update_progress(0, "Downloading..."))
             
             # Extract video title first
-            self._original_video_title = _extract_youtube_title(url)
+            self._original_video_title = get_youtube_title(url) or 'video'
             
             # Ensure temp directory exists
             TEMP_DIR.mkdir(exist_ok=True)
