@@ -41,7 +41,7 @@ class VideoSubtitlerModel:
             "merge_output_format": "mp4",
             "postprocessors": [{
                 'key': 'FFmpegVideoConvertor',
-                'preferredformat': 'mp4',
+                'preferedformat': 'mp4',  # Fixed typo: preferedformat (one 'r') not preferredformat (two 'r's)
             }],
             "progress_hooks": [hook],
             "quiet": True,
