@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import shlex
 from typing import Optional, Tuple
 
 from utils.logger import logger
@@ -25,17 +26,22 @@ def run_transcribe_cli(
     """
 
     try:
+        # Properly quote input_path to handle special characters like &, |, >, <, etc.
+        # This prevents shell interpretation issues on Windows
+        safe_input_path = shlex.quote(input_path) if os.name == 'nt' else input_path
+        
         cmd = [
             "transcribe-anything",
-            input_path,
+            input_path,  # Use original for list format (safe)
             "--device",
             device,
             "--output_dir",
             output_dir,
         ]
-
+        
+        # For logging, use the safe version to avoid shell interpretation in logs
         logger.info("Running: %s … --device %s", " ".join(cmd[:2]), device)
-        logger.debug("Full command: %s", " ".join(cmd))
+        logger.debug("Full command: %s", " ".join([shlex.quote(arg) if isinstance(arg, str) else str(arg) for arg in cmd]))
 
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
@@ -64,6 +70,18 @@ def run_transcribe_cli(
                     "Transcription failed with Unicode error for: %s", input_path
                 )
                 logger.error("Details: %s", error_output[:200])
+                return False, error
+            
+            # Handle JavaScript runtime issues for YouTube URLs
+            if "JavaScript runtime" in error_output or "EJS" in error_output:
+                error = (
+                    "YouTube extraction requires a JavaScript runtime (Node.js or Deno). "
+                    "Please install Node.js or configure yt-dlp with --js-runtimes. "
+                    "See: https://github.com/yt-dlp/yt-dlp/wiki/EJS"
+                )
+                logger.error(
+                    "YouTube extraction failed due to missing JavaScript runtime"
+                )
                 return False, error
 
             logger.error(

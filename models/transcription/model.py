@@ -188,6 +188,15 @@ class TranscribeModel:
                 device=device,
             )
             if not success:
+                # Add context for YouTube URL failures
+                if "JavaScript runtime" in error or "EJS" in error:
+                    enhanced_error = (
+                        f"YouTube transcription failed: {error}\n"
+                        "This typically occurs when yt-dlp cannot extract YouTube content "
+                        "due to missing JavaScript runtime. Install Node.js or configure "
+                        "yt-dlp with --js-runtimes flag."
+                    )
+                    return False, None, enhanced_error, None
                 return False, None, error, None
 
             transcript_content, metadata = process_outputs(
