@@ -37,13 +37,35 @@ class VideoSubtitlerModel:
 
         ydl_opts = {
             "outtmpl": str(TEMP_DIR / "video.%(ext)s"),
-            "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            "format": "bv*+ba/b",  # Best video + best audio / best fallback
             "merge_output_format": "mp4",
+            "postprocessors": [{
+                'key': 'FFmpegVideoConvertor',
+                'preferredformat': 'mp4',
+            }],
             "progress_hooks": [hook],
             "quiet": True,
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+            try:
+                ydl.download([url])
+            except Exception as e:
+                # Enhanced error handling for download failures
+                error_msg = str(e)
+                if "No supported JavaScript runtime" in error_msg:
+                    raise Exception(
+                        f"YouTube download failed: {error_msg}\n"
+                        "This typically occurs when yt-dlp cannot extract YouTube content "
+                        "due to missing JavaScript runtime. Install Node.js or configure "
+                        "yt-dlp with --js-runtimes flag."
+                    )
+                elif "no video formats" in error_msg.lower():
+                    raise Exception(
+                        f"YouTube download failed: {error_msg}\n"
+                        "The video may be unavailable, private, or region-restricted."
+                    )
+                else:
+                    raise Exception(f"YouTube download failed: {error_msg}")
         # yt-dlp may produce video.mp4 directly or video.webm etc — find actual file
         candidates = list(TEMP_DIR.glob("video.*"))
         mp4_files = [f for f in candidates if f.suffix == ".mp4"]
