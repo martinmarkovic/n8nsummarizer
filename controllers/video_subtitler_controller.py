@@ -13,15 +13,18 @@ from tkinter import filedialog
 from models.transcribe_model import TranscribeModel
 from models.translation_model import TranslationModel
 from models.transcription.youtube import get_youtube_title
-from models.video_subtitler_model import VideoSubtitlerModel
+from models.video_subtitler_model import VideoSubtitlerModel, TEMP_DIR, TRANSCRIBE_OUT_DIR
 from utils.settings_manager import SettingsManager
 from utils.logger import logger
+from utils.video_utils import (
+    download_progress_hook,
+    model_progress_callback,
+    create_download_progress_wrapper,
+    run_translation_sync
+)
 
 
 # TEMP_DIR and utility functions are now in VideoSubtitlerModel
-# Kept here for reference but no longer used directly
-TEMP_DIR = Path("temp_subtitler")
-TRANSCRIBE_OUT_DIR = TEMP_DIR / "out"
 
 
 class VideoSubtitlerController:
@@ -44,9 +47,23 @@ class VideoSubtitlerController:
             if saved_dir:
                 self._output_dir = Path(saved_dir)
                 tab.output_dir_var.set(saved_dir)
-        
+
         tab.set_controller(self)
         logger.info("VideoSubtitlerController initialized")
+        
+        # Create callback for video utils (instance method to avoid scope issues)
+        self.tab_progress_callback = lambda percent, message: self.tab.after(0, lambda p=percent, m=message: self.tab.update_progress(p, m))
+        
+        # Create callback dictionary for translation sync (instance method to avoid scope issues)
+        def create_translation_callbacks(self):
+            """Create callbacks dictionary for run_translation_sync"""
+            return {
+                'after': lambda delay, func: self.tab.after(delay, func),
+                'display_translated_srt': lambda translated: self.tab.display_translated_srt(translated),
+                'update_status': lambda status: self.tab.update_status(status),
+                'enable_burn_btn': lambda: self.tab.enable_burn_btn()
+            }
+        self.create_translation_callbacks = create_translation_callbacks.__get__(self, self.__class__)
 
     def on_start(self):
         if self._thread and self._thread.is_alive():
@@ -97,7 +114,9 @@ class VideoSubtitlerController:
             self._original_video_title = get_youtube_title(url) or 'video'
             
             # Use model to handle download and processing with correct callback
-            download_progress_wrapper = self._create_download_progress_wrapper()
+            download_progress_wrapper = create_download_progress_wrapper(
+                lambda p, s, e: model_progress_callback(p, s, e, tab_callback=self.tab_progress_callback)
+            )
             video_path = self.video_subtitler_model.download_and_process_video(url, download_progress_wrapper)
             
             self.tab.after(0, lambda: self.tab.update_progress(100, "Download complete."))
@@ -106,7 +125,12 @@ class VideoSubtitlerController:
             self._run_transcription(str(video_path))
             
             # Run translation
-            ok = self._run_translation_sync()
+            ok = run_translation_sync(
+                self.translation_model, 
+                self.srt_path, 
+                self.tab.get_target_language(),
+                self.create_translation_callbacks()
+            )
             if ok:
                 self._run_ffmpeg()
             
@@ -125,13 +149,21 @@ class VideoSubtitlerController:
             
             # Use model to handle local file processing
             source_path = Path(file_path)
-            video_path = self.video_subtitler_model.process_local_video_file(source_path, self._model_progress_callback)
+            video_path = self.video_subtitler_model.process_local_video_file(
+                source_path, 
+                lambda p, s=0, e=0, m=None: model_progress_callback(p, s, e, m, tab_callback=tab_progress_callback)
+            )
             
             # Run transcription
             self._run_transcription(str(video_path))
             
             # Run translation
-            ok = self._run_translation_sync()
+            ok = run_translation_sync(
+                self.translation_model, 
+                self.srt_path, 
+                self.tab.get_target_language(),
+                self.create_translation_callbacks()
+            )
             if ok:
                 self._run_ffmpeg()
             
@@ -164,43 +196,7 @@ class VideoSubtitlerController:
         finally:
             self.tab.after(0, lambda: self.tab.set_busy(False))
 
-    def _download_progress_hook(self, progress_info):
-        """Progress hook for yt-dlp downloads."""
-        status = progress_info.get('status')
-        if status == 'downloading':
-            downloaded = progress_info.get('downloaded_bytes', 0)
-            total = progress_info.get('total_bytes') or progress_info.get('total_bytes_estimate', 0)
-            speed = progress_info.get('speed', 0)
-            eta = progress_info.get('eta', 0)
-            
-            if total > 0:
-                percent = (downloaded / total) * 100
-                speed_mb = (speed or 0) / (1024 * 1024)
-                msg = f"Downloading: {percent:.1f}% — {speed_mb:.2f} MB/s — ETA: {eta}s"
-                self.tab.after(0, lambda p=percent, m=msg: self.tab.update_progress(p, m))
 
-    def _model_progress_callback(self, percent: float, speed: float = 0, eta: int = 0, message: str = None):
-        """Progress callback for VideoSubtitlerModel operations."""
-        if message:
-            msg = f"{message}: {percent:.1f}%"
-        else:
-            speed_mb = speed / (1024 * 1024) if speed else 0
-            msg = f"Processing: {percent:.1f}% — {speed_mb:.2f} MB/s — ETA: {eta}s"
-        
-        self.tab.after(0, lambda p=percent, m=msg: self.tab.update_progress(p, m))
-
-    def _create_download_progress_wrapper(self):
-        """Create a wrapper to adapt yt-dlp progress dict to model callback format."""
-        def wrapper(progress_info):
-            """Convert yt-dlp progress dict to (percent, speed, eta) format."""
-            if progress_info.get('status') == 'downloading':
-                downloaded = progress_info.get('downloaded_bytes', 0)
-                total = progress_info.get('total_bytes') or progress_info.get('total_bytes_estimate', 1)
-                speed = progress_info.get('speed', 0) or 0
-                eta = progress_info.get('eta', 0) or 0
-                pct = (downloaded / total * 100) if total else 0
-                return self._model_progress_callback(pct, speed, eta)
-        return wrapper
 
     def _run_local(self, file_path):
         """Process local video file using VideoSubtitlerModel."""
@@ -210,7 +206,10 @@ class VideoSubtitlerController:
             
             # Use model to handle local file processing
             source_path = Path(file_path)
-            video_path = self.video_subtitler_model.process_local_video_file(source_path, self._model_progress_callback)
+            video_path = self.video_subtitler_model.process_local_video_file(
+                source_path, 
+                lambda p, s=0, e=0, m=None: model_progress_callback(p, s, e, m, tab_callback=self.tab_progress_callback)
+            )
             
             # Run transcription (video file remains in temp directory for other steps)
             self._run_transcription(str(video_path))
@@ -440,25 +439,7 @@ class VideoSubtitlerController:
             # Re-enable burn button
             self.tab.after(0, lambda: self.tab.burn_btn.config(state=tk.NORMAL))
     
-    def _run_translation_sync(self) -> bool:
-        """Run translation synchronously for auto pipeline."""
-        try:
-            lang = self.tab.get_target_language()
-            srt_text = self.srt_path.read_text(encoding="utf-8")
-            self.translation_model.set_current_file_path(str(self.srt_path))
-            success, translated, error = self.translation_model.translate_srt(srt_text, lang)
-            if success:
-                self.translated_srt_path = TEMP_DIR / "video_translated.srt"
-                self.translated_srt_path.write_text(translated, encoding="utf-8")
-                self.tab.after(0, lambda t=translated: self.tab.display_translated_srt(t))
-                return True
-            else:
-                self.tab.after(0, lambda e=error: self.tab.update_status(f"❌ Translation failed: {e}"))
-                return False
-        except Exception as e:
-            logger.error(f"Auto translation error: {e}", exc_info=True)
-            self.tab.after(0, lambda e=e: self.tab.update_status(f"❌ Translation error: {e}"))
-            return False
+
     
     def set_output_dir(self, path: str):
         """Set output directory and save to settings."""

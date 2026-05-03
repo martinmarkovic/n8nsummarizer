@@ -5,7 +5,7 @@ import os
 import threading
 from datetime import datetime
 from tkinter import filedialog, messagebox
-from models.file_scanner import FileScanner
+from models.file_reader import FileReader
 from models.http_client import HTTPClient
 from utils.logger import logger
 from config import EXPORT_DIR
@@ -16,7 +16,7 @@ class ScannerController:
     
     def __init__(self, view):
         self.view = view
-        self.file_scanner = FileScanner()
+        self.file_reader = FileReader()
         self.http_client = HTTPClient()
         
         # Setup view callbacks
@@ -33,13 +33,13 @@ class ScannerController:
         """Handle file selection from view"""
         logger.info(f"File selected: {file_path}")
         
-        success, content, error = self.file_scanner.read_file(file_path)
+        success, content, error = self.file_reader.read_file(file_path)
         
         if success:
             self.view.set_file_path(file_path)
             self.view.set_content(content)
             
-            file_info = self.file_scanner.get_file_info()
+            file_info = self.file_reader.get_file_info()
             self.view.set_file_info(file_info)
             
             self.view.set_status(f"File loaded: {file_info['name']}")
@@ -455,7 +455,7 @@ class ScannerController:
     
     def handle_clear_clicked(self):
         logger.info("Clear button clicked")
-        self.file_scanner.clear()
+        self.file_reader.clear()
         self.view.clear_all()
         self.view.set_status("Ready")
     

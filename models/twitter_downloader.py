@@ -11,50 +11,38 @@ from typing import Optional, Callable, Dict, Any, Tuple
 import logging
 
 from models.youtube_downloader import YouTubeDownloader
+from models.base_downloader import BaseDownloader
 
 logger = logging.getLogger(__name__)
 
 
-class TwitterDownloader:
-    """Download videos from Twitter/X using yt-dlp."""
-
+class TwitterDownloader(BaseDownloader):
+    """Download videos from Twitter/X using yt-dlp.
+    
+    Extends BaseDownloader with Twitter-specific functionality:
+    - Uses YouTubeDownloader's resolution presets for consistency
+    - Implements Twitter URL handling and video info extraction
+    - Provides Twitter-specific download options
+    """
+    
     def __init__(self) -> None:
-        self.download_path: Optional[Path] = None
-        self.selected_resolution: str = "Best Available"
-        self.progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
-        self.is_downloading: bool = False
+        super().__init__()
 
-    # --------------------------- Configuration ---------------------------
-
-    def set_download_path(self, path: str) -> None:
-        self.download_path = Path(path)
-        logger.info(f"[Twitter] Download path set to: {self.download_path}")
-
-    def set_resolution(self, resolution: str) -> None:
-        if resolution in YouTubeDownloader.RESOLUTION_FORMATS:
-            self.selected_resolution = resolution
-        else:
-            logger.warning(f"[Twitter] Unknown resolution '{resolution}', using Best Available")
-            self.selected_resolution = "Best Available"
-
+    # --------------------------- Twitter-Specific Configuration ---------------------------
+    
     def set_po_token(self, token: Optional[str]) -> None:  # Kept for interface compatibility
         # PO tokens are not used for Twitter; ignore.
         return
-
+    
     def get_po_token(self) -> Optional[str]:
         return None
-
+    
     def has_po_token(self) -> bool:
         return False
-
-    def set_progress_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None:
-        self.progress_callback = callback
-
-    # --------------------------- Helpers ---------------------------
-
-    def _progress_hook(self, d: Dict[str, Any]) -> None:
-        if self.progress_callback:
-            self.progress_callback(d)
+    
+    # Note: set_download_path(), set_resolution(), set_progress_callback(), and _progress_hook()
+    # are inherited from BaseDownloader and should not be overridden unless platform-specific
+    # behavior is required.
 
     # --------------------------- Public API ---------------------------
 
@@ -83,13 +71,10 @@ class TwitterDownloader:
         if self.is_downloading:
             return False, "Download already in progress"
 
-        if not self.download_path:
-            return False, "No download path set"
-
-        try:
-            self.download_path.mkdir(parents=True, exist_ok=True)
-        except Exception as exc:
-            return False, f"Failed to create download directory: {exc}"
+        # Validate download path using base class utility
+        path_ok, path_error = self._ensure_download_path_exists()
+        if not path_ok:
+            return False, path_error
 
         # Map resolution preset to yt-dlp format string from YouTubeDownloader
         format_string = YouTubeDownloader.RESOLUTION_FORMATS[self.selected_resolution]
@@ -130,6 +115,4 @@ class TwitterDownloader:
             logger.error(error_msg)
             return False, error_msg
 
-    def cancel_download(self) -> None:
-        self.is_downloading = False
-        logger.info("[Twitter] Download cancellation requested")
+    # cancel_download() is inherited from BaseDownloader
