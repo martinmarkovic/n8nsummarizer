@@ -27,7 +27,13 @@ class VideoSubtitlerModel:
                 speed = d.get("speed", 0) or 0
                 eta = d.get("eta", 0) or 0
                 pct = (downloaded / total * 100) if total else 0
-                progress_cb(pct, speed, eta)
+                # Check callback signature and call appropriately
+                try:
+                    # Try calling with 3 arguments first (new style)
+                    progress_cb(pct, speed, eta)
+                except TypeError:
+                    # Fall back to single argument (old style)
+                    progress_cb(d)
 
         ydl_opts = {
             "outtmpl": str(TEMP_DIR / "video.%(ext)s"),

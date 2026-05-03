@@ -96,8 +96,9 @@ class VideoSubtitlerController:
             # Extract video title first
             self._original_video_title = get_youtube_title(url) or 'video'
             
-            # Use model to handle download and processing
-            video_path = self.video_subtitler_model.download_and_process_video(url, self._download_progress_hook)
+            # Use model to handle download and processing with correct callback
+            download_progress_wrapper = self._create_download_progress_wrapper()
+            video_path = self.video_subtitler_model.download_and_process_video(url, download_progress_wrapper)
             
             self.tab.after(0, lambda: self.tab.update_progress(100, "Download complete."))
             
@@ -147,8 +148,9 @@ class VideoSubtitlerController:
             self.tab.after(0, lambda: self.tab.update_status("⬇ Downloading video..."))
             self.tab.after(0, lambda: self.tab.update_progress(0, "Downloading..."))
             
-            # Use model to handle download and processing
-            video_path = self.video_subtitler_model.download_and_process_video(url, self._download_progress_hook)
+            # Use model to handle download and processing with correct callback
+            download_progress_wrapper = self._create_download_progress_wrapper()
+            video_path = self.video_subtitler_model.download_and_process_video(url, download_progress_wrapper)
             
             self.tab.after(0, lambda: self.tab.update_progress(100, "Download complete."))
             
@@ -186,6 +188,19 @@ class VideoSubtitlerController:
             msg = f"Processing: {percent:.1f}% — {speed_mb:.2f} MB/s — ETA: {eta}s"
         
         self.tab.after(0, lambda p=percent, m=msg: self.tab.update_progress(p, m))
+
+    def _create_download_progress_wrapper(self):
+        """Create a wrapper to adapt yt-dlp progress dict to model callback format."""
+        def wrapper(progress_info):
+            """Convert yt-dlp progress dict to (percent, speed, eta) format."""
+            if progress_info.get('status') == 'downloading':
+                downloaded = progress_info.get('downloaded_bytes', 0)
+                total = progress_info.get('total_bytes') or progress_info.get('total_bytes_estimate', 1)
+                speed = progress_info.get('speed', 0) or 0
+                eta = progress_info.get('eta', 0) or 0
+                pct = (downloaded / total * 100) if total else 0
+                return self._model_progress_callback(pct, speed, eta)
+        return wrapper
 
     def _run_local(self, file_path):
         """Process local video file using VideoSubtitlerModel."""
