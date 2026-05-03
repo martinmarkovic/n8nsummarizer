@@ -82,7 +82,7 @@ def main():
 
         # Initialize Transcriber tab controller FIRST (so it's available for YouTube controller)
         # Wires: TranscriberTab UI ↔ TranscriberController ↔ TranscribeModel + N8NModel
-        transcriber_controller = TranscriberController(window.transcriber_tab)
+        transcriber_controller = TranscriberController(window.transcriber_tab, settings)
         logger.info("TranscriberController initialized")
 
         # Initialize YouTube Summarizer tab controller

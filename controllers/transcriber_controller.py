@@ -54,14 +54,16 @@ class TranscriberController:
     - Cleanup temporary files
     """
     
-    def __init__(self, view):
+    def __init__(self, view, settings_manager=None):
         """
         Initialize Transcriber controller.
         
         Args:
             view: TranscriberTab instance
+            settings_manager: SettingsManager instance for persistent preferences
         """
         self.view = view
+        self.settings = settings_manager
         self.transcribe_model = TranscribeModel()
         self.n8n_model = N8NModel()
         self.last_transcript_path = None  # Store last export location

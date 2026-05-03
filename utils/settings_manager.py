@@ -195,3 +195,19 @@ class SettingsManager:
     def set_youtube_po_token(self, token: str) -> None:
         """Set YouTube PO token."""
         self.set("YOUTUBE_PO_TOKEN", token)
+    
+    def get_transcriber_output_location(self) -> str:
+        """Get transcriber output location preference."""
+        return self.get("TRANSCRIBER_OUTPUT_LOCATION", "original")
+    
+    def set_transcriber_output_location(self, location: str) -> None:
+        """Set transcriber output location preference."""
+        self.set("TRANSCRIBER_OUTPUT_LOCATION", location)
+    
+    def get_transcriber_custom_path(self) -> str:
+        """Get transcriber custom output path."""
+        return self.get("TRANSCRIBER_CUSTOM_PATH", "")
+    
+    def set_transcriber_custom_path(self, path: str) -> None:
+        """Set transcriber custom output path."""
+        self.set("TRANSCRIBER_CUSTOM_PATH", path)

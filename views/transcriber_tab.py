@@ -34,20 +34,31 @@ class TranscriberTab(BaseTab):
     - Proper window resizing
     """
     
-    def __init__(self, parent):
+    def __init__(self, parent, settings_manager=None):
         """
         Initialize Transcriber tab.
         
         Args:
             parent: Parent widget (ttk.Notebook)
+            settings_manager: SettingsManager instance for persistent preferences
         """
+        self.settings = settings_manager
+        
         # Initialize variables BEFORE calling super().__init__()
         self.mode_var = tk.StringVar(value="local")
         self.device_var = tk.StringVar(value="cuda")
         self.file_path_var = tk.StringVar()
         self.url_var = tk.StringVar()
-        self.output_location_var = tk.StringVar(value="original")  # original or custom
-        self.output_custom_path_var = tk.StringVar()
+        
+        # Load saved output location preference or default to "original"
+        default_output_location = "original"
+        default_custom_path = ""
+        if self.settings:
+            default_output_location = self.settings.get_transcriber_output_location()
+            default_custom_path = self.settings.get_transcriber_custom_path()
+        
+        self.output_location_var = tk.StringVar(value=default_output_location)
+        self.output_custom_path_var = tk.StringVar(value=default_custom_path)
         
         # Output format checkboxes
         self.keep_txt_var = tk.BooleanVar(value=True)
@@ -345,11 +356,15 @@ class TranscriberTab(BaseTab):
             self.youtube_frame.grid(row=0, column=0, columnspan=3, sticky=(tk.W, tk.E))
     
     def _toggle_output_location(self):
-        """Toggle custom output location field"""
+        """Toggle custom output location field and save preference"""
         if self.output_location_var.get() == "custom":
             self.custom_path_frame.grid()
         else:
             self.custom_path_frame.grid_remove()
+        
+        # Save output location preference
+        if self.settings:
+            self.settings.set_transcriber_output_location(self.output_location_var.get())
     
     def _browse_file(self):
         """Browse for local file"""
@@ -367,10 +382,13 @@ class TranscriberTab(BaseTab):
                 self.on_file_selected(file_path)
     
     def _browse_output_folder(self):
-        """Browse for custom output folder"""
+        """Browse for custom output folder and save preference"""
         folder = filedialog.askdirectory(title="Select output folder")
         if folder:
             self.output_custom_path_var.set(folder)
+            # Save custom path preference
+            if self.settings:
+                self.settings.set_transcriber_custom_path(folder)
     
     def _transcribe_clicked(self):
         """Handle transcribe button click"""

@@ -348,7 +348,7 @@ class MainWindow:
         self.notebook.add(self.youtube_summarizer_tab, text="🎜 YouTube Summarization")
 
         # Tab 2: Transcriber
-        self.transcriber_tab = TranscriberTab(self.notebook)
+        self.transcriber_tab = TranscriberTab(self.notebook, self.settings)
         self.notebook.add(self.transcriber_tab, text="🗡 Transcriber")
 
         # Tab 3: Bulk Summarizer
