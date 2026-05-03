@@ -29,6 +29,7 @@ import logging
 from docx import Document
 
 from models.n8n_model import N8NModel
+from utils.file_scanner import FileScanner
 from utils.logger import logger
 
 
@@ -136,29 +137,25 @@ class BulkSummarizerController:
 
         Supported types: txt, srt, docx, pdf, opus (NEW v4.5)
         """
-        folder_path = Path(folder)
-        files = []
-
-        # NEW v4.5: added opus pattern
+        # Patterns for file discovery
         patterns = {
-            'txt':  '*.txt',
-            'srt':  '*.srt',
-            'docx': '*.docx',
-            'pdf':  '*.pdf',
-            'opus': '*.opus',
+            'txt':  ['*.txt'],
+            'srt':  ['*.srt'],
+            'docx': ['*.docx'],
+            'pdf':  ['*.pdf'],
+            'opus': ['*.opus'],
         }
 
         try:
+            # Filter patterns to only include selected file types
+            selected_patterns = {}
             for file_type in file_types:
                 if file_type in patterns:
-                    if recursive:
-                        matching = list(folder_path.rglob(patterns[file_type]))
-                    else:
-                        matching = list(folder_path.glob(patterns[file_type]))
-                    logger.debug(f"Found {len(matching)} {file_type} files (recursive={recursive})")
-                    files.extend(matching)
+                    selected_patterns[file_type] = patterns[file_type]
 
-            files = sorted(set(files))
+            # Use FileScanner for unified file discovery
+            files = FileScanner.scan_with_patterns(folder, selected_patterns, recursive)
+            
             logger.info(
                 f"Discovered {len(files)} total files matching types: {file_types}, "
                 f"recursive={recursive}"

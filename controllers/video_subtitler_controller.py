@@ -13,38 +13,15 @@ from tkinter import filedialog
 from models.transcribe_model import TranscribeModel
 from models.translation_model import TranslationModel
 from models.transcription.youtube import get_youtube_title
+from models.video_subtitler_model import VideoSubtitlerModel
 from utils.settings_manager import SettingsManager
 from utils.logger import logger
 
 
-def _sanitize_filename(title: str) -> str:
-    """Sanitize filename for filesystem safety."""
-    # Remove special chars, keep alphanumeric, spaces, hyphens, underscores
-    safe = re.sub(r'[^\w\s\-\_]', '', title).strip()
-    # Replace spaces with underscores
-    safe = re.sub(r'\s+', '_', safe)
-    # Limit to 80 characters
-    return safe[:80] if safe else 'video'
-
-
+# TEMP_DIR and utility functions are now in VideoSubtitlerModel
+# Kept here for reference but no longer used directly
 TEMP_DIR = Path("temp_subtitler")
 TRANSCRIBE_OUT_DIR = TEMP_DIR / "out"
-
-
-def _clean_temp_folder():
-    """Clean temp folder of previous SRT files and videos."""
-    if not TEMP_DIR.exists():
-        return
-    
-    # Remove previous SRT files and video files
-    for file in TEMP_DIR.iterdir():
-        if file.is_file():
-            if file.suffix.lower() in {".srt", ".mp4", ".webm", ".mkv", ".avi", ".mov"}:
-                try:
-                    file.unlink()
-                    logger.info(f"Cleaned up previous file: {file.name}")
-                except Exception as e:
-                    logger.warning(f"Failed to clean up {file.name}: {e}")
 
 
 class VideoSubtitlerController:
@@ -53,6 +30,7 @@ class VideoSubtitlerController:
         self.settings = settings_manager
         self.transcribe_model = TranscribeModel()
         self.translation_model = TranslationModel()
+        self.video_subtitler_model = VideoSubtitlerModel()
         self._thread = None
         self.srt_path = None
         self.translated_srt_path = None
@@ -112,40 +90,16 @@ class VideoSubtitlerController:
     def _run_auto_url(self, url):
         """Run complete pipeline for URL input: Download → Transcribe → Translate → Burn."""
         try:
-            # Clean temp folder before starting
-            _clean_temp_folder()
-            
             self.tab.after(0, lambda: self.tab.update_status("⬇ Downloading video..."))
             self.tab.after(0, lambda: self.tab.update_progress(0, "Downloading..."))
             
             # Extract video title first
             self._original_video_title = get_youtube_title(url) or 'video'
             
-            # Ensure temp directory exists
-            TEMP_DIR.mkdir(exist_ok=True)
-            
-            # yt-dlp options with fixed output filename "video.%(ext)s"
-            ydl_opts = {
-                'format': 'bv*+ba/b',  # Best video + best fallback
-                'outtmpl': str(TEMP_DIR / 'video.%(ext)s'),  # Fixed filename pattern
-                'progress_hooks': [self._download_progress_hook],
-                'quiet': True,
-                'no_warnings': True,
-            }
-            
-            # Download the video
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+            # Use model to handle download and processing
+            video_path = self.video_subtitler_model.download_and_process_video(url, self._download_progress_hook)
             
             self.tab.after(0, lambda: self.tab.update_progress(100, "Download complete."))
-            
-            # Find the downloaded video file
-            downloaded_files = list(TEMP_DIR.glob("video.*"))
-            if not downloaded_files:
-                raise FileNotFoundError("No video file found after download")
-            
-            # Use the first matching file (should be video.mp4, video.webm, etc.)
-            video_path = downloaded_files[0]
             
             # Run transcription
             self._run_transcription(str(video_path))
@@ -165,26 +119,15 @@ class VideoSubtitlerController:
     def _run_auto_local(self, file_path):
         """Run complete pipeline for local file: Copy → Transcribe → Translate → Burn."""
         try:
-            # Clean temp folder before starting
-            _clean_temp_folder()
-            
             self.tab.after(0, lambda: self.tab.update_status("📁 Processing local file..."))
             self.tab.after(0, lambda: self.tab.update_progress(0, "Processing..."))
-
-            # Ensure temp directory exists
-            TEMP_DIR.mkdir(exist_ok=True)
             
-            # Copy file to temp directory with fixed filename pattern
+            # Use model to handle local file processing
             source_path = Path(file_path)
-            final_video_path = TEMP_DIR / "video.mp4"  # Always use .mp4 for consistency
-            if final_video_path.exists():
-                final_video_path.unlink()
-            
-            shutil.copy2(source_path, final_video_path)
-            self.tab.after(0, lambda: self.tab.update_progress(100, "File processing complete."))
+            video_path = self.video_subtitler_model.process_local_video_file(source_path, self._model_progress_callback)
             
             # Run transcription
-            self._run_transcription(str(final_video_path))
+            self._run_transcription(str(video_path))
             
             # Run translation
             ok = self._run_translation_sync()
@@ -199,39 +142,15 @@ class VideoSubtitlerController:
             self.tab.after(0, lambda: self.tab.set_busy(False))
 
     def _run_url(self, url):
-        """Process URL-based video using yt-dlp direct download."""
+        """Process URL-based video using VideoSubtitlerModel."""
         try:
-            # Clean temp folder before starting
-            _clean_temp_folder()
-            
             self.tab.after(0, lambda: self.tab.update_status("⬇ Downloading video..."))
             self.tab.after(0, lambda: self.tab.update_progress(0, "Downloading..."))
-
-            # Ensure temp directory exists
-            TEMP_DIR.mkdir(exist_ok=True)
             
-            # yt-dlp options with fixed output filename "video.%(ext)s"
-            ydl_opts = {
-                'format': 'bv*+ba/b',  # Best video + best audio / best fallback
-                'outtmpl': str(TEMP_DIR / 'video.%(ext)s'),  # Fixed filename pattern
-                'progress_hooks': [self._download_progress_hook],
-                'quiet': True,
-                'no_warnings': True,
-            }
-            
-            # Download the video
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+            # Use model to handle download and processing
+            video_path = self.video_subtitler_model.download_and_process_video(url, self._download_progress_hook)
             
             self.tab.after(0, lambda: self.tab.update_progress(100, "Download complete."))
-            
-            # Find the downloaded video file
-            downloaded_files = list(TEMP_DIR.glob("video.*"))
-            if not downloaded_files:
-                raise FileNotFoundError("No video file found after download")
-            
-            # Use the first matching file (should be video.mp4, video.webm, etc.)
-            video_path = downloaded_files[0]
             
             # Run transcription (video file remains in temp directory for other steps)
             self._run_transcription(str(video_path))
@@ -258,29 +177,28 @@ class VideoSubtitlerController:
                 msg = f"Downloading: {percent:.1f}% — {speed_mb:.2f} MB/s — ETA: {eta}s"
                 self.tab.after(0, lambda p=percent, m=msg: self.tab.update_progress(p, m))
 
+    def _model_progress_callback(self, percent: float, speed: float = 0, eta: int = 0, message: str = None):
+        """Progress callback for VideoSubtitlerModel operations."""
+        if message:
+            msg = f"{message}: {percent:.1f}%"
+        else:
+            speed_mb = speed / (1024 * 1024) if speed else 0
+            msg = f"Processing: {percent:.1f}% — {speed_mb:.2f} MB/s — ETA: {eta}s"
+        
+        self.tab.after(0, lambda p=percent, m=msg: self.tab.update_progress(p, m))
+
     def _run_local(self, file_path):
-        """Process local video file."""
+        """Process local video file using VideoSubtitlerModel."""
         try:
-            # Clean temp folder before starting
-            _clean_temp_folder()
-            
             self.tab.after(0, lambda: self.tab.update_status("📁 Processing local file..."))
             self.tab.after(0, lambda: self.tab.update_progress(0, "Processing..."))
-
-            # Ensure temp directory exists
-            TEMP_DIR.mkdir(exist_ok=True)
             
-            # Copy file to temp directory with fixed filename pattern
+            # Use model to handle local file processing
             source_path = Path(file_path)
-            final_video_path = TEMP_DIR / "video.mp4"  # Always use .mp4 for consistency
-            if final_video_path.exists():
-                final_video_path.unlink()
-            
-            shutil.copy2(source_path, final_video_path)
-            self.tab.after(0, lambda: self.tab.update_progress(100, "File processing complete."))
+            video_path = self.video_subtitler_model.process_local_video_file(source_path, self._model_progress_callback)
             
             # Run transcription (video file remains in temp directory for other steps)
-            self._run_transcription(str(final_video_path))
+            self._run_transcription(str(video_path))
             
         except Exception as e:
             logger.error(f"VideoSubtitler Local File error: {e}", exc_info=True)

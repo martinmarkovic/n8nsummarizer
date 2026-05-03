@@ -29,6 +29,7 @@ from datetime import datetime
 import logging
 
 from models.transcribe_model import TranscribeModel
+from utils.file_scanner import FileScanner
 from utils.logger import logger
 
 
@@ -166,9 +167,7 @@ class BulkTranscriberController:
     
     def _discover_files(self, folder: str, media_types: List[str], recursive: bool = False) -> List[Path]:
         """
-        Discover all matching media files in folder.
-        
-        FIXED v6.8.6: Added case-insensitive matching and detailed debugging
+        Discover all matching media files in folder using FileScanner.
         
         Args:
             folder: Path to folder
@@ -180,50 +179,35 @@ class BulkTranscriberController:
         Returns:
             Sorted list of Path objects matching selected media types
         """
-        folder_path = Path(folder)
-        files = []
-        
         logger.info(f"Starting file discovery: folder={folder}, types={media_types}, recursive={recursive}")
         
         try:
-            # Map media type to glob patterns (both lowercase and uppercase for case-insensitive matching)
-            # FIXED v6.8.6: Added both cases for each extension
-            patterns = {
-                'mp4': ['*.mp4', '*.MP4'],
-                'mov': ['*.mov', '*.MOV'],
-                'avi': ['*.avi', '*.AVI'],
-                'mkv': ['*.mkv', '*.MKV'],
-                'webm': ['*.webm', '*.WEBM', '*.WebM'],
-                'mp3': ['*.mp3', '*.MP3'],
-                'wav': ['*.wav', '*.WAV'],
-                'm4a': ['*.m4a', '*.M4A'],
-                'flac': ['*.flac', '*.FLAC'],
-                'aac': ['*.aac', '*.AAC'],
-                'wma': ['*.wma', '*.WMA'],
-                'opus': ['*.opus', '*.OPUS']  # FIXED: Added .opus support with both cases
+            # Map media types to case-insensitive extensions
+            media_type_patterns = {
+                'mp4': ['mp4', 'MP4'],
+                'mov': ['mov', 'MOV'],
+                'avi': ['avi', 'AVI'],
+                'mkv': ['mkv', 'MKV'],
+                'webm': ['webm', 'WEBM', 'WebM'],
+                'mp3': ['mp3', 'MP3'],
+                'wav': ['wav', 'WAV'],
+                'm4a': ['m4a', 'M4A'],
+                'flac': ['flac', 'FLAC'],
+                'aac': ['aac', 'AAC'],
+                'wma': ['wma', 'WMA'],
+                'opus': ['opus', 'OPUS']
             }
             
-            # Discover files for each selected type
+            # Filter patterns to only include selected media types
+            selected_patterns = {}
             for media_type in media_types:
-                if media_type in patterns:
-                    # Try both lowercase and uppercase patterns
-                    for pattern in patterns[media_type]:
-                        if recursive:
-                            # Use rglob for recursive scanning
-                            matching = list(folder_path.rglob(pattern))
-                            if matching:
-                                logger.debug(f"Found {len(matching)} files matching {pattern} (recursive)")
-                        else:
-                            # Normal glob for current folder only
-                            matching = list(folder_path.glob(pattern))
-                            if matching:
-                                logger.debug(f"Found {len(matching)} files matching {pattern}")
-                        files.extend(matching)
+                if media_type in media_type_patterns:
+                    selected_patterns[media_type] = media_type_patterns[media_type]
                 else:
                     logger.warning(f"Unknown media type: {media_type}")
             
-            # Sort and remove duplicates
-            files = sorted(set(files))
+            # Use FileScanner for unified file discovery with case-insensitive support
+            files = FileScanner.scan_with_case_insensitive_types(folder, selected_patterns, recursive)
             
             logger.info(f"Discovered {len(files)} total media files matching types: {media_types}, recursive={recursive}")
             
@@ -234,8 +218,9 @@ class BulkTranscriberController:
             else:
                 logger.error(f"No files found! Folder contents check...")
                 # List ALL files in folder for debugging
-                all_files = list(folder_path.glob('*') if not recursive else folder_path.rglob('*'))
-                all_files = [f for f in all_files if f.is_file()]
+                folder_path = Path(folder)
+                glob_method = folder_path.rglob if recursive else folder_path.glob
+                all_files = [f for f in glob_method('*') if f.is_file()]
                 logger.error(f"Total files in folder: {len(all_files)}")
                 if all_files:
                     extensions = set(f.suffix.lower() for f in all_files[:20])

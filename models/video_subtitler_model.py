@@ -23,7 +23,7 @@ class VideoSubtitlerModel:
         def hook(d):
             if progress_cb and d.get("status") == "downloading":
                 downloaded = d.get("downloaded_bytes", 0)
-                total = d.get("total_bytes") or d.get("total_bytes_estimate", 1)
+                total = d.get("total_bytes")
                 speed = d.get("speed", 0) or 0
                 eta = d.get("eta", 0) or 0
                 pct = (downloaded / total * 100) if total else 0
@@ -46,6 +46,42 @@ class VideoSubtitlerModel:
         elif candidates:
             return candidates[0]
         raise FileNotFoundError("yt-dlp did not produce a video file in temp_subtitler/")
+
+    def download_and_process_video(self, url: str, progress_cb=None) -> Path:
+        """Complete video download and processing pipeline for URL input."""
+        try:
+            # Clean temp folder before starting
+            self.clean_temp_folder()
+            
+            # Download the video
+            video_path = self.download_video(url, progress_cb)
+            
+            return video_path
+            
+        except Exception as e:
+            raise Exception(f"Failed to download and process video: {str(e)}")
+
+    def process_local_video_file(self, source_path: Path, progress_cb=None) -> Path:
+        """Complete local file processing pipeline."""
+        try:
+            # Clean temp folder before starting
+            self.clean_temp_folder()
+            
+            # Copy file to temp directory with fixed filename pattern
+            final_video_path = TEMP_DIR / "video.mp4"
+            if final_video_path.exists():
+                final_video_path.unlink()
+            
+            import shutil
+            shutil.copy2(source_path, final_video_path)
+            
+            if progress_cb:
+                progress_cb(100, "File processing complete.")
+            
+            return final_video_path
+            
+        except Exception as e:
+            raise Exception(f"Failed to process local video: {str(e)}")
 
     def process_local_video(self, file_path: Path, progress_cb=None) -> Path:
         """Process local video file for transcription."""
@@ -136,3 +172,17 @@ class VideoSubtitlerModel:
 
     def video_exists(self) -> bool:
         return VIDEO_PATH.exists()
+
+    def clean_temp_folder(self):
+        """Clean temp folder of previous SRT files and videos."""
+        if not TEMP_DIR.exists():
+            return
+        
+        # Remove previous SRT files and video files
+        for file in TEMP_DIR.iterdir():
+            if file.is_file():
+                if file.suffix.lower() in {".srt", ".mp4", ".webm", ".mkv", ".avi", ".mov"}:
+                    try:
+                        file.unlink()
+                    except Exception as e:
+                        pass  # Silent cleanup
