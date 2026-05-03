@@ -118,7 +118,7 @@ def main():
 
         # Initialize Video Subtitler tab controller
         # Wires: VideoSubtitlerTab UI ↔ VideoSubtitlerController ↔ VideoSubtitlerModel
-        video_subtitler_controller = VideoSubtitlerController(window.video_subtitler_tab)
+        video_subtitler_controller = VideoSubtitlerController(window.video_subtitler_tab, settings)
         logger.info("VideoSubtitlerController initialized")
 
         # Downloader tab controller already initialized in DownloaderTab.__init__

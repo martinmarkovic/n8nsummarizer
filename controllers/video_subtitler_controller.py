@@ -10,7 +10,7 @@ import tkinter as tk
 import re
 from pathlib import Path
 from tkinter import filedialog
-from models.transcription import TranscribeModel
+from models.transcribe_model import TranscribeModel
 from models.translation_model import TranslationModel
 from utils.settings_manager import SettingsManager
 from utils.logger import logger
@@ -26,35 +26,8 @@ def _sanitize_filename(title: str) -> str:
     return safe[:80] if safe else 'video'
 
 
-def _extract_youtube_title(url: str) -> str:
-    """Extract and sanitize YouTube video title."""
-    try:
-        import yt_dlp
-        info_opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
-        with yt_dlp.YoutubeDL(info_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            if info and 'title' in info:
-                return _sanitize_filename(info['title'])
-    except Exception as e:
-        logger.warning(f"Failed to extract YouTube title: {e}")
-    return 'video'
-
-
 TEMP_DIR = Path("temp_subtitler")
 TRANSCRIBE_OUT_DIR = TEMP_DIR / "out"
-
-# Settings for output folder persistence
-settings = SettingsManager()
-
-
-def _get_output_dir():
-    """Get saved output directory from settings."""
-    return settings.get("SUBTITLER_OUTPUT_DIR", "")
-
-
-def _set_output_dir(path: str):
-    """Save output directory to settings."""
-    settings.set("SUBTITLER_OUTPUT_DIR", path)
 
 
 def _clean_temp_folder():
@@ -74,8 +47,9 @@ def _clean_temp_folder():
 
 
 class VideoSubtitlerController:
-    def __init__(self, tab):
+    def __init__(self, tab, settings_manager=None):
         self.tab = tab
+        self.settings = settings_manager
         self.transcribe_model = TranscribeModel()
         self.translation_model = TranslationModel()
         self._thread = None
@@ -86,10 +60,11 @@ class VideoSubtitlerController:
         self._original_video_title = None
         
         # Load saved output directory
-        saved_dir = _get_output_dir()
-        if saved_dir:
-            self._output_dir = Path(saved_dir)
-            tab.output_dir_var.set(saved_dir)
+        if self.settings:
+            saved_dir = self.settings.get("SUBTITLER_OUTPUT_DIR", "")
+            if saved_dir:
+                self._output_dir = Path(saved_dir)
+                tab.output_dir_var.set(saved_dir)
         
         tab.set_controller(self)
         logger.info("VideoSubtitlerController initialized")
@@ -222,13 +197,13 @@ class VideoSubtitlerController:
             self.tab.after(0, lambda: self.tab.set_busy(False))
 
     def _run_url(self, url):
-        """Process URL-based video using极行程 yt-dlp direct download."""
+        """Process URL-based video using yt-dlp direct download."""
         try:
             # Clean temp folder before starting
             _clean_temp_folder()
             
             self.tab.after(0, lambda: self.tab.update_status("⬇ Downloading video..."))
-            self.tab.after(0, lambda: self.tab.update_progress极行程(0, "Downloading..."))
+            self.tab.after(0, lambda: self.tab.update_progress(0, "Downloading..."))
 
             # Ensure temp directory exists
             TEMP_DIR.mkdir(exist_ok=True)
@@ -552,7 +527,8 @@ class VideoSubtitlerController:
     
     def set_output_dir(self, path: str):
         """Set output directory and save to settings."""
-        _set_output_dir(path)
+        if self.settings:
+            self.settings.set("SUBTITLER_OUTPUT_DIR", path)
         self._output_dir = Path(path)
     
     def on_auto(self):

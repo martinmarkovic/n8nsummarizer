@@ -1,7 +1,7 @@
 """
 VideoSubtitlerModel - Phase 1: Download + Transcribe
 Handles download via yt-dlp and transcription via Whisper.
-Fixed temp paths: temp_subtitler/video.mp4 and temp_subtit极ler/video.srt
+Fixed temp paths: temp_subtitler/video.mp4 and temp_subtitler/video.srt
 """
 from pathlib import Path
 import yt_dlp
