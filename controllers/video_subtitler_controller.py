@@ -75,12 +75,13 @@ class VideoSubtitlerController:
             return
         
         # Check output directory
-        output_dir = _get_output_dir()
+        output_dir = self.settings.get("SUBTITLER_OUTPUT_DIR", "") if self.settings else ""
         if not output_dir or not Path(output_dir).is_dir():
             chosen = filedialog.askdirectory(title="Select output folder for subtitled video")
             if not chosen:
                 return  # User cancelled — abort everything
-            _set_output_dir(chosen)
+            if self.settings:
+                self.settings.set("SUBTITLER_OUTPUT_DIR", chosen)
             output_dir = chosen
         self._output_dir = Path(output_dir)
         
@@ -538,12 +539,13 @@ class VideoSubtitlerController:
             return
         
         # Check output directory
-        output_dir = _get_output_dir()
+        output_dir = self.settings.get("SUBTITLER_OUTPUT_DIR", "") if self.settings else ""
         if not output_dir or not Path(output_dir).is_dir():
             chosen = filedialog.askdirectory(title="Select output folder")
             if not chosen:
                 return
-            _set_output_dir(chosen)
+            if self.settings:
+                self.settings.set("SUBTITLER_OUTPUT_DIR", chosen)
             self._output_dir = Path(chosen)
         
         input_mode = self.tab.get_input_mode()
