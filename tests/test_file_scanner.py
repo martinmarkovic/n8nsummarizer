@@ -4,15 +4,15 @@ Unit tests for FileScanner model
 import unittest
 import tempfile
 import os
-from models.file_scanner import FileScanner
+from models.file_reader import FileReader
 
 
-class TestFileScanner(unittest.TestCase):
-    """Test cases for FileScanner model"""
+class TestFileReader(unittest.TestCase):
+    """Test cases for FileReader model"""
     
     def setUp(self):
         """Setup test fixtures"""
-        self.scanner = FileScanner()
+        self.reader = FileReader()
         self.temp_dir = tempfile.mkdtemp()
     
     def tearDown(self):
@@ -30,7 +30,7 @@ class TestFileScanner(unittest.TestCase):
             f.write(test_content)
         
         # Read file
-        success, content, error = self.scanner.read_file(test_file)
+        success, content, error = self.reader.read_file(test_file)
         
         self.assertTrue(success)
         self.assertEqual(content, test_content)
@@ -38,7 +38,7 @@ class TestFileScanner(unittest.TestCase):
     
     def test_read_nonexistent_file(self):
         """Test reading a nonexistent file"""
-        success, content, error = self.scanner.read_file("/nonexistent/file.txt")
+        success, content, error = self.reader.read_file("/nonexistent/file.txt")
         
         self.assertFalse(success)
         self.assertIsNone(content)
@@ -50,7 +50,7 @@ class TestFileScanner(unittest.TestCase):
         with open(test_file, 'w') as f:
             pass
         
-        success, content, error = self.scanner.read_file(test_file)
+        success, content, error = self.reader.read_file(test_file)
         
         self.assertFalse(success)
         self.assertIsNone(content)
@@ -63,8 +63,8 @@ class TestFileScanner(unittest.TestCase):
         with open(test_file, 'w') as f:
             f.write(test_content)
         
-        self.scanner.read_file(test_file)
-        info = self.scanner.get_file_info()
+        self.reader.read_file(test_file)
+        info = self.reader.get_file_info()
         
         self.assertIsNotNone(info)
         self.assertEqual(info['name'], 'info.txt')
@@ -77,12 +77,12 @@ class TestFileScanner(unittest.TestCase):
         with open(test_file, 'w') as f:
             f.write("Test content")
         
-        self.scanner.read_file(test_file)
-        self.assertIsNotNone(self.scanner.current_file)
+        self.reader.read_file(test_file)
+        self.assertIsNotNone(self.reader.current_file)
         
-        self.scanner.clear()
-        self.assertIsNone(self.scanner.current_file)
-        self.assertIsNone(self.scanner.current_content)
+        self.reader.clear()
+        self.assertIsNone(self.reader.current_file)
+        self.assertIsNone(self.reader.current_content)
 
 
 if __name__ == '__main__':

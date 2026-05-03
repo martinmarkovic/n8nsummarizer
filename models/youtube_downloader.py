@@ -21,19 +21,24 @@ custom clients or PO tokens.
 
 import yt_dlp
 from pathlib import Path
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable, Dict, Any, Tuple
 import logging
 from urllib.parse import urlparse, parse_qs
+
+from models.base_downloader import BaseDownloader
 
 logger = logging.getLogger(__name__)
 
 
-class YouTubeDownloader:
+class YouTubeDownloader(BaseDownloader):
     """Model for downloading YouTube videos using yt-dlp.
     
-    Handles video download operations with configurable quality,
-    destination folder, playlist handling (including resume-from-item),
-    audio-only modes, and progress tracking.
+    Extends BaseDownloader with YouTube-specific functionality including:
+    - Quality/resolution selection with format presets
+    - Playlist (bulk) downloads with resume-from-item support
+    - Audio-only modes via format presets
+    - PO token management (stored for future use)
+    - YouTube-specific URL validation and video info extraction
     
     Uses simplified format strings for reliable downloads.
     """
@@ -56,35 +61,10 @@ class YouTubeDownloader:
     
     def __init__(self):
         """Initialize YouTube downloader."""
-        self.download_path: Optional[Path] = None
-        self.selected_resolution: str = "Best Available"
-        self.progress_callback: Optional[Callable] = None
-        self.is_downloading: bool = False
+        super().__init__()
         self._po_token: Optional[str] = None  # Stored for future use (not applied)
         
-    # --------------------------- Configuration ---------------------------
-    def set_download_path(self, path: str) -> None:
-        """Set destination folder for downloads.
-        
-        Args:
-            path: String path to download directory
-        """
-        self.download_path = Path(path)
-        logger.info(f"Download path set to: {self.download_path}")
-        
-    def set_resolution(self, resolution: str) -> None:
-        """Set preferred video/audio resolution preset.
-        
-        Args:
-            resolution: Resolution preset key (e.g., '1080p (Full HD)' or 'Audio Only (Best)')
-        """
-        if resolution in self.RESOLUTION_FORMATS:
-            self.selected_resolution = resolution
-            logger.info(f"Resolution preset set to: {resolution}")
-        else:
-            logger.warning(f"Unknown resolution '{resolution}', using Best Available")
-            self.selected_resolution = "Best Available"
-    
+    # --------------------------- YouTube-Specific Configuration ---------------------------
     def set_po_token(self, token: Optional[str]) -> None:
         """Store PO Token for future use (not currently used in downloads).
         
@@ -102,7 +82,7 @@ class YouTubeDownloader:
         else:
             self._po_token = None
             logger.info("PO Token cleared")
-    
+        
     def get_po_token(self) -> Optional[str]:
         """Get current PO Token.
         
@@ -110,7 +90,7 @@ class YouTubeDownloader:
             Current PO token or None if not set
         """
         return self._po_token
-    
+        
     def has_po_token(self) -> bool:
         """Check if PO Token is configured.
         
@@ -118,24 +98,10 @@ class YouTubeDownloader:
             True if PO token is set and appears valid
         """
         return self._po_token is not None and len(self._po_token) >= 10
-            
-    def set_progress_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None:
-        """Set callback function for download progress updates.
-        
-        Args:
-            callback: Function to call with progress info dict
-        """
-        self.progress_callback = callback
-        
-    # --------------------------- Helpers ---------------------------
-    def _progress_hook(self, d: Dict[str, Any]) -> None:
-        """Internal progress hook called by yt-dlp.
-        
-        Args:
-            d: Progress info dictionary from yt-dlp
-        """
-        if self.progress_callback:
-            self.progress_callback(d)
+    
+    # Note: set_download_path(), set_resolution(), set_progress_callback(), and _progress_hook()
+    # are inherited from BaseDownloader and should not be overridden unless platform-specific
+    # behavior is required.
             
     @staticmethod
     def _is_playlist_url(url: str) -> bool:
@@ -252,15 +218,10 @@ class YouTubeDownloader:
         if not is_valid:
             return False, msg
             
-        # Check download path
-        if not self.download_path:
-            return False, "No download path set"
-            
-        # Create download directory if it doesn't exist
-        try:
-            self.download_path.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            return False, f"Failed to create download directory: {str(e)}"
+        # Validate download path using base class utility
+        path_ok, path_error = self._ensure_download_path_exists()
+        if not path_ok:
+            return False, path_error
             
         # Configure yt-dlp options with simplified format string
         format_string = self.RESOLUTION_FORMATS[self.selected_resolution]
@@ -333,14 +294,7 @@ class YouTubeDownloader:
             logger.error(error_msg)
             return False, error_msg
             
-    def cancel_download(self) -> None:
-        """Cancel current download operation.
-        
-        Note: yt-dlp doesn't provide direct cancellation,
-        this flag prevents new downloads from starting.
-        """
-        self.is_downloading = False
-        logger.info("Download cancellation requested")
+    # cancel_download() is inherited from BaseDownloader
         
     @staticmethod
     def get_available_resolutions() -> list[str]:

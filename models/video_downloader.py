@@ -24,9 +24,12 @@ from utils.logger import logger
 
 class VideoDownloader:
     """Router model that delegates to site-specific downloaders.
-
+    
     This keeps the controller/view API identical while supporting
     multiple platforms behind the scenes.
+    
+    All platform downloaders (YouTubeDownloader, TwitterDownloader, InstagramDownloader)
+    extend BaseDownloader for shared configuration and state management.
     """
 
     def __init__(self) -> None:

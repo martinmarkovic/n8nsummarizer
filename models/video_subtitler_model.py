@@ -9,6 +9,7 @@ import yt_dlp
 TEMP_DIR = Path("temp_subtitler")
 VIDEO_PATH = TEMP_DIR / "video.mp4"
 SRT_PATH = TEMP_DIR / "video.srt"
+TRANSCRIBE_OUT_DIR = TEMP_DIR / "out"
 
 # Whisper will be imported lazily to avoid startup issues
 _whisper_available = None

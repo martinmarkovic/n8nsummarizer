@@ -8,8 +8,8 @@ from utils.logger import logger
 from utils.validators import validate_file, validate_content_not_empty
 
 
-class FileScanner:
-    """Model for scanning and extracting text from multiple file types"""
+class FileReader:
+    """Model for reading and extracting text from multiple file types"""
     
     def __init__(self):
         self.current_file = None

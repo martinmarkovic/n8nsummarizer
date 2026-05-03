@@ -1,41 +1,121 @@
-# n8n Summarizer v6.0
+# Media SwissKnife
 
-Desktop application for summarizing text files, transcribing media, and bulk processing via n8n webhooks.
-
-## Features
-
-- **File Summarizer** - Load text/srt/docx/pdf files and summarize via n8n
-- **YouTube Summarization** - Transcribe and summarize YouTube videos
-- **Transcriber** - Convert audio/video to text (11 media formats)
-- **Bulk Summarizer** - Process entire folders of documents
-- **Bulk Transcriber** - Process entire folders of media files
-- **Translation** - UI placeholder for future translation workflows (v6.0)
+Multi-source media processing desktop application built with Python/Tkinter.
 
 ## Quick Start
 
-1. Install dependencies: `pip install -r requirements.txt`
-2. Copy `.env.example` to `.env` and configure n8n webhook URLs
-3. Run: `python main.py` or `runGui.bat`
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Set up configuration
+cp .env.example .env
+# Edit .env with your API keys and settings
+
+# Run the application
+python main.py  # or runGui.bat on Windows
+```
+
+## Features
+
+Media SwissKnife provides comprehensive media processing capabilities:
+
+- **File Summarization**: Summarize text files (txt, srt, docx, pdf)
+- **YouTube Processing**: Download and summarize YouTube videos with transcription
+- **Single File Transcription**: Transcribe audio/video files (mp4, mp3, wav, m4a, flac, aac, wma, mov, avi, mkv, webm)
+- **Bulk Summarization**: Process multiple files with advanced options
+- **Bulk Transcription**: Transcribe multiple media files with format selection
+- **Translation**: Translate text and subtitles using LM Studio or compatible APIs
+- **Video Download**: Download videos from YouTube, Twitter, and Instagram
+- **Video Subtitler**: Download, transcribe, translate, and burn subtitles into videos
 
 ## Architecture
 
-**MVC Pattern:**
-- `views/` - UI tabs (Tkinter)
-- `controllers/` - Business logic and event handlers
-- `models/` - Data access and n8n integration
-- `utils/` - Shared utilities (logger, file scanner)
+MVC (Model-View-Controller) architecture:
 
-**Modular Tabs (v5.0.3+):**
-- `views/bulk_summarizer/` - Refactored into 6 focused modules
-- `views/bulk_transcriber/` - Refactored into 7 focused modules
+- **Models**: Data processing, API communication, file operations
+- **Views**: Tkinter UI components and tabs
+- **Controllers**: Orchestrate workflows between views and models
+
+## Requirements
+
+```
+requests>=2.31.0
+python-dotenv>=1.0.0
+python-docx>=0.8.11
+tkinter-tooltip>=2.1.0
+yt-dlp>=2024.0.0
+srt>=0.0.6
+openai-whisper>=2024.0.0
+```
+
+## Configuration
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `LAST_ACTIVE_TAB` | Last active tab index | `0` (File Tab) |
+| `DOWNLOADER_SAVE_PATH` | Default download folder | `/path/to/downloads` |
+| `DOWNLOADER_QUALITY` | Video download quality | `Best Available`, `1080p (Full HD)` |
+| `YOUTUBE_PO_TOKEN` | YouTube PO token for HD | `your_po_token_here` |
+| `N8N_WEBHOOK_URL` | n8n webhook endpoint | `http://localhost:5678/webhook` |
+| `TRANSLATION_URL` | Translation API endpoint | `http://127.0.0.1:1234/v1/completions` |
+
+## Folder Structure
+
+```
+media-swissknife/
+├── controllers/       # UI orchestration and workflow coordination
+├── models/            # Business logic, data processing, and API communication
+├── views/             # Tkinter UI components and tabs
+├── utils/             # Shared utilities and helpers
+├── tests/             # Test suite
+├── docs/              # Documentation and guides
+├── main.py            # Application entry point
+├── config.py          # Configuration constants
+├── requirements.txt   # Python dependencies
+└── .env.example       # Environment configuration template
+```
 
 ## Documentation
 
-- `models/README.md` - Model layer details
-- `views/README.md` - View layer and tab structure
-- `controllers/README.md` - Controller layer and workflows
-- Package-level READMEs in `views/bulk_summarizer/` and `views/bulk_transcriber/`
+See [docs/](docs/) for detailed guides, changelogs, and technical documentation.
 
-## Version
+## Tabs Overview
 
-Current: **v6.0** (February 2026)
+| Tab | Controller | Description |
+|-----|-----------|-------------|
+| File Summarizer | FileController | Summarize individual text files |
+| YouTube Summarizer | YouTubeSummarizerController | Download and summarize YouTube videos |
+| Transcriber | TranscriberController | Transcribe single audio/video files |
+| Bulk Summarizer | BulkSummarizerController | Process multiple files for summarization |
+| Bulk Transcriber | BulkTranscriberController | Transcribe multiple media files |
+| Translation | TranslationController | Translate text and subtitles |
+| Downloader | DownloaderController | Download videos from multiple platforms |
+| Video Subtitler | VideoSubtitlerController | Complete subtitle workflow (download → transcribe → translate → burn) |
+
+## Development
+
+### Adding New Features
+
+1. **Models**: Add data processing logic in `models/`
+2. **Views**: Create UI components in `views/`
+3. **Controllers**: Wire them together in `controllers/`
+4. **Integration**: Register in `main.py`
+
+### Testing
+
+```bash
+python -m pytest tests/
+```
+
+## Support
+
+For issues and feature requests, please open a GitHub issue.
+
+## License
+
+[Specify license information here]
+
+## Contributing
+
+Contributions are welcome! Please follow the existing code style and architecture patterns.

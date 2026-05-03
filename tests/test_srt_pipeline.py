@@ -1,10 +1,12 @@
 """
 Comprehensive test for SRT translation pipeline
 Tests all scenarios: perfect markers, consolidated format, truncated responses
+
+Note: This file has been moved from root to tests/ directory as part of Phase 3 cleanup.
 """
 
 import sys
-sys.path.insert(0, '.')
+sys.path.insert(0, '..')
 
 from models.translation.srt_support import (
     decode_text_only_batch,

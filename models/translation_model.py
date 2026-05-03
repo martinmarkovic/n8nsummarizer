@@ -38,11 +38,29 @@ from models.translation.srt_support import (
     rebuild_subtitles_with_translations,
     validate_rebuilt_subtitles
 )
+from models.translation.file_handler import TranslationFileHandler
 
 
 class TranslationModel:
-    """Translation business logic and data operations."""
-
+    """Translation facade that coordinates service calls and business logic.
+    
+    Acts as a facade over TranslationService and TranslationFileHandler,
+    providing a unified interface for translation operations while
+    delegating specific responsibilities to specialized components.
+    
+    Responsibilities:
+        - Translation workflow coordination
+        - Service orchestration
+        - Error handling and retry logic
+        - Translation quality management
+        
+    Delegates:
+        - File operations → TranslationFileHandler
+        - API communication → TranslationService
+        - Text chunking → TranslationChunker
+        - SRT processing → srt_support module
+    """
+    
     def __init__(self, max_tokens: int = None, chunk_size: int = None, batch_max_items: int = None, batch_max_chars: int = None):
         """Initialize translation model with default configuration."""
         self.webhook_url = TRANSLATION_DEFAULT_URL
@@ -50,15 +68,15 @@ class TranslationModel:
         self.chunk_size = chunk_size or TRANSLATION_CHUNK_SIZE
         self.batch_max_items = batch_max_items or TRANSLATION_BATCH_MAX_ITEMS
         self.batch_max_chars = batch_max_chars or TRANSLATION_BATCH_MAX_CHARS
-        self.current_file_path = None
 
-        # Initialize services
+        # Initialize services (facade pattern - delegate to specialized components)
         self.chunker = TranslationChunker(
             max_chunk_size=self.chunk_size, max_tokens=self.max_tokens
         )
         self.translation_service = TranslationService(
             webhook_url=TRANSLATION_DEFAULT_URL, max_tokens=self.max_tokens
         )
+        self.file_handler = TranslationFileHandler()
 
         logger.info(
             f"TranslationModel initialized with default webhook: {self.webhook_url}"
@@ -73,38 +91,33 @@ class TranslationModel:
     def set_current_file_path(self, path: str):
         """
         Set the current file path.
-
+        
         Args:
             path: Path to the current file
         """
-        self.current_file_path = path
-        logger.info(f"Set current file path: {self.current_file_path}")
+        self.file_handler.set_current_file_path(path)
+        logger.info(f"Set current file path: {path}")
 
     def get_current_file_path(self) -> str:
         """
         Get the current file path.
-
+        
         Returns:
             str: The current file path
         """
-        return self.current_file_path
+        return self.file_handler.get_current_file_path()
 
     def is_srt_source(self, text: str) -> bool:
         """
         Return True if current file path ends with .srt or content is SRT-like.
-
+        
         Args:
             text: Text content to analyze
-
+            
         Returns:
             bool: True if source appears to be SRT
         """
-        # Check file extension first
-        if self.current_file_path and self.current_file_path.lower().endswith('.srt'):
-            return True
-
-        # Fallback to content detection
-        return is_srt_like(text)
+        return self.file_handler.is_srt_source(text)
 
     def set_max_tokens(self, max_tokens: int):
         """Set maximum tokens for translation API calls."""
@@ -655,26 +668,14 @@ class TranslationModel:
     def load_file_content(self, file_path: str) -> Tuple[bool, str, Optional[str]]:
         """
         Load text content from file.
-
+        
         Args:
             file_path: Path to file to load
-
+            
         Returns:
             Tuple of (success: bool, content: str, error: Optional[str])
         """
-        if not file_path or not os.path.exists(file_path):
-            return False, "", f"File not found: {file_path}"
-
-        try:
-            path = Path(file_path)
-            content = path.read_text(encoding="utf-8", errors="replace")
-            logger.info(f"Loaded file: {file_path} ({len(content)} characters)")
-            return True, content, None
-
-        except Exception as e:
-            error_msg = f"Error loading file {file_path}: {str(e)}"
-            logger.error(error_msg)
-            return False, "", error_msg
+        return self.file_handler.load_file_content(file_path)
 
     def save_webhook_to_env(self, url: str) -> bool:
         """
