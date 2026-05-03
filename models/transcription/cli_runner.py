@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import subprocess
 import shlex
+import sys
 from typing import Optional, Tuple
 
 from utils.logger import logger
@@ -26,26 +27,59 @@ def run_transcribe_cli(
     """
 
     try:
-        # Properly quote input_path to handle special characters like &, |, >, <, etc.
-        # This prevents shell interpretation issues on Windows
-        safe_input_path = shlex.quote(input_path) if os.name == 'nt' else input_path
+        # Use full path to transcribe-anything since subprocess with list doesn't search PATH
+        transcribe_anything_path = "F:/Python scripts/n8nsummarizer/myenv/Scripts/transcribe-anything.exe"
+        if not os.path.exists(transcribe_anything_path):
+            # Fallback to just "transcribe-anything" if full path doesn't exist
+            transcribe_anything_path = "transcribe-anything"
+            logger.warning("transcribe-anything not found at expected path, using PATH lookup")
+        
+        # For YouTube URLs, don't quote them since transcribe-anything will extract the title
+        # and the quotes would become part of the filename. For local file paths, quoting
+        # is also not needed since we're using list format (not shell=True).
+        input_path_for_cmd = input_path
         
         cmd = [
-            "transcribe-anything",
-            input_path,  # Use original for list format (safe)
+            transcribe_anything_path,
+            input_path_for_cmd,
             "--device",
             device,
             "--output_dir",
             output_dir,
         ]
         
-        # For logging, use the safe version to avoid shell interpretation in logs
-        logger.info("Running: %s … --device %s", " ".join(cmd[:2]), device)
-        logger.debug("Full command: %s", " ".join([shlex.quote(arg) if isinstance(arg, str) else str(arg) for arg in cmd]))
-
+        # Add the virtual environment's Scripts directory to PATH
+        # This ensures yt-dlp.exe can be found by transcribe-anything subprocess
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
         env["PYTHONLEGACYWINDOWSSTDIO"] = "0"
+        
+        # Add the project's virtual environment Scripts directory to PATH
+        # This ensures both transcribe-anything and yt-dlp.exe can be found
+        project_scripts_dir = "F:/Python scripts/n8nsummarizer/myenv/Scripts"
+        if os.path.exists(project_scripts_dir):
+            env["PATH"] = project_scripts_dir + os.pathsep + env["PATH"]
+            logger.debug("Added project virtual env scripts to PATH: %s", project_scripts_dir)
+        else:
+            logger.warning("Project scripts directory not found: %s", project_scripts_dir)
+        
+        # Also try to find yt-dlp in common locations
+        common_yt_dlp_locations = [
+            "F:/Python scripts/n8nsummarizer/myenv/Scripts",
+            "C:/Python314/Scripts",
+            "C:/Python3133/Scripts",
+            "C:/Python39/Scripts",
+        ]
+        for yt_dlp_dir in common_yt_dlp_locations:
+            if os.path.exists(yt_dlp_dir) and os.path.exists(os.path.join(yt_dlp_dir, "yt-dlp.exe")):
+                if yt_dlp_dir not in env["PATH"]:
+                    env["PATH"] = yt_dlp_dir + os.pathsep + env["PATH"]
+                    logger.debug("Added yt-dlp location to PATH: %s", yt_dlp_dir)
+                break
+        
+        # For logging, use the safe version to avoid shell interpretation in logs
+        logger.info("Running: %s … --device %s", " ".join(cmd[:2]), device)
+        logger.debug("Full command: %s", " ".join([shlex.quote(arg) if isinstance(arg, str) else str(arg) for arg in cmd]))
 
         result = subprocess.run(
             cmd,

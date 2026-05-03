@@ -100,6 +100,10 @@ class TranscribeModel:
         try:
             path_obj = Path(file_path)
 
+            # Prevent YouTube URLs from being processed as files
+            if file_path.startswith(('http://', 'https://')):
+                return False, None, f"Cannot process URL as file: {file_path}. Use transcribe_youtube() method instead.", None
+
             if not path_obj.exists():
                 return False, None, f"File not found: {path_obj}", None
 
@@ -161,6 +165,10 @@ class TranscribeModel:
         """
 
         try:
+            # Ensure this is actually a URL (not a file path)
+            if not youtube_url.startswith(('http://', 'https://')):
+                return False, None, f"Expected YouTube URL but got file path: {youtube_url}. Use transcribe_file() method instead.", None
+
             if not validate_youtube_url(youtube_url):
                 return False, None, "Invalid YouTube URL", None
 
