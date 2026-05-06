@@ -23,6 +23,7 @@ import tkinter as tk
 from views.main_window import MainWindow
 from controllers.file_controller import FileController
 from controllers.youtube_summarizer_controller import YouTubeSummarizerController
+from controllers.summarizer_controller import SummarizerController
 from controllers.transcriber_controller import TranscriberController
 from controllers.bulk_summarizer_controller import BulkSummarizerController
 from controllers.bulk_transcriber_controller import BulkTranscriberController
@@ -40,13 +41,14 @@ def main():
     Creates:
     - SettingsManager (persistent user preferences)
     - MainWindow (views layer with all tabs)
-    - FileController (coordinates FileTab + models)
-    - TranscriberController (coordinates TranscriberTab + models)
-    - YouTubeSummarizerController (coordinates YouTubeSummarizerTab + models)
-    - BulkSummarizerController (coordinates BulkSummarizerTab + models)
-    - BulkTranscriberController (coordinates BulkTranscriberTab + models)
-    - TranslationController (coordinates TranslationTab + TranslationModel)
-    - DownloaderTab with persistent settings
+     - FileController (coordinates FileTab + models) [LEGACY]
+     - SummarizerController (coordinates SummarizerTab + models) [NEW v9.3]
+     - TranscriberController (coordinates TranscriberTab + models)
+     - YouTubeSummarizerController (coordinates YouTubeSummarizerTab + models) [LEGACY]
+     - BulkSummarizerController (coordinates BulkSummarizerTab + models)
+     - BulkTranscriberController (coordinates BulkTranscriberTab + models)
+     - TranslationController (coordinates TranslationTab + TranslationModel)
+     - DownloaderTab with persistent settings
 
     Features (v6.3):
     - File summarization (txt, srt, docx, pdf)
@@ -75,25 +77,31 @@ def main():
         # Pass settings manager to main window
         window = MainWindow(root, settings)
 
-        # Initialize File Summarizer tab controller
-        # Wires: FileTab UI ↔ FileController ↔ FileModel + N8NModel
-        file_controller = FileController(window.file_tab)
-        logger.info("FileController initialized")
-
-        # Initialize Transcriber tab controller FIRST (so it's available for YouTube controller)
-        # Wires: TranscriberTab UI ↔ TranscriberController ↔ TranscribeModel + N8NModel
-        transcriber_controller = TranscriberController(window.transcriber_tab, settings)
-        logger.info("TranscriberController initialized")
-
-        # Initialize YouTube Summarizer tab controller
-        # Wires: YouTubeSummarizerTab UI ↔ YouTubeSummarizerController ↔ TranscribeModel + N8NModel
-        # Pass BOTH transcriber_tab reference (for UI) AND transcriber_controller
-        youtube_summarizer_controller = YouTubeSummarizerController(
-            window.youtube_summarizer_tab,
-            transcriber_tab=window.transcriber_tab,
-            transcriber_controller=transcriber_controller,
-        )
-        logger.info("YouTubeSummarizerController initialized")
+         # Initialize Transcriber tab controller FIRST (so it's available for other controllers)
+         # Wires: TranscriberTab UI ↔ TranscriberController ↔ TranscribeModel + N8NModel
+         transcriber_controller = TranscriberController(window.transcriber_tab, settings)
+         logger.info("TranscriberController initialized")
+         
+         # Initialize NEW Summarizer tab controller (v9.3)
+         # Wires: SummarizerTab UI ↔ SummarizerController ↔ FileModel + LLMClient + TranscribeModel
+         # Replaces both FileController and YouTubeSummarizerController with direct LLM integration
+         summarizer_controller = SummarizerController(
+             window.summarizer_tab,
+             transcriber_controller=transcriber_controller
+         )
+         logger.info("SummarizerController initialized (NEW v9.3)")
+         
+         # Initialize LEGACY controllers (kept for backward compatibility)
+         # These can be removed once SummarizerController is fully tested
+         file_controller = FileController(window.file_tab)
+         logger.info("FileController initialized (LEGACY)")
+         
+         youtube_summarizer_controller = YouTubeSummarizerController(
+             window.youtube_summarizer_tab,
+             transcriber_tab=window.transcriber_tab,
+             transcriber_controller=transcriber_controller,
+         )
+         logger.info("YouTubeSummarizerController initialized (LEGACY)")
 
         # Initialize Bulk Summarizer tab controller
         # Wires: BulkSummarizerTab UI ↔ BulkSummarizerController
