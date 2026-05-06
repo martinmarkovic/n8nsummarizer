@@ -20,6 +20,7 @@ The utils layer provides:
 | `__init__.py` | Package initialization (empty) |
 | `file_scanner.py` | File path discovery and counting |
 | `logger.py` | Centralized logging configuration |
+| `prompt_presets.py` | Predefined prompt templates for LLM operations |
 | `settings_manager.py` | .env file persistence |
 | `validators.py` | Input validation functions |
 
@@ -56,6 +57,39 @@ success, content, error = reader.read_file("document.txt")
 ```
 
 ## Detailed Components
+
+### prompt_presets.py
+
+Predefined prompt templates for LLM summarization and processing:
+
+```python
+from utils.prompt_presets import PROMPT_PRESETS, DEFAULT_PROMPT_KEY, PRESET_NAMES
+
+# Get all available presets
+presets = PROMPT_PRESETS
+
+# Get default preset
+default_prompt = PROMPT_PRESETS[DEFAULT_PROMPT_KEY]
+
+# Get preset names for UI dropdown
+preset_names = PRESET_NAMES
+
+# Get prompt with content inserted
+prompt = get_prompt_with_content("Meeting Notes", meeting_transcript)
+```
+
+**Available Presets**:
+- **General Summary**: Clear, concise summarization
+- **Meeting Notes**: Extract decisions, action items, participants
+- **Technical Document**: Key concepts, APIs, requirements
+- **Research / Article**: Main argument, evidence, conclusions
+- **Interview / Transcript**: By topic and speaker
+
+**Features**:
+- 5 predefined prompt templates
+- Content placeholder system
+- Helper functions for easy usage
+- Ready for LLM webhook integration
 
 ### file_scanner.py
 

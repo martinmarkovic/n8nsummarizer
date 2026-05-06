@@ -71,6 +71,11 @@ DARK_THEME = {
     "button_hover": "#383c45",  # Button hover
 }
 
+# LLM Configuration (for direct LLM webhook support)
+LLM_WEBHOOK_URL = os.getenv("LLM_WEBHOOK_URL", "http://localhost:1234")
+LLM_MODEL = os.getenv("LLM_MODEL", "local-model")
+LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "120"))  # 2 minutes for LLM responses
+
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FILE = os.path.join(os.path.dirname(__file__), "logs", "scanner.log")
