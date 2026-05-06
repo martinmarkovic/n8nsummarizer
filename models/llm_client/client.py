@@ -34,7 +34,8 @@ hosted OpenAI-compatible endpoint.
         self,
         webhook_url: Optional[str] = None,
         model_name: Optional[str] = None,
-        timeout: Optional[int] = None
+        timeout: Optional[int] = None,
+        use_openai_format: Optional[bool] = None
     ) -> None:
         """Initialize LLMClient.
         
@@ -42,13 +43,15 @@ hosted OpenAI-compatible endpoint.
             webhook_url: Optional webhook URL override
             model_name: Optional model name override
             timeout: Optional timeout override in seconds
+            use_openai_format: Optional format override (True for OpenAI, False for simple prompt)
         """
         # Build configuration
-        if webhook_url or model_name or timeout:
+        if webhook_url or model_name or timeout or use_openai_format:
             self.config = LLMClientConfig(
                 webhook_url=webhook_url or LLMClientConfig.from_env().webhook_url,
                 model_name=model_name or LLMClientConfig.from_env().model_name,
-                timeout=timeout or LLMClientConfig.from_env().timeout
+                timeout=timeout or LLMClientConfig.from_env().timeout,
+                use_openai_format=use_openai_format if use_openai_format is not None else LLMClientConfig.from_env().use_openai_format
             )
         else:
             self.config = LLMClientConfig.from_env()
@@ -140,15 +143,25 @@ hosted OpenAI-compatible endpoint.
             return False, None, error
         
         try:
-            # Build OpenAI-compatible chat completions request
-            request_body = {
-                "model": self.config.model_name,
-                "messages": [
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": content}
-                ],
-                "stream": False
-            }
+            # Build request body - support both OpenAI format and simple prompt format
+            # Check if the server expects OpenAI format or simple prompt format
+            if hasattr(self.config, 'use_openai_format') and self.config.use_openai_format:
+                # OpenAI-compatible chat completions format
+                request_body = {
+                    "model": self.config.model_name,
+                    "messages": [
+                        {"role": "system", "content": prompt},
+                        {"role": "user", "content": content}
+                    ],
+                    "stream": False
+                }
+            else:
+                # Simple prompt format (for LM Studio and similar servers)
+                request_body = {
+                    "prompt": f"{prompt}\n\n{content}",
+                    "model": self.config.model_name,
+                    "stream": False
+                }
             
             # Handle both base URLs and full paths
             base_url = self.config.webhook_url.rstrip('/')

@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from config import LLM_WEBHOOK_URL, LLM_MODEL, LLM_TIMEOUT
+from config import LLM_WEBHOOK_URL, LLM_MODEL, LLM_TIMEOUT, LLM_USE_OPENAI_FORMAT
 from utils.logger import logger
 
 
@@ -22,17 +22,19 @@ class LLMClientConfig:
         model_name: Model name to use for completions
         timeout: Request timeout in seconds
         chunk_size_bytes: Maximum content size per API call (default: 400KB)
+        use_openai_format: Use OpenAI chat format (True) or simple prompt format (False)
     """
     webhook_url: str
     model_name: str
     timeout: int
     chunk_size_bytes: int = 400_000  # 400KB default
+    use_openai_format: bool = True  # Use OpenAI format by default
 
     @classmethod
     def from_env(cls) -> 'LLMClientConfig':
         """Create configuration from environment variables.
         
-        Reads LLM_WEBHOOK_URL, LLM_MODEL, and LLM_TIMEOUT from config.py
+        Reads LLM_WEBHOOK_URL, LLM_MODEL, LLM_TIMEOUT, and LLM_USE_OPENAI_FORMAT from config.py
         which sources them from .env file.
         
         Returns:
@@ -41,7 +43,8 @@ class LLMClientConfig:
         return cls(
             webhook_url=LLM_WEBHOOK_URL,
             model_name=LLM_MODEL,
-            timeout=LLM_TIMEOUT
+            timeout=LLM_TIMEOUT,
+            use_openai_format=LLM_USE_OPENAI_FORMAT
         )
 
     def save_to_env(self, webhook_url: str, model_name: str) -> bool:
