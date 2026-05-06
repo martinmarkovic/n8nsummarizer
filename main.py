@@ -77,31 +77,31 @@ def main():
         # Pass settings manager to main window
         window = MainWindow(root, settings)
 
-         # Initialize Transcriber tab controller FIRST (so it's available for other controllers)
-         # Wires: TranscriberTab UI ↔ TranscriberController ↔ TranscribeModel + N8NModel
-         transcriber_controller = TranscriberController(window.transcriber_tab, settings)
-         logger.info("TranscriberController initialized")
-         
-         # Initialize NEW Summarizer tab controller (v9.3)
-         # Wires: SummarizerTab UI ↔ SummarizerController ↔ FileModel + LLMClient + TranscribeModel
-         # Replaces both FileController and YouTubeSummarizerController with direct LLM integration
-         summarizer_controller = SummarizerController(
-             window.summarizer_tab,
-             transcriber_controller=transcriber_controller
-         )
-         logger.info("SummarizerController initialized (NEW v9.3)")
-         
-         # Initialize LEGACY controllers (kept for backward compatibility)
-         # These can be removed once SummarizerController is fully tested
-         file_controller = FileController(window.file_tab)
-         logger.info("FileController initialized (LEGACY)")
-         
-         youtube_summarizer_controller = YouTubeSummarizerController(
-             window.youtube_summarizer_tab,
-             transcriber_tab=window.transcriber_tab,
-             transcriber_controller=transcriber_controller,
-         )
-         logger.info("YouTubeSummarizerController initialized (LEGACY)")
+        # Initialize Transcriber tab controller FIRST (so it's available for other controllers)
+        # Wires: TranscriberTab UI ↔ TranscriberController ↔ TranscribeModel + N8NModel
+        transcriber_controller = TranscriberController(window.transcriber_tab, settings)
+        logger.info("TranscriberController initialized")
+
+        # Initialize NEW Summarizer tab controller (v9.3)
+        # Wires: SummarizerTab UI ↔ SummarizerController ↔ FileModel + LLMClient + TranscribeModel
+        # Replaces both FileController and YouTubeSummarizerController with direct LLM integration
+        summarizer_controller = SummarizerController(
+            window.summarizer_tab,
+            transcriber_controller=transcriber_controller
+        )
+        logger.info("SummarizerController initialized (NEW v9.3)")
+
+        # Initialize LEGACY controllers (kept for backward compatibility)
+        # These can be removed once SummarizerController is fully tested
+        file_controller = FileController(window.file_tab)
+        logger.info("FileController initialized (LEGACY)")
+
+        youtube_summarizer_controller = YouTubeSummarizerController(
+            window.youtube_summarizer_tab,
+            transcriber_tab=window.transcriber_tab,
+            transcriber_controller=transcriber_controller,
+        )
+        logger.info("YouTubeSummarizerController initialized (LEGACY)")
 
         # Initialize Bulk Summarizer tab controller
         # Wires: BulkSummarizerTab UI ↔ BulkSummarizerController

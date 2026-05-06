@@ -49,6 +49,7 @@ from config import (
 from utils.logger import logger
 from utils.settings_manager import SettingsManager
 from views.file_tab import FileTab
+from views.summarizer_tab import SummarizerTab  # NEW v9.3
 from views.youtube_summarizer_tab import YouTubeSummarizerTab
 from views.transcriber_tab import TranscriberTab
 from views.bulk_summarizer_tab import BulkSummarizerTab
@@ -343,7 +344,11 @@ class MainWindow:
         self.file_tab = FileTab(self.notebook)
         self.notebook.add(self.file_tab, text="📄 File Summarizer")
 
-        # Tab 1: YouTube Summarization
+        # Tab 1: Summarizer (NEW v9.3 - replaces File and YouTube tabs)
+        self.summarizer_tab = SummarizerTab(self.notebook)
+        self.notebook.add(self.summarizer_tab, text="📝 Summarizer")
+        
+        # Tab 2: YouTube Summarization (LEGACY - kept for backward compatibility)
         self.youtube_summarizer_tab = YouTubeSummarizerTab(self.notebook)
         self.notebook.add(self.youtube_summarizer_tab, text="🎜 YouTube Summarization")
 

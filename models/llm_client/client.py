@@ -150,7 +150,14 @@ hosted OpenAI-compatible endpoint.
                 "stream": False
             }
             
-            endpoint = f"{self.config.webhook_url.rstrip('/')}/v1/chat/completions"
+            # Handle both base URLs and full paths
+            base_url = self.config.webhook_url.rstrip('/')
+            if '/v1/' in base_url or '/chat/' in base_url:
+                # URL already contains path, use as-is
+                endpoint = base_url
+            else:
+                # Base URL only, append full path
+                endpoint = f"{base_url}/v1/chat/completions"
             
             logger.info(f"Sending to LLM endpoint: {endpoint}")
             logger.debug(f"Request body: {request_body}")
