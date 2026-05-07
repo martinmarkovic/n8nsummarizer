@@ -131,7 +131,7 @@ class SummarizerTab(BaseTab):
         
         ttk.Radiobutton(
             mode_frame,
-            text="🎬 YouTube URL",
+            text="🎬 Video URL",
             value="youtube",
             variable=self.input_mode_var,
             command=self._on_mode_changed

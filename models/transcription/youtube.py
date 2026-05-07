@@ -8,44 +8,30 @@ from typing import Optional
 from utils.logger import logger
 
 
-def get_youtube_title(url: str) -> Optional[str]:
-    """Fetch YouTube video title for output naming.
-
-    Uses yt-dlp if available, otherwise falls back to youtube-dl.
-    """
+def get_video_title(url: str) -> Optional[str]:
+    """Fetch video title for any yt-dlp-supported URL."""
 
     try:
-        try:
-            from yt_dlp import YoutubeDL
+        from yt_dlp import YoutubeDL
 
-            ydl_opts = {"quiet": True, "no_warnings": True}
-            with YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                title = info.get("title")
-                if title:
-                    title = re.sub(r"[\\/*?:\"<>|]", "_", title)
-                    if len(title) > 200:
-                        title = title[:200]
-                    return title
-        except ImportError:
-            try:
-                import youtube_dl
-
-                ydl_opts = {"quiet": True, "no_warnings": True}
-                with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                    title = info.get("title")
-                    if title:
-                        title = re.sub(r"[\\/*?:\"<>|]", "_", title)
-                        if len(title) > 200:
-                            title = title[:200]
-                        return title
-            except ImportError:
-                logger.warning("Neither yt-dlp nor youtube-dl available")
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Could not fetch YouTube title: %s", exc)
+        ydl_opts = {"quiet": True, "no_warnings": True}
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            title = info.get("title")
+            if title:
+                title = re.sub(r"[\\/*?:\"<>|]", "_", title)
+                if len(title) > 200:
+                    title = title[:200]
+                return title
+    except Exception as exc:
+        logger.warning("Could not fetch video title: %s", exc)
 
     return None
+
+
+def get_youtube_title(url: str) -> Optional[str]:
+    """Backward-compatible alias for get_video_title."""
+    return get_video_title(url)
 
 
 def extract_youtube_id(url: str) -> Optional[str]:
@@ -61,14 +47,30 @@ def extract_youtube_id(url: str) -> Optional[str]:
     return None
 
 
-def validate_youtube_url(url: str) -> bool:
-    """Return True if *url* looks like a YouTube URL."""
+def extract_video_slug(url: str) -> str:
+    """Extract a short identifier from any video URL for use as fallback name."""
+    import urllib.parse
 
-    url_lower = url.lower()
-    youtube_patterns = [
-        "youtube.com/watch",
-        "youtu.be/",
-        "youtube.com/embed/",
-        "youtube.com/v/",
-    ]
-    return any(pattern in url_lower for pattern in youtube_patterns)
+    try:
+        parsed = urllib.parse.urlparse(url)
+        parts = [p for p in parsed.path.split("/") if p]
+        if parts:
+            slug = parts[-1]
+            slug = slug.split("?")[0].split("&")[0]
+            if slug:
+                return re.sub(r"[\\/*?:\"<>|]", "_", slug)[:80]
+    except Exception:
+        pass
+
+    return "video"
+
+
+def validate_video_url(url: str) -> bool:
+    """Return True if url looks like any yt-dlp-supported video URL."""
+    url_lower = url.lower().strip()
+    return url_lower.startswith(("http://", "https://"))
+
+
+def validate_youtube_url(url: str) -> bool:
+    """Backward-compatible alias for validate_video_url."""
+    return validate_video_url(url)

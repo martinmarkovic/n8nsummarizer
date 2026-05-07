@@ -100,11 +100,11 @@ class SummarizerController:
     def handle_send_clicked(self):
         """Handle summarize button click - route to appropriate workflow."""
         mode = self.view.get_input_mode()
-        
+
         if mode == "file":
             self._start_file_summarize()
         elif mode == "youtube":
-            self._start_youtube_summarize()
+            self._start_video_url_summarize()
         else:
             self.view.show_error(f"Unknown input mode: {mode}")
     
@@ -192,87 +192,89 @@ class SummarizerController:
             logger.error(f"File summarization error: {e}", exc_info=True)
             self.view.root.after(0, self._on_error, str(e))
     
-    def _start_youtube_summarize(self):
-        """Start YouTube transcription and summarization workflow."""
-        youtube_url = self.view.get_youtube_url()
-        if not youtube_url or youtube_url == "https://":
-            self.view.show_error("Please enter a YouTube URL.")
+    def _start_video_url_summarize(self):
+        """Start video URL transcription and summarization workflow."""
+        video_url = self.view.get_youtube_url()
+        if not video_url or video_url == "https://":
+            self.view.show_error("Please enter a video URL.")
             return
-        
-        if not TranscribeModel.validate_youtube_url(youtube_url):
-            self.view.show_error("Invalid YouTube URL format.")
+
+        if not video_url.startswith(("http://", "https://")):
+            self.view.show_error("Please enter a valid URL starting with http:// or https://")
             return
-        
+
         if not self._update_llm_client():
             return
-        
+
         format_ext = self.view.get_transcription_format()
         prompt = self.view.get_prompt()
-        
-        # Update UI for transcription
-        self.view.set_status("Transcribing YouTube video...")
+
+        self.view.set_status("Transcribing video...")
         self.view.display_response(
-            "Transcribing YouTube video...\n"
-            "This may take a few minutes depending on video length."
+            "Transcribing video...\n"
+            "This may take a few minutes depending on video length.\n"
+            "Supported: YouTube, YouTube Shorts, Twitter/X, Instagram, TikTok, Vimeo, and more."
         )
         self.view.show_loading(True)
-        
-        # Start transcription thread
+
         thread = threading.Thread(
-            target=self._youtube_thread,
-            args=(youtube_url, format_ext, prompt),
+            target=self._video_url_thread,
+            args=(video_url, format_ext, prompt),
             daemon=True
         )
         thread.start()
     
-    def _youtube_thread(self, youtube_url: str, format_ext: str, prompt: str):
-        """Background thread for YouTube transcription."""
+    def _video_url_thread(self, video_url: str, format_ext: str, prompt: str):
+        """Background thread for video URL transcription."""
         try:
-            logger.info(f"Transcribing YouTube video: {youtube_url}")
-            
-            # Transcribe YouTube video
+            logger.info(f"Transcribing video URL: {video_url}")
+
             success, transcript_content, error, metadata = (
-                self.transcribe_model.transcribe_youtube(
-                    youtube_url=youtube_url,
+                self.transcribe_model.transcribe_video_url(
+                    url=video_url,
                     device="cuda",
                     keep_formats=[format_ext]
                 )
             )
-            
+
             if not success or not transcript_content:
                 error_msg = error or "No transcript generated"
                 self.view.root.after(0, self._on_error, error_msg)
                 return
-            
-            # Store transcript and metadata
+
             self.current_transcript = transcript_content
             self.current_youtube_title = (
-                metadata.get("base_name", "youtube_video") 
-                if metadata else "youtube_video"
+                metadata.get("base_name", "video")
+                if metadata else "video"
             )
             self.current_metadata = metadata
-            
-            # Clean up temporary files
+
             self._cleanup_transcript_files()
-            
-            # Show transcript in UI
+
             self.view.root.after(0, self.view.set_content, transcript_content)
             self.view.root.after(0, self.view.display_response,
                 f"Transcript loaded ({len(transcript_content)} characters)\n"
                 f"Sending to LLM webhook..."
             )
-            
-            # Chain into summarization
+
             thread = threading.Thread(
                 target=self._summarize_transcript_thread,
                 args=(transcript_content, prompt),
                 daemon=True
             )
             thread.start()
-            
+
         except Exception as e:
             logger.error(f"YouTube transcription error: {e}", exc_info=True)
             self.view.root.after(0, self._on_error, str(e))
+
+    def _start_youtube_summarize(self):
+        """Deprecated: use _start_video_url_summarize()."""
+        self._start_video_url_summarize()
+
+    def _youtube_thread(self, youtube_url, format_ext, prompt):
+        """Deprecated: use _video_url_thread()."""
+        self._video_url_thread(youtube_url, format_ext, prompt)
     
     def _summarize_transcript_thread(self, transcript_content: str, prompt: str):
         """Background thread for transcript summarization."""

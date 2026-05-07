@@ -16,8 +16,11 @@ from .cli_runner import run_transcribe_cli
 from .outputs import process_outputs
 from .youtube import (
     get_youtube_title,
+    get_video_title,
     extract_youtube_id,
+    extract_video_slug,
     validate_youtube_url,
+    validate_video_url,
 )
 from .sanitizer import sanitize_filename
 
@@ -151,6 +154,77 @@ class TranscribeModel:
     # Public API – YouTube transcription
     # ------------------------------------------------------------------
 
+    def transcribe_video_url(
+        self,
+        url: str,
+        device: str = "cuda",
+        output_dir: Optional[str] = None,
+        keep_formats: Optional[List[str]] = None,
+    ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict]]:
+        """Transcribe any yt-dlp-supported video URL.
+
+        Works with YouTube, YouTube Shorts, Twitter/X, Instagram,
+        TikTok, Vimeo, and any other yt-dlp-compatible source.
+
+        Returns:
+            (success, transcript_content, error_msg, metadata_dict)
+        """
+
+        try:
+            if not url.startswith(("http://", "https://")):
+                return False, None, f"Expected a URL but got: {url}", None
+
+            if keep_formats is None:
+                keep_formats = [".txt", ".srt"]
+
+            out_dir = (
+                Path(output_dir)
+                if output_dir
+                else Path.home() / "Documents" / "Transcribe Anything"
+            )
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+            base_name = get_video_title(url)
+            if not base_name:
+                base_name = extract_video_slug(url)
+
+            base_name = sanitize_filename(base_name, out_dir)
+            logger.info("Transcribing video URL: %s (base_name=%s)", url, base_name)
+
+            success, error = run_transcribe_cli(
+                input_path=url,
+                output_dir=str(out_dir),
+                device=device,
+            )
+            if not success:
+                if "JavaScript runtime" in (error or "") or "EJS" in (error or ""):
+                    return False, None, (
+                        f"Video transcription failed: {error}\n"
+                        "This typically occurs when yt-dlp cannot extract content "
+                        "due to missing JavaScript runtime. Install Node.js or configure "
+                        "yt-dlp with --js-runtimes flag."
+                    ), None
+                return False, None, error, None
+
+            transcript_content, metadata = process_outputs(
+                output_dir=out_dir,
+                base_name=base_name,
+                keep_formats=keep_formats,
+                source_type="video_url",
+                url=url,
+            )
+
+            if transcript_content is None:
+                return False, None, "No transcript generated", None
+
+            logger.info("Successfully transcribed video URL: %s", base_name)
+            return True, transcript_content, None, metadata
+
+        except Exception as exc:  # noqa: BLE001
+            error = f"Error transcribing video URL: {exc}"
+            logger.error(error, exc_info=True)
+            return False, None, error, None
+
     def transcribe_youtube(
         self,
         youtube_url: str,
@@ -281,3 +355,8 @@ class TranscribeModel:
             True if valid YouTube URL, False otherwise
         """
         return validate_youtube_url(url)
+
+    @staticmethod
+    def validate_video_url(url: str) -> bool:
+        """Validate if URL is any yt-dlp-supported video URL."""
+        return validate_video_url(url)
