@@ -145,16 +145,31 @@ hosted OpenAI-compatible endpoint.
         try:
             # Build request body - support both OpenAI format and simple prompt format
             # Check if the server expects OpenAI format or simple prompt format
-            request_body = {
-                "model": self.config.model_name,
-                "messages": [
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": content}
-                ],
-                "stream": False
-            }
-            
+            # Detect expected format based on URL patterns
             endpoint = self.config.webhook_url.strip()
+            use_messages_format = any(pattern in endpoint.lower() for pattern in [
+                '/v1/chat/completions',
+                '/chat/completions', 
+                'openai',
+                'ollama',
+                'lmstudio'
+            ])
+            
+            if use_messages_format:
+                request_body = {
+                    "model": self.config.model_name,
+                    "messages": [
+                        {"role": "system", "content": prompt},
+                        {"role": "user", "content": content}
+                    ],
+                    "stream": False
+                }
+            else:
+                request_body = {
+                    "prompt": f"{prompt}\n\n{content}",
+                    "model": self.config.model_name,
+                    "stream": False
+                }
             
             logger.info(f"Sending to LLM endpoint: {endpoint}")
             logger.debug(f"Request body: {request_body}")
