@@ -14,6 +14,7 @@ Features:
 """
 
 import requests
+import re
 from typing import Optional, Tuple, Dict, List
 from dataclasses import dataclass
 
@@ -172,6 +173,9 @@ hosted OpenAI-compatible endpoint.
                     try:
                         # OpenAI chat format
                         summary = response_data["choices"][0]["message"]["content"]
+                        # Strip <think>...</think> blocks produced by reasoning models
+                        # (e.g. DeepSeek-R1, QwQ) before returning the clean response
+                        summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL).strip()
                     except KeyError:
                         try:
                             # Text completion format
