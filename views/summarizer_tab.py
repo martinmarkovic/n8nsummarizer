@@ -20,11 +20,12 @@ Created: 2026-05-06
 
 import os
 import tkinter as tk
-from tkinter import filedialog, scrolledtext, ttk
+from tkinter import filedialog, scrolledtext, ttk, messagebox
 from typing import Optional, Dict, Any
 
 from config import LLM_WEBHOOK_URL, LLM_MODEL
 from utils.prompt_presets import PROMPT_PRESETS, PRESET_NAMES, DEFAULT_PROMPT_KEY
+from utils.prompt_manager import PromptManager
 from utils.logger import logger
 from views.base_tab import BaseTab
 
@@ -37,12 +38,13 @@ class SummarizerTab(BaseTab):
     OpenAI-compatible LLM webhooks instead of using n8n workflows.
     """
     
-    def __init__(self, parent):
+    def __init__(self, parent, prompt_manager=None):
         """
         Initialize Summarizer tab.
-        
+
         Args:
             parent: Parent widget (ttk.Notebook)
+            prompt_manager: Optional PromptManager instance for managing prompts
         """
         # Initialize variables BEFORE calling super().__init__()
         # Input mode
@@ -61,6 +63,10 @@ class SummarizerTab(BaseTab):
         self.webhook_var = tk.StringVar(value=LLM_WEBHOOK_URL or "http://localhost:1234")
         self.model_var = tk.StringVar(value=LLM_MODEL or "local-model")
         self.save_settings_var = tk.BooleanVar(value=False)
+        
+        # Prompt management
+        self.prompt_manager = prompt_manager
+        self._last_valid_preset = DEFAULT_PROMPT_KEY
         
         # Prompt
         self.prompt_preset_var = tk.StringVar(value=DEFAULT_PROMPT_KEY)
@@ -226,15 +232,16 @@ class SummarizerTab(BaseTab):
         # Prompt preset
         row += 1
         ttk.Label(settings_frame, text="Prompt Preset:").grid(row=row, column=0, sticky="w")
-        prompt_combo = ttk.Combobox(
+        self.prompt_combo = ttk.Combobox(
             settings_frame,
             textvariable=self.prompt_preset_var,
-            values=PRESET_NAMES,
             state="readonly",
             width=30
         )
-        prompt_combo.grid(row=row, column=1, sticky="w", padx=5)
-        prompt_combo.bind("<<ComboboxSelected>>", self._on_preset_changed)
+        self.prompt_combo.grid(row=row, column=1, sticky="w", padx=5)
+        self.prompt_combo.bind("<<ComboboxSelected>>", self._on_preset_changed)
+        self.prompt_combo.bind("<Button-3>", self._on_preset_combo_rightclick)
+        self._last_valid_preset = DEFAULT_PROMPT_KEY
         
         # Prompt text area
         row += 1
@@ -245,16 +252,116 @@ class SummarizerTab(BaseTab):
             font=("Segoe UI", 9)
         )
         self.prompt_text.grid(row=row, column=0, columnspan=3, sticky="ew", pady=5)
+        self.prompt_text.bind("<Button-3>", self._on_prompt_text_rightclick)
         
-        # Insert default prompt
-        self.prompt_text.insert("1.0", PROMPT_PRESETS[DEFAULT_PROMPT_KEY])
+        # Load presets using prompt_manager if available
+        names = self.prompt_manager.get_names() if self.prompt_manager else PRESET_NAMES
+        default_key = self.prompt_manager.get_default() if self.prompt_manager else DEFAULT_PROMPT_KEY
+        default_prompt = self.prompt_manager.get_prompt(default_key) if self.prompt_manager else PROMPT_PRESETS[DEFAULT_PROMPT_KEY]
+        
+        self.prompt_combo.config(values=names)
+        self.prompt_preset_var.set(default_key)
+        self.prompt_text.insert("1.0", default_prompt)
     
     def _on_preset_changed(self, event=None):
         """Handle prompt preset selection changes."""
         key = self.prompt_preset_var.get()
+        if key == PromptManager.SEPARATOR:
+            self.prompt_preset_var.set(self._last_valid_preset)
+            return
+        self._last_valid_preset = key
+        if self.prompt_manager:
+            text = self.prompt_manager.get_prompt(key)
+        else:
+            text = PROMPT_PRESETS.get(key, "")
         self.prompt_text.delete("1.0", tk.END)
-        self.prompt_text.insert("1.0", PROMPT_PRESETS.get(key, ""))
+        self.prompt_text.insert("1.0", text)
         logger.debug(f"Prompt preset changed to: {key}")
+    
+    def _reload_presets(self):
+        """Reload prompt presets into dropdown"""
+        if not self.prompt_manager:
+            return
+        names = self.prompt_manager.get_names()
+        self.prompt_combo.config(values=names)
+        current = self.prompt_preset_var.get()
+        if current not in names or current == PromptManager.SEPARATOR:
+            fallback = self.prompt_manager.get_default()
+            self.prompt_preset_var.set(fallback)
+            self._last_valid_preset = fallback
+            self.prompt_text.delete("1.0", tk.END)
+            self.prompt_text.insert("1.0", self.prompt_manager.get_prompt(fallback))
+    
+    def _on_prompt_text_rightclick(self, event):
+        """Handle right-click on prompt textbox"""
+        if not self.prompt_manager:
+            return
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label="💾 Save as prompt", command=self._save_prompt_as_custom)
+        menu.tk_popup(event.x_root, event.y_root)
+        menu.grab_release()
+    
+    def _save_prompt_as_custom(self):
+        """Save current prompt text as a custom prompt"""
+        if not self.prompt_manager:
+            return
+        text = self.prompt_text.get("1.0", tk.END).strip()
+        if not text:
+            messagebox.showwarning("Empty prompt", "Cannot save an empty prompt.")
+            return
+        dialog = tk.Toplevel(self)
+        dialog.title("Save prompt")
+        dialog.resizable(False, False)
+        dialog.grab_set()
+        ttk.Label(dialog, text="Preset name:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        name_var = tk.StringVar()
+        name_entry = ttk.Entry(dialog, textvariable=name_var, width=30)
+        name_entry.grid(row=0, column=1, padx=10, pady=10)
+        name_entry.focus_set()
+        def do_save():
+            name = name_var.get().strip()
+            if not name:
+                messagebox.showwarning("Missing name", "Please enter a name.", parent=dialog)
+                return
+            try:
+                self.prompt_manager.add_custom(name, text)
+                self._reload_presets()
+                self.prompt_preset_var.set(name)
+                self._last_valid_preset = name
+                dialog.destroy()
+            except ValueError as e:
+                messagebox.showerror("Error", str(e), parent=dialog)
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.grid(row=1, column=0, columnspan=2, pady=10)
+        ttk.Button(btn_frame, text="Save", command=do_save).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Cancel", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        dialog.bind("<Return>", lambda e: do_save())
+    
+    def _on_preset_combo_rightclick(self, event):
+        """Handle right-click on preset dropdown"""
+        if not self.prompt_manager:
+            return
+        selected = self.prompt_preset_var.get()
+        menu = tk.Menu(self, tearoff=0)
+        if self.prompt_manager and self.prompt_manager.is_custom(selected):
+            menu.add_command(label="🗑 Delete prompt", command=self._delete_custom_prompt)
+        else:
+            menu.add_command(label="Cannot delete default prompt", state="disabled")
+        menu.tk_popup(event.x_root, event.y_root)
+        menu.grab_release()
+    
+    def _delete_custom_prompt(self):
+        """Delete a custom prompt"""
+        if not self.prompt_manager:
+            return
+        name = self.prompt_preset_var.get()
+        if not messagebox.askyesno("Delete prompt", f"Delete custom prompt '{name}'?\nThis cannot be undone."):
+            return
+        try:
+            self.prompt_manager.delete_custom(name)
+            self._reload_presets()
+        except (ValueError, KeyError) as e:
+            messagebox.showerror("Error", str(e))
     
     def _setup_file_info_section(self):
         """Setup file information display section."""

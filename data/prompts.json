@@ -1,0 +1,30 @@
+{
+  "defaults": [
+    {
+      "name": "General Summary",
+      "prompt": "Summarize the following content in a clear, concise manner. Focus on the main points, key information, and essential details. The summary should be comprehensive enough to understand the content without reading the original, but concise enough to be quickly digestible.\n\nRequirements:\n- Maintain the original meaning and context\n- Use bullet points or short paragraphs for readability\n- Keep the summary to approximately 20-30% of the original length\n- Preserve important names, dates, and specific details\n- Use professional, neutral language\n\nContent to summarize:\n{content}\n\nSummary:"
+    },
+    {
+      "name": "Meeting Notes",
+      "prompt": "Extract key information from this meeting transcript or notes. Organize the information in a structured format.\n\nRequired sections:\n1. Meeting Title/Topic:\n2. Date and Time:\n3. Participants:\n4. Key Decisions Made:\n5. Action Items (with owners and deadlines):\n6. Open Questions/Next Steps:\n7. Important Discussions or Debates:\n8. Any Deadlines or Milestones Mentioned:\n\nIf any section has no content, write 'None' or 'Not applicable'.\n\nMeeting content:\n{content}\n\nStructured meeting notes:"
+    },
+    {
+      "name": "Technical Document",
+      "prompt": "Summarize this technical document focusing on key technical concepts, APIs, requirements, and implementation details. Use precise technical language and maintain accuracy.\n\nStructure your summary with these sections:\n1. Document Purpose/Overview:\n2. Key Technical Concepts:\n3. APIs/Interfaces (if applicable):\n4. Implementation Requirements:\n5. Dependencies/Prerequisites:\n6. Important Code Snippets or Configurations:\n7. Potential Issues or Considerations:\n8. Testing or Validation Requirements:\n\nUse markdown formatting for code blocks and maintain technical accuracy. Preserve all technical terms, variable names, and specific configurations.\n\nTechnical content:\n{content}\n\nTechnical summary:"
+    },
+    {
+      "name": "Research / Article",
+      "prompt": "Create a structured summary of this research paper or article. Focus on the academic or analytical content.\n\nRequired structure:\n1. Title and Authors:\n2. Main Research Question or Thesis:\n3. Methodology (if applicable):\n4. Key Findings or Arguments:\n5. Supporting Evidence or Data:\n6. Conclusions or Implications:\n7. Limitations or Counterarguments (if mentioned):\n8. References to Important Sources:\n\nFor opinion pieces or editorials, adapt to focus on main argument, supporting points, and counterarguments.\n\nResearch content:\n{content}\n\nStructured research summary:"
+    },
+    {
+      "name": "Interview / Transcript",
+      "prompt": "Summarize this interview or conversation transcript, organizing by topics and identifying speakers where possible.\n\nFormat your summary as follows:\n1. Interview/Conversation Title or Context:\n2. Participants (if identifiable):\n3. Date/Time (if available):\n4. Summary by Topic:\n   - Topic 1: [Key points discussed, speaker attributions if possible]\n   - Topic 2: [Key points discussed, speaker attributions if possible]\n   - [Continue for all major topics]\n5. Notable Quotes (with speaker attribution if possible):\n6. Key Takeaways or Conclusions:\n7. Action Items or Follow-ups (if mentioned):\n\nIf speakers cannot be identified, summarize by topic without attribution. Preserve the conversational flow and key insights.\n\nInterview content:\n{content}\n\nStructured interview summary:"
+    },
+    {
+      "name": "Simple prompt",
+      "prompt": "Summarize following:"
+    }
+  ],
+  "custom": [],
+  "default_selected": "General Summary"
+}

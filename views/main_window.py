@@ -48,9 +48,8 @@ from config import (
 )
 from utils.logger import logger
 from utils.settings_manager import SettingsManager
-from views.file_tab import FileTab
+from utils.prompt_manager import PromptManager
 from views.summarizer_tab import SummarizerTab  # NEW v9.3
-from views.youtube_summarizer_tab import YouTubeSummarizerTab
 from views.transcriber_tab import TranscriberTab
 from views.bulk_summarizer_tab import BulkSummarizerTab
 from views.bulk_transcriber_tab import BulkTranscriberTab
@@ -75,14 +74,14 @@ class MainWindow:
     - Status bar
     - Tab selection persistence
 
-    Tab order (v6.3):
-    1. File Summarizer (index 0)
-    2. YouTube Summarization (index 1)
-    3. Transcriber (index 2)
-    4. Bulk Summarizer (index 3)
-    5. Bulk Transcriber (index 4)
-    6. Translation (index 5)
-    7. Downloader (index 6)
+        Tab order (v9.5):
+        1. Summarizer (index 0)
+        2. Transcriber (index 1)
+        3. Bulk Summarizer (index 2)
+        4. Bulk Transcriber (index 3)
+        5. Translation (index 4)
+        6. Downloader (index 5)
+        7. Video Subtitler (index 6)
     """
 
     # Font sizes
@@ -144,8 +143,8 @@ class MainWindow:
         """
         try:
             last_tab = self.settings.get_last_active_tab()
-            # Validate tab index (0-7 for 8 tabs)
-            if 0 <= last_tab <= 7:
+            # Validate tab index (0-6 for 7 tabs)
+            if 0 <= last_tab <= 6:
                 self.notebook.select(last_tab)
                 logger.info(f"Restored last active tab: {last_tab}")
             else:
@@ -340,43 +339,38 @@ class MainWindow:
             row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10)
         )
 
-        # Tab 0: File Summarizer
-        self.file_tab = FileTab(self.notebook)
-        self.notebook.add(self.file_tab, text="📄 File Summarizer")
+        # Initialize PromptManager
+        self.prompt_manager = PromptManager()
 
-        # Tab 1: Summarizer (NEW v9.3 - replaces File and YouTube tabs)
-        self.summarizer_tab = SummarizerTab(self.notebook)
+        # Tab 0: Summarizer (NEW v9.3 - replaces File and YouTube tabs)
+        self.summarizer_tab = SummarizerTab(self.notebook, prompt_manager=self.prompt_manager)
         self.notebook.add(self.summarizer_tab, text="📝 Summarizer")
         
-        # Tab 2: YouTube Summarization (LEGACY - kept for backward compatibility)
-        self.youtube_summarizer_tab = YouTubeSummarizerTab(self.notebook)
-        self.notebook.add(self.youtube_summarizer_tab, text="🎜 YouTube Summarization")
-
-        # Tab 2: Transcriber
+        # Tab 1: Transcriber
         self.transcriber_tab = TranscriberTab(self.notebook, self.settings)
         self.notebook.add(self.transcriber_tab, text="🗡 Transcriber")
 
-        # Tab 3: Bulk Summarizer
+        # Tab 1: Bulk Summarizer
         self.bulk_summarizer_tab = BulkSummarizerTab(self.notebook)
         self.notebook.add(self.bulk_summarizer_tab, text="📦 Bulk Summarizer")
 
-        # Tab 4: Bulk Transcriber
+        # Tab 2: Bulk Transcriber
         self.bulk_transcriber_tab = BulkTranscriberTab(self.notebook)
         self.notebook.add(self.bulk_transcriber_tab, text="🎬 Bulk Transcriber")
 
-        # Tab 5: Translation
+        # Tab 3: Translation
         self.translation_tab = TranslationTab(self.notebook)
         self.notebook.add(self.translation_tab, text="🌐 Translation")
 
-        # Tab 6: Downloader
+        # Tab 4: Downloader
         self.downloader_tab = DownloaderTab(self.notebook)
         self.notebook.add(self.downloader_tab, text="📥 Downloader")
 
-        # Tab 7: Video Subtitler
+        # Tab 5: Video Subtitler
         self.video_subtitler_tab = VideoSubtitlerTab(self.notebook)
         self.notebook.add(self.video_subtitler_tab, text="🎞 Video Subtitler")
 
-        logger.info("All tabs initialized (v8.2 - Video Subtitler with Local Files)")
+        logger.info("All tabs initialized (v9.5 - Removed File and YouTube Summarizer tabs)")
 
     def _setup_status_bar(self, parent):
         """
@@ -455,22 +449,15 @@ class MainWindow:
         text_bg = colors["bg_secondary"]
         text_fg = colors["text_primary"]
 
-        # File tab
-        if hasattr(self, "file_tab"):
-            self.file_tab.content_text.configure(
+        # Summarizer tab
+        if hasattr(self, "summarizer_tab"):
+            self.summarizer_tab.content_text.configure(
                 bg=text_bg, fg=text_fg, insertbackground=text_fg
             )
-            self.file_tab.response_text.configure(
+            self.summarizer_tab.response_text.configure(
                 bg=text_bg, fg=text_fg, insertbackground=text_fg
             )
-            self.file_tab.info_text.configure(bg=text_bg, fg=text_fg)
-            self.file_tab.path_label.configure(foreground=colors["text_secondary"])
-
-        # YouTube Summarizer tab
-        if hasattr(self, "youtube_summarizer_tab"):
-            self.youtube_summarizer_tab.summary_text.configure(
-                bg=text_bg, fg=text_fg, insertbackground=text_fg
-            )
+            self.summarizer_tab.info_text.configure(bg=text_bg, fg=text_fg)
 
         # Transcriber tab
         if hasattr(self, "transcriber_tab"):
@@ -613,22 +600,16 @@ class MainWindow:
         # Update display label
         self.font_size_var.set(f"{self.current_font_size}px")
 
-        # Apply to File tab
-        if hasattr(self, "file_tab"):
-            self.file_tab.content_text.configure(
+        # Apply to Summarizer tab
+        if hasattr(self, "summarizer_tab"):
+            self.summarizer_tab.content_text.configure(
                 font=("Segoe UI", self.current_font_size)
             )
-            self.file_tab.response_text.configure(
+            self.summarizer_tab.response_text.configure(
                 font=("Segoe UI", self.current_font_size)
             )
-            self.file_tab.info_text.configure(
+            self.summarizer_tab.info_text.configure(
                 font=("Segoe UI", self.current_font_size - 1)
-            )
-
-        # Apply to YouTube Summarizer tab
-        if hasattr(self, "youtube_summarizer_tab"):
-            self.youtube_summarizer_tab.summary_text.configure(
-                font=("Segoe UI", self.current_font_size)
             )
 
         # Apply to Transcriber tab
@@ -701,17 +682,17 @@ class MainWindow:
         """
         tab_index = self.notebook.index(self.notebook.select())
         if tab_index == 0:
-            return self.file_tab
+            return self.summarizer_tab
         elif tab_index == 1:
-            return self.youtube_summarizer_tab
-        elif tab_index == 2:
             return self.transcriber_tab
-        elif tab_index == 3:
+        elif tab_index == 2:
             return self.bulk_summarizer_tab
-        elif tab_index == 4:
+        elif tab_index == 3:
             return self.bulk_transcriber_tab
-        elif tab_index == 5:
+        elif tab_index == 4:
             return self.translation_tab
-        elif tab_index == 6:
+        elif tab_index == 5:
             return self.downloader_tab
+        elif tab_index == 6:
+            return self.video_subtitler_tab
         return None
