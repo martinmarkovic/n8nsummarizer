@@ -143,33 +143,15 @@ hosted OpenAI-compatible endpoint.
             return False, None, error
         
         try:
-            # Build request body - support both OpenAI format and simple prompt format
-            # Check if the server expects OpenAI format or simple prompt format
-            # Detect expected format based on URL patterns
+            # Simple approach like Translation tab - use URL exactly as provided
             endpoint = self.config.webhook_url.strip()
-            use_messages_format = any(pattern in endpoint.lower() for pattern in [
-                '/v1/chat/completions',
-                '/chat/completions', 
-                'openai',
-                'ollama',
-                'lmstudio'
-            ])
             
-            if use_messages_format:
-                request_body = {
-                    "model": self.config.model_name,
-                    "messages": [
-                        {"role": "system", "content": prompt},
-                        {"role": "user", "content": content}
-                    ],
-                    "stream": False
-                }
-            else:
-                request_body = {
-                    "prompt": f"{prompt}\n\n{content}",
-                    "model": self.config.model_name,
-                    "stream": False
-                }
+            # Standard request format (prompt-based for maximum compatibility)
+            request_body = {
+                "prompt": f"{prompt}\n\n{content}",
+                "model": self.config.model_name,
+                "stream": False
+            }
             
             logger.info(f"Sending to LLM endpoint: {endpoint}")
             logger.debug(f"Request body: {request_body}")
@@ -181,14 +163,40 @@ hosted OpenAI-compatible endpoint.
                 headers={"Content-Type": "application/json"}
             )
             
-            # Handle successful response
+            # Handle successful response with flexible parsing
             if response.status_code == 200:
                 try:
                     response_data = response.json()
-                    summary = response_data["choices"][0]["message"]["content"]
+                    
+                    # Try multiple response formats (like Translation tab)
+                    try:
+                        # OpenAI chat format
+                        summary = response_data["choices"][0]["message"]["content"]
+                    except KeyError:
+                        try:
+                            # Text completion format
+                            summary = response_data["choices"][0]["text"]
+                        except KeyError:
+                            try:
+                                # Simple response format
+                                summary = response_data["response"]
+                            except KeyError:
+                                # Fallback to first available text field
+                                if "choices" in response_data and len(response_data["choices"]) > 0:
+                                    first_choice = response_data["choices"][0]
+                                    if isinstance(first_choice, dict):
+                                        for key, value in first_choice.items():
+                                            if isinstance(value, str) and key in ["text", "content", "output", "result"]:
+                                                summary = value
+                                                break
+                                else:
+                                    # Last resort: use raw response text
+                                    summary = response.text
+                    
                     logger.info(f"Successfully received LLM response ({len(summary)} characters)")
                     return True, summary, None
-                except (KeyError, IndexError, ValueError) as e:
+                    
+                except (IndexError, ValueError) as e:
                     error = f"Invalid LLM response format: {str(e)}. Response: {response.text[:200]}"
                     logger.error(error)
                     return False, None, error
