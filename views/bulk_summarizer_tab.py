@@ -23,18 +23,19 @@ Updated: 2026-03-15 (v5.1 - .opus support + scrollable left column)
 """
 
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 from datetime import datetime
 import os
 from views.base_tab import BaseTab
 from utils.logger import logger
+from utils.prompt_manager import PromptManager
 
 
 class BulkSummarizerTab(BaseTab):
     """UI for bulk file summarization (v5.1 - .opus + scrollable left column)"""
 
-    def __init__(self, notebook):
+    def __init__(self, notebook, prompt_manager=None):
         self.notebook = notebook
         self.source_folder_var = tk.StringVar(value="[No folder selected]")
         self.output_folder_var = tk.StringVar(value="[Default (Parent folder)]")
@@ -55,6 +56,10 @@ class BulkSummarizerTab(BaseTab):
 
         # Output location
         self.output_location_default = tk.BooleanVar(value=True)
+
+        # Prompt management
+        self.prompt_manager = prompt_manager
+        self._last_valid_preset = None
 
         # Callback registration
         self.on_start_requested = None

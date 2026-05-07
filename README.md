@@ -28,6 +28,8 @@ Media SwissKnife provides comprehensive media processing capabilities:
 - **Translation**: Translate text and subtitles using LM Studio or compatible APIs
 - **Video Download**: Download videos from YouTube, Twitter, and Instagram
 - **Video Subtitler**: Download, transcribe, translate, and burn subtitles into videos
+- **LLM Integration**: Direct LLM webhook support with prompt presets (v9.0+)
+- **Prompt Presets**: 5 predefined prompt templates for different summarization needs
 
 ## Architecture
 
@@ -59,6 +61,9 @@ openai-whisper>=2024.0.0
 | `YOUTUBE_PO_TOKEN` | YouTube PO token for HD | `your_po_token_here` |
 | `N8N_WEBHOOK_URL` | n8n webhook endpoint | `http://localhost:5678/webhook` |
 | `TRANSLATION_URL` | Translation API endpoint | `http://127.0.0.1:1234/v1/completions` |
+| `LLM_WEBHOOK_URL` | LLM webhook endpoint (v9.0+) | `http://localhost:1234` |
+| `LLM_MODEL` | LLM model name (v9.0+) | `local-model` |
+| `LLM_TIMEOUT` | LLM request timeout (v9.0+) | `120` |
 
 ## Folder Structure
 
