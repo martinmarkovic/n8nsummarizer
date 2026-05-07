@@ -97,14 +97,15 @@ class SummarizerTab(BaseTab):
         """Setup the complete UI with all sections."""
         # Configure row weights
         self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=1)
         self.rowconfigure(3, weight=1)  # Content/response section expands
         
         # Setup sections in order
-        self._setup_input_section()             # row=0
-        self._setup_settings_section()          # row=1
-        self._setup_file_info_section()         # row=2
-        self._setup_content_response_section()  # row=3 (weight=1)
-        self._setup_action_bar()                # row=4
+        self._setup_input_section()             # row=0, column=0
+        self._setup_file_info_section()         # row=0, column=1
+        self._setup_settings_section()          # row=1, column=0, columnspan=2
+        self._setup_content_response_section()  # row=2 (weight=1), column=0, columnspan=2
+        self._setup_action_bar()                # row=3, column=0, columnspan=2
         
         # Initialize mode visibility
         self._on_mode_changed()
@@ -201,7 +202,7 @@ class SummarizerTab(BaseTab):
     def _setup_settings_section(self):
         """Setup LLM settings section."""
         settings_frame = ttk.LabelFrame(self, text="Summarizer Settings", padding="10")
-        settings_frame.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
+        settings_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
         
         settings_frame.columnconfigure(1, weight=1)
         
@@ -368,7 +369,7 @@ class SummarizerTab(BaseTab):
     def _setup_file_info_section(self):
         """Setup file information display section."""
         self.file_info_frame = ttk.LabelFrame(self, text="File Info", padding="10")
-        self.file_info_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
+        self.file_info_frame.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
         
         # Create text widget with scrollbar
         text_frame = ttk.Frame(self.file_info_frame)
@@ -395,7 +396,7 @@ class SummarizerTab(BaseTab):
     def _setup_content_response_section(self):
         """Setup content preview and response display sections."""
         content_frame = ttk.Frame(self)
-        content_frame.grid(row=3, column=0, sticky="nsew", padx=5, pady=5)
+        content_frame.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
         
         # Configure grid weights
         content_frame.rowconfigure(0, weight=1)
@@ -451,7 +452,7 @@ class SummarizerTab(BaseTab):
     def _setup_action_bar(self):
         """Setup action bar with buttons and export controls."""
         action_frame = ttk.Frame(self)
-        action_frame.grid(row=4, column=0, sticky="ew", padx=5, pady=5)
+        action_frame.grid(row=3, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
         
         # Summarize button
         self.send_btn = ttk.Button(
