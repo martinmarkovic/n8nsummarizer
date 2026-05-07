@@ -177,25 +177,37 @@ hosted OpenAI-compatible endpoint.
                         # (e.g. DeepSeek-R1, QwQ) before returning the clean response
                         summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL).strip()
                     except KeyError:
-                        try:
-                            # Text completion format
-                            summary = response_data["choices"][0]["text"]
-                        except KeyError:
-                            try:
-                                # Simple response format
-                                summary = response_data["response"]
-                            except KeyError:
-                                # Fallback to first available text field
-                                if "choices" in response_data and len(response_data["choices"]) > 0:
-                                    first_choice = response_data["choices"][0]
-                                    if isinstance(first_choice, dict):
-                                        for key, value in first_choice.items():
-                                            if isinstance(value, str) and key in ["text", "content", "output", "result"]:
-                                                summary = value
-                                                break
-                                else:
-                                    # Last resort: use raw response text
-                                    summary = response.text
+                         try:
+                             # Text completion format
+                             summary = response_data["choices"][0]["text"]
+                             # Strip <think>...</think> blocks produced by reasoning models
+                             # (e.g. DeepSeek-R1, QwQ) before returning the clean response
+                             summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL).strip()
+                         except KeyError:
+                             try:
+                                 # Simple response format
+                                 summary = response_data["response"]
+                                 # Strip <think>...</think> blocks produced by reasoning models
+                                 # (e.g. DeepSeek-R1, QwQ) before returning the clean response
+                                 summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL).strip()
+                             except KeyError:
+                                 # Fallback to first available text field
+                                 if "choices" in response_data and len(response_data["choices"]) > 0:
+                                     first_choice = response_data["choices"][0]
+                                     if isinstance(first_choice, dict):
+                                         for key, value in first_choice.items():
+                                             if isinstance(value, str) and key in ["text", "content", "output", "result"]:
+                                                 summary = value
+                                                 # Strip <think>...</think> blocks produced by reasoning models
+                                                 # (e.g. DeepSeek-R1, QwQ) before returning the clean response
+                                                 summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL).strip()
+                                                 break
+                                 else:
+                                     # Last resort: use raw response text
+                                     summary = response.text
+                                     # Strip <think>...</think> blocks produced by reasoning models
+                                     # (e.g. DeepSeek-R1, QwQ) before returning the clean response
+                                     summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL).strip()
                     
                     logger.info(f"Successfully received LLM response ({len(summary)} characters)")
                     return True, summary, None
