@@ -90,6 +90,7 @@ class SummarizerTab(BaseTab):
     def _setup_ui(self):
         """Setup the complete UI with all sections."""
         # Configure row weights
+        self.columnconfigure(0, weight=1)
         self.rowconfigure(3, weight=1)  # Content/response section expands
         
         # Setup sections in order

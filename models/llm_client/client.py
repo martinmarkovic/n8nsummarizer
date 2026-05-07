@@ -145,23 +145,14 @@ hosted OpenAI-compatible endpoint.
         try:
             # Build request body - support both OpenAI format and simple prompt format
             # Check if the server expects OpenAI format or simple prompt format
-            if hasattr(self.config, 'use_openai_format') and self.config.use_openai_format:
-                # OpenAI-compatible chat completions format
-                request_body = {
-                    "model": self.config.model_name,
-                    "messages": [
-                        {"role": "system", "content": prompt},
-                        {"role": "user", "content": content}
-                    ],
-                    "stream": False
-                }
-            else:
-                # Simple prompt format (for LM Studio and similar servers)
-                request_body = {
-                    "prompt": f"{prompt}\n\n{content}",
-                    "model": self.config.model_name,
-                    "stream": False
-                }
+            request_body = {
+                "model": self.config.model_name,
+                "messages": [
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": content}
+                ],
+                "stream": False
+            }
             
             # Handle both base URLs and full paths
             base_url = self.config.webhook_url.rstrip('/')
