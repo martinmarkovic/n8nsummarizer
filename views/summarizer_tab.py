@@ -157,9 +157,10 @@ class SummarizerTab(BaseTab):
         ttk.Label(self._youtube_frame, text="URL:").grid(row=youtube_row, column=0, sticky="w")
         self.url_entry = ttk.Entry(
             self._youtube_frame,
-            textvariable=self.url_var
+            textvariable=self.url_var,
+            width=50  # Make wider like other tabs
         )
-        self.url_entry.grid(row=youtube_row, column=1, sticky="ew", padx=5)
+        self.url_entry.grid(row=youtube_row, column=1, sticky=(tk.W, tk.E), padx=5)
         self.url_var.set("https://")
         
         youtube_row += 1
@@ -438,11 +439,11 @@ class SummarizerTab(BaseTab):
     def _browse_file(self):
         """Browse for file."""
         filetypes = [
+            ("All Files", ".*"),  # Make this first and default
             ("Text Files", ".txt"),
             ("Subtitle Files", ".srt .vtt"),
             ("JSON Files", ".json"),
-            ("Word Documents", ".docx"),
-            ("All Files", ".*")
+            ("Word Documents", ".docx")
         ]
         
         file_path = filedialog.askopenfilename(
