@@ -272,6 +272,8 @@ class SummarizerTab(BaseTab):
         self._last_valid_preset = key
         if self.prompt_manager:
             text = self.prompt_manager.get_prompt(key)
+            # Save the selected preset as the new default
+            self.prompt_manager.set_default(key)
         else:
             text = PROMPT_PRESETS.get(key, "")
         self.prompt_text.delete("1.0", tk.END)

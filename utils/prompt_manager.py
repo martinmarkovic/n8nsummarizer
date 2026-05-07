@@ -49,12 +49,33 @@ class PromptManager:
             self.custom = data.get("custom", [])
             self.default_selected = data.get("default_selected", "General Summary")
 
+            # Load default preset from .env if it exists
+            self._load_default_from_env()
+
         except (FileNotFoundError, json.JSONDecodeError):
             # If file doesn't exist or is invalid, create default structure
             self.defaults = []
             self.custom = []
             self.default_selected = "General Summary"
             self._write()
+
+    def _load_default_from_env(self) -> None:
+        """Load the default preset from the .env file."""
+        try:
+            env_path = Path(".env")
+            if env_path.exists():
+                with open(env_path, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("DEFAULT_PROMPT_PRESET="):
+                            preset_name = line.split("=", 1)[1].strip()
+                            # Verify the preset exists in defaults or custom
+                            if any(p["name"] == preset_name for p in self.defaults) or any(p["name"] == preset_name for p in self.custom):
+                                self.default_selected = preset_name
+                            break
+        except Exception as e:
+            # Log the error but continue with the default
+            print(f"Error loading default preset from .env: {e}")
 
     def _write(self) -> None:
         """Write prompts to the JSON file."""
@@ -69,6 +90,39 @@ class PromptManager:
 
         with open(self.prompts_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+
+        # Save the default preset to .env
+        self._save_default_to_env()
+
+    def _save_default_to_env(self) -> None:
+        """Save the default preset to the .env file."""
+        try:
+            env_path = Path(".env")
+            env_lines = []
+            preset_line = f"DEFAULT_PROMPT_PRESET={self.default_selected}"
+            found = False
+
+            # Read existing .env file if it exists
+            if env_path.exists():
+                with open(env_path, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("DEFAULT_PROMPT_PRESET="):
+                            env_lines.append(preset_line)
+                            found = True
+                        else:
+                            env_lines.append(line)
+            
+            # If not found, add the preset line
+            if not found:
+                env_lines.append(preset_line)
+
+            # Write the updated .env file
+            with open(env_path, "w") as f:
+                f.write("\n".join(env_lines))
+        except Exception as e:
+            # Log the error but continue
+            print(f"Error saving default preset to .env: {e}")
 
     def get_names(self) -> List[str]:
         """
