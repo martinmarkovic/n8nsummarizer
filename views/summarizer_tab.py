@@ -215,6 +215,27 @@ class SummarizerTab(BaseTab):
         )
         self.webhook_entry.grid(row=row, column=1, sticky="ew", padx=5)
         
+        # API key field (optional)
+        row += 1
+        ttk.Label(
+            settings_frame,
+            text="API key (optional)"
+        ).grid(row=row, column=0, sticky="w", padx=5)
+        self.api_key_var = tk.StringVar()
+        api_key_entry = ttk.Entry(
+            settings_frame,
+            textvariable=self.api_key_var,
+            show="*"  # Mask the API key
+        )
+        api_key_entry.grid(row=row, column=1, sticky="ew", padx=5)
+        ttk.Label(
+            settings_frame,
+            text="Only required for protected endpoints",
+            style="Tiny.TLabel"
+        ).grid(row=row, column=2, sticky="w", padx=5)
+        
+        row += 1
+        
         ttk.Checkbutton(
             settings_frame,
             text="Save to .env",
@@ -614,6 +635,10 @@ class SummarizerTab(BaseTab):
     def get_webhook_url(self) -> str:
         """Get webhook URL."""
         return self.webhook_var.get().strip()
+    
+    def get_api_key(self) -> str:
+        """Get API key for authenticated LLM endpoints."""
+        return self.api_key_var.get().strip()
     
     def get_model_name(self) -> str:
         """Get model name."""

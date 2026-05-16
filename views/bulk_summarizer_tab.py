@@ -30,6 +30,7 @@ import os
 from views.base_tab import BaseTab
 from utils.logger import logger
 from utils.prompt_manager import PromptManager
+from config import LLM_WEBHOOK_URL
 
 
 class BulkSummarizerTab(BaseTab):
@@ -56,6 +57,11 @@ class BulkSummarizerTab(BaseTab):
 
         # Output location
         self.output_location_default = tk.BooleanVar(value=True)
+        
+        # LLM settings (for local LLM pipeline)
+        self.webhook_url_var = tk.StringVar(value=LLM_WEBHOOK_URL or "http://127.0.0.1:1234/v1/completions")
+        self.model_name_var = tk.StringVar(value="llama3")
+        self.save_settings_var = tk.BooleanVar(value=False)
 
         # Prompt management
         self.prompt_manager = prompt_manager
@@ -390,6 +396,30 @@ class BulkSummarizerTab(BaseTab):
         ttk.Label(prog_frame, textvariable=self.progress_text_var).pack(
             anchor=tk.W, padx=10, pady=5
         )
+        
+        # Add LLM settings section
+        row = 0
+        llm_frame = ttk.LabelFrame(self._left_inner, text="LLM Settings")
+        llm_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        # Webhook URL
+        ttk.Label(llm_frame, text="Webhook URL").grid(row=0, column=0, sticky="w", padx=5)
+        self.bulk_webhook_var = tk.StringVar(value=LLM_WEBHOOK_URL or "http://127.0.0.1:1234/v1/completions")
+        ttk.Entry(llm_frame, textvariable=self.bulk_webhook_var).grid(row=0, column=1, sticky="ew", padx=5)
+        
+        # Model name
+        row += 1
+        ttk.Label(llm_frame, text="Model").grid(row=1, column=0, sticky="w", padx=5)
+        self.bulk_model_var = tk.StringVar(value="local-model")
+        ttk.Entry(llm_frame, textvariable=self.bulk_model_var).grid(row=1, column=1, sticky="ew", padx=5)
+        
+        # API key (optional)
+        row += 1
+        ttk.Label(llm_frame, text="API key (optional)").grid(row=2, column=0, sticky="w", padx=5)
+        self.bulk_api_key_var = tk.StringVar()
+        api_key_entry = ttk.Entry(llm_frame, textvariable=self.bulk_api_key_var, show="*")
+        api_key_entry.grid(row=2, column=1, sticky="ew", padx=5)
+        ttk.Label(llm_frame, text="Only for protected endpoints", style="Tiny.TLabel").grid(row=2, column=2, sticky="w", padx=5)
 
     def _setup_status_log(self):
         """Status log with scroll - right column (row 1, col 1)"""
@@ -481,6 +511,41 @@ class BulkSummarizerTab(BaseTab):
 
     def get_content(self) -> str:
         return self.status_log.get('1.0', tk.END)
+    
+    # LLM settings methods
+    def get_webhook_url(self) -> str:
+        """Get webhook URL for bulk LLM operations."""
+        return self.bulk_webhook_var.get().strip()
+    
+    def get_model_name(self) -> str:
+        """Get model name for bulk LLM operations."""
+        return self.bulk_model_var.get().strip()
+    
+    def get_api_key(self) -> str:
+        """Get API key for authenticated LLM endpoints."""
+        return self.bulk_api_key_var.get().strip()
+        return self.status_log.get('1.0', tk.END)
+
+    # ------------------------------------------------------------------
+    # LLM Settings Methods (for local LLM pipeline)
+    # ------------------------------------------------------------------
+
+    def get_webhook_url(self) -> str:
+        """Get the webhook URL for LLM communication."""
+        return self.webhook_url_var.get()
+
+    def get_model_name(self) -> str:
+        """Get the model name for LLM communication."""
+        return self.model_name_var.get()
+
+    def get_save_settings(self) -> bool:
+        """Get whether to save LLM settings to .env file."""
+        return self.save_settings_var.get()
+
+    def get_prompt(self) -> str:
+        """Get the prompt for summarization."""
+        # Use a default prompt that matches single summarizer's default
+        return "Summarize the following content:"
 
     # ------------------------------------------------------------------
     # Event Handlers

@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from config import LLM_WEBHOOK_URL, LLM_MODEL, LLM_TIMEOUT, LLM_USE_OPENAI_FORMAT
+from config import LLM_WEBHOOK_URL, LLM_MODEL, LLM_TIMEOUT, LLM_USE_OPENAI_FORMAT, LLM_API_KEY
 from utils.logger import logger
 
 
@@ -29,12 +29,13 @@ class LLMClientConfig:
     timeout: int
     chunk_size_bytes: int = 400_000  # 400KB default
     use_openai_format: bool = True  # Use OpenAI format by default
+    api_key: str = ""  # Optional API key for authenticated endpoints
 
     @classmethod
     def from_env(cls) -> 'LLMClientConfig':
         """Create configuration from environment variables.
         
-        Reads LLM_WEBHOOK_URL, LLM_MODEL, LLM_TIMEOUT, and LLM_USE_OPENAI_FORMAT from config.py
+        Reads LLM_WEBHOOK_URL, LLM_MODEL, LLM_TIMEOUT, LLM_USE_OPENAI_FORMAT, and LLM_API_KEY from config.py
         which sources them from .env file.
         
         Returns:
@@ -44,10 +45,11 @@ class LLMClientConfig:
             webhook_url=LLM_WEBHOOK_URL,
             model_name=LLM_MODEL,
             timeout=LLM_TIMEOUT,
-            use_openai_format=LLM_USE_OPENAI_FORMAT
+            use_openai_format=LLM_USE_OPENAI_FORMAT,
+            api_key=LLM_API_KEY
         )
 
-    def save_to_env(self, webhook_url: str, model_name: str) -> bool:
+    def save_to_env(self, webhook_url: str, model_name: str, api_key: str = "") -> bool:
         """Save configuration to .env file.
         
         Updates the .env file in project root with new values.
@@ -94,10 +96,18 @@ class LLMClientConfig:
             if not model_updated:
                 updated_lines.append(f'LLM_MODEL={model_name}')
             
+            # Add API key if provided
+            if api_key.strip():
+                # Check if API key line exists
+                api_key_updated = any(line.startswith('LLM_API_KEY=') for line in lines)
+                if not api_key_updated:
+                    updated_lines.append(f'LLM_API_KEY={api_key}')
+            
             # Write updated content
             env_path.write_text('\n'.join(updated_lines), encoding='utf-8')
             
-            logger.info(f"Saved LLM configuration to .env: webhook_url={webhook_url}, model_name={model_name}")
+            logger.info(f"Saved LLM configuration to .env: webhook_url={webhook_url}, model_name={model_name}" + 
+                       (f", api_key={'*' * len(api_key)}" if api_key else ""))
             return True
             
         except Exception as e:

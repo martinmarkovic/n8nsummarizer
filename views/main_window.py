@@ -402,6 +402,9 @@ class MainWindow:
         style.configure(
             "TLabel", background=colors["bg_primary"], foreground=colors["text_primary"]
         )
+        style.configure(
+            "Tiny.TLabel", background=colors["bg_primary"], foreground=colors["text_primary"], font=("Segoe UI", 8)
+        )
         style.configure("TFrame", background=colors["bg_primary"])
         style.configure(
             "TLabelFrame", background=colors["bg_primary"], bordercolor=colors["border"]
