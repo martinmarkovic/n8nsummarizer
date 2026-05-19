@@ -163,12 +163,35 @@ hosted OpenAI-compatible endpoint.
                 # Fallback to original behavior for unknown providers
                 endpoint = self.config.webhook_url.strip()
             
-            # Standard request format (prompt-based for maximum compatibility)
-            request_body = {
-                "prompt": f"{prompt}\n\n{content}",
-                "model": self.config.model_name,
-                "stream": False
-            }
+            # Construct request body based on provider
+            if self.config.provider == "lmstudio":
+                # LM Studio expects OpenAI chat format with messages
+                request_body = {
+                    "messages": [
+                        {"role": "system", "content": prompt},
+                        {"role": "user", "content": content}
+                    ],
+                    "model": self.config.model_name,
+                    "stream": False
+                }
+            elif self.config.provider == "ollama-local":
+                # Ollama can use OpenAI chat format too
+                request_body = {
+                    "messages": [
+                        {"role": "system", "content": prompt},
+                        {"role": "user", "content": content}
+                    ],
+                    "model": self.config.model_name,
+                    "stream": False
+                }
+            else:
+                # Fallback to original prompt format for backward compatibility
+                request_body = {
+                    "prompt": f"{prompt}\
+\n{content}",
+                    "model": self.config.model_name,
+                    "stream": False
+                }
             
             logger.info(f"Sending to LLM endpoint: {endpoint}")
             logger.debug(f"Request body: {request_body}")
