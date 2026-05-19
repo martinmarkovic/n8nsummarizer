@@ -36,7 +36,8 @@ hosted OpenAI-compatible endpoint.
         webhook_url: Optional[str] = None,
         model_name: Optional[str] = None,
         timeout: Optional[int] = None,
-        use_openai_format: Optional[bool] = None
+        use_openai_format: Optional[bool] = None,
+        provider: Optional[str] = None
     ) -> None:
         """Initialize LLMClient.
         
@@ -45,14 +46,16 @@ hosted OpenAI-compatible endpoint.
             model_name: Optional model name override
             timeout: Optional timeout override in seconds
             use_openai_format: Optional format override (True for OpenAI, False for simple prompt)
+            provider: Optional provider override ('lmstudio' or 'ollama-local')
         """
         # Build configuration
-        if webhook_url or model_name or timeout or use_openai_format:
+        if webhook_url or model_name or timeout or use_openai_format or provider:
             self.config = LLMClientConfig(
                 webhook_url=webhook_url or LLMClientConfig.from_env().webhook_url,
                 model_name=model_name or LLMClientConfig.from_env().model_name,
                 timeout=timeout or LLMClientConfig.from_env().timeout,
-                use_openai_format=use_openai_format if use_openai_format is not None else LLMClientConfig.from_env().use_openai_format
+                use_openai_format=use_openai_format if use_openai_format is not None else LLMClientConfig.from_env().use_openai_format,
+                provider=provider or LLMClientConfig.from_env().provider
             )
         else:
             self.config = LLMClientConfig.from_env()
@@ -144,8 +147,21 @@ hosted OpenAI-compatible endpoint.
             return False, None, error
         
         try:
-            # Simple approach like Translation tab - use URL exactly as provided
-            endpoint = self.config.webhook_url.strip()
+            # Construct proper endpoint based on provider
+            if self.config.provider == "lmstudio":
+                # LM Studio uses OpenAI-compatible /v1/chat/completions endpoint
+                base_url = self.config.webhook_url.strip()
+                if not base_url.endswith("/v1"):
+                    base_url = base_url.rstrip("/") + "/v1"
+                endpoint = f"{base_url}/chat/completions"
+            elif self.config.provider == "ollama-local":
+                # Ollama can use OpenAI-compatible endpoint or native API
+                # For now, use OpenAI-compatible endpoint
+                base_url = self.config.webhook_url.strip()
+                endpoint = f"{base_url}/chat/completions"
+            else:
+                # Fallback to original behavior for unknown providers
+                endpoint = self.config.webhook_url.strip()
             
             # Standard request format (prompt-based for maximum compatibility)
             request_body = {
