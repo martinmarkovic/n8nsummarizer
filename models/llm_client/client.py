@@ -155,10 +155,9 @@ hosted OpenAI-compatible endpoint.
                     base_url = base_url.rstrip("/") + "/v1"
                 endpoint = f"{base_url}/chat/completions"
             elif self.config.provider == "ollama-local":
-                # Ollama can use OpenAI-compatible endpoint or native API
-                # For now, use OpenAI-compatible endpoint
+                # Use Ollama's native API endpoint (/api/chat)
                 base_url = self.config.webhook_url.strip()
-                endpoint = f"{base_url}/chat/completions"
+                endpoint = f"{base_url}/chat"
             else:
                 # Fallback to original behavior for unknown providers
                 endpoint = self.config.webhook_url.strip()
@@ -175,13 +174,13 @@ hosted OpenAI-compatible endpoint.
                     "stream": False
                 }
             elif self.config.provider == "ollama-local":
-                # Ollama can use OpenAI chat format too
+                # Use Ollama's native API format (model first, then messages)
                 request_body = {
+                    "model": self.config.model_name,
                     "messages": [
                         {"role": "system", "content": prompt},
                         {"role": "user", "content": content}
                     ],
-                    "model": self.config.model_name,
                     "stream": False
                 }
             else:
@@ -208,7 +207,7 @@ hosted OpenAI-compatible endpoint.
                 try:
                     response_data = response.json()
                     
-                    # Try multiple response formats (like Translation tab)
+                     # Try multiple response formats (like Translation tab)
                     try:
                         # OpenAI chat format
                         summary = response_data["choices"][0]["message"]["content"]
@@ -230,6 +229,16 @@ hosted OpenAI-compatible endpoint.
                                  # (e.g. DeepSeek-R1, QwQ) before returning the clean response
                                  summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL).strip()
                              except KeyError:
+                                 # Try Ollama native API format (message.content)
+                                 if self.config.provider == "ollama-local":
+                                     try:
+                                         summary = response_data["message"]["content"]
+                                         # Strip <think>...</think> blocks produced by reasoning models
+                                         # (e.g. DeepSeek-R1, QwQ) before returning the clean response
+                                         summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL).strip()
+                                     except KeyError:
+                                         pass
+                                 
                                  # Fallback to first available text field
                                  if "choices" in response_data and len(response_data["choices"]) > 0:
                                      first_choice = response_data["choices"][0]
