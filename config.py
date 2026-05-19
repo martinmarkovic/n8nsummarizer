@@ -72,11 +72,25 @@ DARK_THEME = {
 }
 
 # LLM Configuration (for direct LLM webhook support)
-LLM_WEBHOOK_URL = os.getenv("LLM_WEBHOOK_URL", "http://localhost:1234")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "lmstudio")  # Default to LM Studio
+LLM_WEBHOOK_URL = os.getenv("LLM_WEBHOOK_URL", "http://127.0.0.1:1234/v1")
 LLM_MODEL = os.getenv("LLM_MODEL", "local-model")
 LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "120"))  # 2 minutes for LLM responses
-LLM_USE_OPENAI_FORMAT = os.getenv("LLM_USE_OPENAI_FORMAT", "true").lower() == "true"
 LLM_USE_OPENAI_FORMAT = os.getenv("LLM_USE_OPENAI_FORMAT", "true").lower() == "true"  # Use OpenAI format by default
+
+# Provider configuration
+PROVIDER_CONFIG = {
+    "lmstudio": {
+        "default_base_url": "http://127.0.0.1:1234/v1",
+        "list_models_path": "/models",
+        "type": "openai"
+    },
+    "ollama-local": {
+        "default_base_url": "http://localhost:11434/api",
+        "list_models_path": "/tags", 
+        "type": "ollama"
+    }
+}
 
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

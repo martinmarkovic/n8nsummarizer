@@ -109,26 +109,27 @@ class SummarizerController:
             self.view.show_error(f"Unknown input mode: {mode}")
     
     def _update_llm_client(self) -> bool:
-        """
-        Update LLM client configuration from view settings.
-        
-        Returns:
-            True if configuration updated successfully, False if validation failed
-        """
+        """Update LLM client configuration from view settings."""
         webhook_url = self.view.get_webhook_url()
         model_name = self.view.get_model_name()
+        provider = self.view.get_provider()
         
         if not webhook_url:
-            self.view.show_error("Webhook URL is empty. Please enter a valid URL.")
+            self.view.show_error("LLM base URL is required.")
+            return False
+            
+        if not model_name:
+            self.view.show_error("LLM model name is required.")
             return False
         
         # Update LLM client configuration
         self.llm_client.config.webhook_url = webhook_url
         self.llm_client.config.model_name = model_name
+        self.llm_client.config.provider = provider
         
         # Save to .env if requested
         if self.view.get_save_settings():
-            self.llm_client.save_settings_to_env(webhook_url, model_name)
+            self.llm_client.save_settings_to_env(webhook_url, model_name, provider)
         
         return True
     
@@ -433,7 +434,7 @@ class SummarizerController:
         if export_prefs["use_original_location"] and export_prefs["original_directory"]:
             file_path = os.path.join(export_prefs["original_directory"], filename)
             try:
-                self.file_model.export_to_docx(content, file_path)
+                self.file_model.export_docx(content, file_path)
             except Exception as e:
                 logger.error(f"Failed to auto-export DOCX: {e}")
                 file_path = None
@@ -449,7 +450,7 @@ class SummarizerController:
                 return
             
             try:
-                self.file_model.export_to_docx(content, file_path)
+                self.file_model.export_docx(content, file_path)
             except Exception as e:
                 self.view.show_error(f"Failed to export DOCX: {e}")
                 return

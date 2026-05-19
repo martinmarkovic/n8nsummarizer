@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from config import LLM_WEBHOOK_URL, LLM_MODEL, LLM_TIMEOUT, LLM_USE_OPENAI_FORMAT
+from config import LLM_WEBHOOK_URL, LLM_MODEL, LLM_TIMEOUT, LLM_USE_OPENAI_FORMAT, LLM_PROVIDER
 from utils.logger import logger
 
 
@@ -23,18 +23,20 @@ class LLMClientConfig:
         timeout: Request timeout in seconds
         chunk_size_bytes: Maximum content size per API call (default: 400KB)
         use_openai_format: Use OpenAI chat format (True) or simple prompt format (False)
+        provider: LLM provider ('lmstudio' or 'ollama-local')
     """
     webhook_url: str
     model_name: str
     timeout: int
     chunk_size_bytes: int = 400_000  # 400KB default
     use_openai_format: bool = True  # Use OpenAI format by default
+    provider: str = "lmstudio"  # Default provider
 
     @classmethod
     def from_env(cls) -> 'LLMClientConfig':
         """Create configuration from environment variables.
         
-        Reads LLM_WEBHOOK_URL, LLM_MODEL, LLM_TIMEOUT, and LLM_USE_OPENAI_FORMAT from config.py
+        Reads LLM_WEBHOOK_URL, LLM_MODEL, LLM_TIMEOUT, LLM_USE_OPENAI_FORMAT, and LLM_PROVIDER from config.py
         which sources them from .env file.
         
         Returns:
@@ -44,10 +46,11 @@ class LLMClientConfig:
             webhook_url=LLM_WEBHOOK_URL,
             model_name=LLM_MODEL,
             timeout=LLM_TIMEOUT,
-            use_openai_format=LLM_USE_OPENAI_FORMAT
+            use_openai_format=LLM_USE_OPENAI_FORMAT,
+            provider=LLM_PROVIDER
         )
 
-    def save_to_env(self, webhook_url: str, model_name: str) -> bool:
+    def save_to_env(self, webhook_url: str, model_name: str, provider: str) -> bool:
         """Save configuration to .env file.
         
         Updates the .env file in project root with new values.
@@ -56,6 +59,7 @@ class LLMClientConfig:
         Args:
             webhook_url: New webhook URL to save
             model_name: New model name to save
+            provider: LLM provider to save
             
         Returns:
             True if save succeeded, False if failed
@@ -76,7 +80,8 @@ class LLMClientConfig:
             # Track if we've updated existing lines
             webhook_updated = False
             model_updated = False
-            
+            provider_updated = False
+
             for line in lines:
                 if line.startswith('LLM_WEBHOOK_URL='):
                     updated_lines.append(f'LLM_WEBHOOK_URL={webhook_url}')
@@ -84,6 +89,9 @@ class LLMClientConfig:
                 elif line.startswith('LLM_MODEL='):
                     updated_lines.append(f'LLM_MODEL={model_name}')
                     model_updated = True
+                elif line.startswith('LLM_PROVIDER='):
+                    updated_lines.append(f'LLM_PROVIDER={provider}')
+                    provider_updated = True
                 else:
                     # Keep comments and other lines unchanged
                     updated_lines.append(line)
@@ -93,11 +101,13 @@ class LLMClientConfig:
                 updated_lines.append(f'LLM_WEBHOOK_URL={webhook_url}')
             if not model_updated:
                 updated_lines.append(f'LLM_MODEL={model_name}')
+            if not provider_updated:
+                updated_lines.append(f'LLM_PROVIDER={provider}')
             
             # Write updated content
             env_path.write_text('\n'.join(updated_lines), encoding='utf-8')
             
-            logger.info(f"Saved LLM configuration to .env: webhook_url={webhook_url}, model_name={model_name}")
+            logger.info(f"Saved LLM configuration to .env: webhook_url={webhook_url}, model_name={model_name}, provider={provider}")
             return True
             
         except Exception as e:

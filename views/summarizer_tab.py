@@ -21,12 +21,13 @@ Created: 2026-05-06
 import os
 import tkinter as tk
 from tkinter import filedialog, scrolledtext, ttk, messagebox
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
-from config import LLM_WEBHOOK_URL, LLM_MODEL
+from config import LLM_WEBHOOK_URL, LLM_MODEL, LLM_PROVIDER, PROVIDER_CONFIG
 from utils.prompt_presets import PROMPT_PRESETS, PRESET_NAMES, DEFAULT_PROMPT_KEY
 from utils.prompt_manager import PromptManager
 from utils.logger import logger
+from models.llm_client.discovery import discover_models, Provider, ModelOption
 from views.base_tab import BaseTab
 
 
@@ -60,14 +61,24 @@ class SummarizerTab(BaseTab):
         self.format_var = tk.StringVar(value=".txt")
         
         # LLM settings
-        self.webhook_var = tk.StringVar(value=LLM_WEBHOOK_URL or "http://localhost:1234")
+        self.provider_var = tk.StringVar(value=LLM_PROVIDER or "lmstudio")
+        self.webhook_var = tk.StringVar(value=LLM_WEBHOOK_URL or "http://127.0.0.1:1234/v1")
         self.model_var = tk.StringVar(value=LLM_MODEL or "local-model")
         self.save_settings_var = tk.BooleanVar(value=False)
+        
+        # Model discovery state
+        self.available_models: List[ModelOption] = []
+        self.models_status = tk.StringVar(value="")
+        self.models_error = tk.StringVar(value="")
+        self.status_indicator = None  # Will be set in _setup_ui
         
         # Prompt management
         self.prompt_manager = prompt_manager
         self._last_valid_preset = DEFAULT_PROMPT_KEY
-        
+
+        # Initialize model discovery on first load
+        # Note: We'll call this after UI is fully set up
+
         # Prompt
         self.prompt_preset_var = tk.StringVar(value=DEFAULT_PROMPT_KEY)
         # self.prompt_text widget created in _setup_ui
@@ -98,7 +109,7 @@ class SummarizerTab(BaseTab):
         # Configure row weights
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
-        self.rowconfigure(3, weight=1)  # Content/response section expands
+        self.rowconfigure(2, weight=1)  # Content/response section expands
         
         # Setup sections in order
         self._setup_input_section()             # row=0, column=0
@@ -109,6 +120,9 @@ class SummarizerTab(BaseTab):
         
         # Initialize mode visibility
         self._on_mode_changed()
+        
+        # Trigger initial model discovery
+        self.after(100, self._discover_models)
         
         logger.debug("SummarizerTab UI setup complete")
     
@@ -206,29 +220,72 @@ class SummarizerTab(BaseTab):
         
         settings_frame.columnconfigure(1, weight=1)
         
-        # Webhook URL
+        # Provider selection
         row = 0
-        ttk.Label(settings_frame, text="Webhook URL:").grid(row=row, column=0, sticky="w")
+        ttk.Label(settings_frame, text="Provider:").grid(row=row, column=0, sticky="w")
+        
+        provider_frame = ttk.Frame(settings_frame)
+        provider_frame.grid(row=row, column=1, sticky="w")
+        
+        ttk.Radiobutton(
+            provider_frame,
+            text="LM Studio",
+            value="lmstudio",
+            variable=self.provider_var,
+            command=self._on_provider_changed
+        ).pack(side=tk.LEFT, padx=5)
+        
+        ttk.Radiobutton(
+            provider_frame,
+            text="Ollama Local",
+            value="ollama-local",
+            variable=self.provider_var,
+            command=self._on_provider_changed
+        ).pack(side=tk.LEFT, padx=5)
+        
+        # Status indicator
+        row += 1
+        status_frame = ttk.Frame(settings_frame)
+        status_frame.grid(row=row, column=0, columnspan=3, sticky="w")
+        
+        self.status_indicator = ttk.Label(status_frame, text="●", font=("Segoe UI", 10))
+        self.status_indicator.pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.status_label = ttk.Label(status_frame, textvariable=self.models_status)
+        self.status_label.pack(side=tk.LEFT)
+        
+        # Base URL
+        row += 1
+        ttk.Label(settings_frame, text="Base URL:").grid(row=row, column=0, sticky="w")
         self.webhook_entry = ttk.Entry(
             settings_frame,
             textvariable=self.webhook_var
         )
         self.webhook_entry.grid(row=row, column=1, sticky="ew", padx=5)
         
+        # Test connection button
+        ttk.Button(
+            settings_frame,
+            text="Test",
+            command=self._test_connection,
+            width=6
+        ).grid(row=row, column=2, padx=5)
+        
         ttk.Checkbutton(
             settings_frame,
             text="Save to .env",
             variable=self.save_settings_var
-        ).grid(row=row, column=2, sticky="w", padx=5)
+        ).grid(row=row, column=3, sticky="w", padx=5)
         
-        # Model name
+        # Model name (changed to combobox)
         row += 1
         ttk.Label(settings_frame, text="Model:").grid(row=row, column=0, sticky="w")
-        self.model_entry = ttk.Entry(
+        self.model_combo = ttk.Combobox(
             settings_frame,
-            textvariable=self.model_var
+            textvariable=self.model_var,
+            state="readonly"
         )
-        self.model_entry.grid(row=row, column=1, sticky="ew", padx=5)
+        self.model_combo.grid(row=row, column=1, sticky="ew", padx=5)
         
         # Prompt preset
         row += 1
@@ -263,7 +320,89 @@ class SummarizerTab(BaseTab):
         self.prompt_combo.config(values=names)
         self.prompt_preset_var.set(default_key)
         self.prompt_text.insert("1.0", default_prompt)
-    
+
+    def _on_provider_changed(self):
+        """Handle provider selection changes."""
+        provider = self.provider_var.get()
+        config = PROVIDER_CONFIG.get(provider)
+
+        if config:
+            # Update base URL to provider default
+            default_url = config['default_base_url']
+            self.webhook_var.set(default_url)
+
+            # Clear current model selection
+            self.model_var.set("")
+
+            # Trigger model discovery
+            self._discover_models()
+
+    def _test_connection(self):
+        """Test connection to LLM server and discover models."""
+        self._discover_models()
+
+    def _discover_models(self):
+        """Discover available models from current provider."""
+        provider = self.provider_var.get()
+        base_url = self.webhook_var.get().strip()
+
+        if not provider or not base_url:
+            self.models_status.set("Error: Provider and URL required")
+            if self.status_indicator:
+                self.status_indicator.config(foreground="red")
+            return
+
+        # Show loading state
+        self.models_status.set("Connecting...")
+        if self.status_indicator:
+            self.status_indicator.config(foreground="orange")
+        self.update()
+
+        # Run discovery in background to avoid UI freeze
+        def discovery_task():
+            try:
+                models, status, error = discover_models(provider, base_url)
+
+                # Update UI on main thread
+                self.after(0, lambda: self._update_models_ui(models, status, error))
+            except Exception as e:
+                self.after(0, lambda: self._update_models_ui([], 'error', str(e)))
+
+        # Start discovery in background thread
+        import threading
+        threading.Thread(target=discovery_task, daemon=True).start()
+
+    def _update_models_ui(self, models, status, error):
+        """Update UI with model discovery results."""
+        self.available_models = models
+
+        # Update status indicator
+        if status == 'ok':
+            self.models_status.set("Connected")
+            if self.status_indicator:
+                self.status_indicator.config(foreground="green")
+            self.models_error.set("")
+        elif status == 'error':
+            self.models_status.set("Cannot reach server")
+            if self.status_indicator:
+                self.status_indicator.config(foreground="red")
+            self.models_error.set(error or "Unknown error")
+        else:
+            self.models_status.set("Connecting...")
+            if self.status_indicator:
+                self.status_indicator.config(foreground="orange")
+
+        # Update model dropdown
+        if models:
+            model_names = [model['label'] for model in models]
+            self.model_combo.config(values=model_names)
+            # Select first model if none selected
+            if not self.model_var.get():
+                self.model_var.set(models[0]['id'])
+        else:
+            self.model_combo.config(values=[])
+            self.model_var.set("")
+
     def _on_preset_changed(self, event=None):
         """Handle prompt preset selection changes."""
         key = self.prompt_preset_var.get()
@@ -622,6 +761,10 @@ class SummarizerTab(BaseTab):
     def get_save_settings(self) -> bool:
         """Get save settings preference."""
         return self.save_settings_var.get()
+    
+    def get_provider(self) -> str:
+        """Get current provider."""
+        return self.provider_var.get()
     
     def get_prompt(self) -> str:
         """Get current prompt text."""

@@ -328,7 +328,7 @@ hosted OpenAI-compatible endpoint.
             logger.error(f"LLM connection test failed: {str(e)}")
             return False
     
-    def save_settings_to_env(self, webhook_url: str, model_name: str) -> bool:
+    def save_settings_to_env(self, webhook_url: str, model_name: str, provider: str) -> bool:
         """Save settings to .env file.
         
         Delegates to config.save_to_env() and updates internal config on success.
@@ -336,16 +336,18 @@ hosted OpenAI-compatible endpoint.
         Args:
             webhook_url: Webhook URL to save
             model_name: Model name to save
+            provider: LLM provider to save
             
         Returns:
             True if save succeeded, False if failed
         """
-        success = self.config.save_to_env(webhook_url, model_name)
+        success = self.config.save_to_env(webhook_url, model_name, provider)
         
         if success:
             # Update internal config to match saved values
             self.config.webhook_url = webhook_url
             self.config.model_name = model_name
+            self.config.provider = provider
             logger.info("Updated LLMClient config with saved settings")
         
         return success
