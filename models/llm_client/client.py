@@ -207,7 +207,24 @@ hosted OpenAI-compatible endpoint.
                 try:
                     response_data = response.json()
                     
-                     # Try multiple response formats (like Translation tab)
+                     # Special handling for Ollama responses first (both local and cloud)
+                    if self.config.provider == "ollama-local":
+                        # Extract only the clean content from message.content, ignore all metadata
+                        if "message" in response_data and isinstance(response_data["message"], dict):
+                            message_obj = response_data["message"]
+                            if "content" in message_obj:
+                                summary = message_obj["content"]
+                                # Strip any thinking blocks that might have been included
+                                summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL).strip()
+                                summary = re.sub(r'<thinking>.*?</thinking>', '', summary, flags=re.DOTALL).strip()
+                                
+                                # Log that we successfully extracted clean content
+                                logger.info(f"Successfully received LLM response ({len(summary)} characters)")
+                                return True, summary, None
+                        else:
+                            logger.warning("Ollama response missing message.content field")
+                    
+                    # Continue with existing multi-format parsing for non-Ollama providers
                     try:
                         # OpenAI chat format
                         summary = response_data["choices"][0]["message"]["content"]
@@ -229,16 +246,6 @@ hosted OpenAI-compatible endpoint.
                                  # (e.g. DeepSeek-R1, QwQ) before returning the clean response
                                  summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL).strip()
                              except KeyError:
-                                 # Try Ollama native API format (message.content)
-                                 if self.config.provider == "ollama-local":
-                                     try:
-                                         summary = response_data["message"]["content"]
-                                         # Strip <think>...</think> blocks produced by reasoning models
-                                         # (e.g. DeepSeek-R1, QwQ) before returning the clean response
-                                         summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL).strip()
-                                     except KeyError:
-                                         pass
-                                 
                                  # Fallback to first available text field
                                  if "choices" in response_data and len(response_data["choices"]) > 0:
                                      first_choice = response_data["choices"][0]
@@ -256,6 +263,9 @@ hosted OpenAI-compatible endpoint.
                                      # Strip <think>...</think> blocks produced by reasoning models
                                      # (e.g. DeepSeek-R1, QwQ) before returning the clean response
                                      summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL).strip()
+                      
+                    logger.info(f"Successfully received LLM response ({len(summary)} characters)")
+                    return True, summary, None
                     
                     logger.info(f"Successfully received LLM response ({len(summary)} characters)")
                     return True, summary, None
