@@ -127,7 +127,7 @@ class SummarizerController:
         self.llm_client.config.model_name = model_name
         self.llm_client.config.provider = provider
         
-        # Save to .env if requested
+        # Save to .env if requested (though now also saved automatically on success)
         if self.view.get_save_settings():
             self.llm_client.save_settings_to_env(webhook_url, model_name, provider)
         
@@ -313,6 +313,13 @@ class SummarizerController:
         self.view.show_loading(False)
         self.view.set_export_buttons_enabled(True)
         self.view.set_status("Ready")
+        
+        # Automatically save last used settings to .env for better UX
+        # This remembers the user's last successful configuration
+        webhook_url = self.view.get_webhook_url()
+        model_name = self.view.get_model_name()
+        provider = self.view.get_provider()
+        self.llm_client.save_settings_to_env(webhook_url, model_name, provider)
         
         # Handle auto-export preferences
         export_prefs = self.view.get_export_preferences()

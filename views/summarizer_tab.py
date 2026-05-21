@@ -64,7 +64,7 @@ class SummarizerTab(BaseTab):
         self.provider_var = tk.StringVar(value=LLM_PROVIDER or "lmstudio")
         self.webhook_var = tk.StringVar(value=LLM_WEBHOOK_URL or "http://127.0.0.1:1234/v1")
         self.model_var = tk.StringVar(value=LLM_MODEL or "local-model")
-        self.save_settings_var = tk.BooleanVar(value=False)
+        self.save_settings_var = tk.BooleanVar(value=True)  # Changed to True for automatic saving
         
         # Model discovery state
         self.available_models: List[ModelOption] = []
@@ -273,7 +273,7 @@ class SummarizerTab(BaseTab):
         
         ttk.Checkbutton(
             settings_frame,
-            text="Save to .env",
+            text="Remember settings",
             variable=self.save_settings_var
         ).grid(row=row, column=3, sticky="w", padx=5)
         
