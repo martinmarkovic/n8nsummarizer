@@ -122,7 +122,7 @@ class TranslationService:
 
         while attempt <= self.max_retries:
             success, translated_text, error, metadata = self._make_translation_request(
-                payload, provider, model_name
+                payload, provider, model_name, chunk
             )
 
             if success:
@@ -179,7 +179,7 @@ class TranslationService:
         )
 
     def _make_translation_request(
-        self, payload: Dict[str, Any], provider: str = "lmstudio", model_name: str = "local-model"
+        self, payload: Dict[str, Any], provider: str = "lmstudio", model_name: str = "local-model", chunk: str = ""
     ) -> Tuple[bool, str, Optional[str], Optional[Dict[str, Any]]]:
         """Make translation request using LLM client for provider-specific communication."""
         try:
@@ -190,6 +190,10 @@ class TranslationService:
             self.llm_client.config.webhook_url = self.webhook_url
             self.llm_client.config.provider = provider
             self.llm_client.config.model_name = model_name
+            
+            # Debug: Log if provider/model are default values (indicates propagation issue)
+            if provider == "lmstudio" and model_name == "local-model":
+                logger.warning("WARNING: Using default provider/model values - check if real values were passed from controller")
             
             # Debug: Log the actual configuration being used
             logger.info(f"TranslationService configured LLM client: provider='{self.llm_client.config.provider}', "
@@ -204,13 +208,17 @@ class TranslationService:
             # Extract the prompt from payload
             prompt = payload.get("prompt", "")
             
+            # Add final debug log showing all configuration
+            logger.info(f"Final translation request: provider='{provider}', model='{model_name}', "
+                       f"base_url='{self.webhook_url}', content_length={len(chunk) if chunk else 0}")
+            
             # Use LLM client to send the translation request
             # The LLM client will handle provider-specific endpoints and formats
             success, translated_text, error = self.llm_client.send_content(
                 file_name="translation",
-                content=chunk,  # Use actual content like Summarizer tab
+                content=chunk if chunk else "",  # Use chunk parameter safely
                 prompt=prompt,
-                file_size_bytes=len(chunk.encode('utf-8'))  # Provide actual content length
+                file_size_bytes=len(chunk.encode('utf-8')) if chunk else 0  # Provide actual content length
             )
 
             if success:
