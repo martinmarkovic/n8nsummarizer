@@ -92,15 +92,15 @@ class TranslationTab(BaseTab):
         # LLM Settings section (NEW - replaces webhook URL entry)
         self._setup_llm_settings_section(top_frame)
 
-        # Language dropdown
+        # Row 4: Language dropdown (moved down to prevent overlap with LLM settings)
         ttk.Label(top_frame, text="Translate to:").grid(
-            row=2, column=0, padx=(0, 8), pady=5, sticky=tk.W
+            row=4, column=0, padx=(0, 8), pady=5, sticky=tk.W
         )
 
         language_dropdown = ttk.Combobox(
             top_frame, textvariable=self.target_language, values=["Croatian", "Deutsch"]
         )
-        language_dropdown.grid(row=2, column=1, padx=4, pady=5, sticky=tk.W)
+        language_dropdown.grid(row=4, column=1, padx=4, pady=5, sticky=tk.W)
 
         # Row 1: Resizable panes with source (left) and translation (right)
         self.panes = ResizablePanes(self)
@@ -152,8 +152,8 @@ class TranslationTab(BaseTab):
         )
 
     def _setup_llm_settings_section(self, parent_frame):
-        """Setup LLM settings section (replaces old webhook URL entry)"""
-        # Provider selection
+        """Setup LLM settings section with multi-row layout to prevent overlap"""
+        # Row 1: Provider selection
         ttk.Label(parent_frame, text="Provider:").grid(row=1, column=0, padx=(0, 8), pady=5, sticky=tk.W)
 
         provider_frame = ttk.Frame(parent_frame)
@@ -175,7 +175,7 @@ class TranslationTab(BaseTab):
             command=self._on_provider_changed
         ).pack(side=tk.LEFT, padx=5)
 
-        # Status indicator
+        # Row 1: Status indicator
         status_frame = ttk.Frame(parent_frame)
         status_frame.grid(row=1, column=2, padx=(8, 0), pady=5, sticky=tk.W)
 
@@ -185,33 +185,32 @@ class TranslationTab(BaseTab):
         self.status_label_llm = ttk.Label(status_frame, textvariable=self.models_status)
         self.status_label_llm.pack(side=tk.LEFT)
 
-        # Base URL
-        ttk.Label(parent_frame, text="Base URL:").grid(row=1, column=3, padx=(8, 0), pady=5, sticky=tk.W)
+        # Row 2: Base URL
+        ttk.Label(parent_frame, text="Base URL:").grid(row=2, column=0, padx=(0, 8), pady=5, sticky=tk.W)
 
         self.webhook_entry = ttk.Entry(
             parent_frame,
             textvariable=self.webhook_var,
             width=30
         )
-        self.webhook_entry.grid(row=1, column=4, padx=(0, 8), pady=5, sticky=tk.W)
+        self.webhook_entry.grid(row=2, column=1, padx=4, pady=5, sticky=tk.W)
 
-        # Test connection button
+        # Row 2: Test connection button and Remember settings checkbox
         ttk.Button(
             parent_frame,
             text="Test",
             command=self._test_connection,
             width=6
-        ).grid(row=1, column=5, padx=(0, 5), pady=5, sticky=tk.W)
+        ).grid(row=2, column=2, padx=(8, 5), pady=5, sticky=tk.W)
 
-        # Remember settings checkbox
         ttk.Checkbutton(
             parent_frame,
             text="Remember settings",
             variable=self.save_settings_var
-        ).grid(row=1, column=6, sticky=tk.W, padx=5)
+        ).grid(row=2, column=3, sticky=tk.W, padx=5)
 
-        # Model selection
-        ttk.Label(parent_frame, text="Model:").grid(row=2, column=0, padx=(0, 8), pady=5, sticky=tk.W)
+        # Row 3: Model selection
+        ttk.Label(parent_frame, text="Model:").grid(row=3, column=0, padx=(0, 8), pady=5, sticky=tk.W)
 
         self.model_combo = ttk.Combobox(
             parent_frame,
@@ -219,7 +218,7 @@ class TranslationTab(BaseTab):
             state="readonly",
             width=30
         )
-        self.model_combo.grid(row=2, column=1, columnspan=3, padx=4, pady=5, sticky=tk.W)
+        self.model_combo.grid(row=3, column=1, columnspan=2, padx=4, pady=5, sticky=tk.W)
 
     # --- View Methods (called by controller) ---
 
