@@ -80,8 +80,14 @@ class TranslationController:
             )
             return
 
-        # Update LLM client with current view settings
+        # Update LLM client and model with current view settings
         self._update_llm_client_from_view()
+        
+        # Update translation model with LLM settings
+        provider = self.view.get_provider()
+        webhook_url = self.view.get_webhook_url()
+        model_name = self.view.get_model_name()
+        self.model.set_llm_settings(provider, webhook_url, model_name)
         
         # Get target language
         target_language = self.view.get_target_language()

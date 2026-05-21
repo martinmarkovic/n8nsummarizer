@@ -68,6 +68,10 @@ class TranslationModel:
         self.chunk_size = chunk_size or TRANSLATION_CHUNK_SIZE
         self.batch_max_items = batch_max_items or TRANSLATION_BATCH_MAX_ITEMS
         self.batch_max_chars = batch_max_chars or TRANSLATION_BATCH_MAX_CHARS
+        
+        # NEW: LLM provider and model settings
+        self.provider = "lmstudio"  # Default provider
+        self.model_name = "local-model"  # Default model
 
         # Initialize services (facade pattern - delegate to specialized components)
         self.chunker = TranslationChunker(
@@ -91,12 +95,30 @@ class TranslationModel:
     def set_current_file_path(self, path: str):
         """
         Set the current file path.
-        
+
         Args:
             path: Path to the current file
         """
         self.file_handler.set_current_file_path(path)
         logger.info(f"Set current file path: {path}")
+
+    def set_llm_settings(self, provider: str, webhook_url: str, model_name: str):
+        """
+        Set LLM provider and model settings for translation.
+
+        Args:
+            provider: LLM provider ('lmstudio' or 'ollama-local')
+            webhook_url: Base URL for the provider
+            model_name: Model name to use
+        """
+        self.provider = provider
+        self.webhook_url = webhook_url
+        self.model_name = model_name
+        
+        # Update the translation service with new webhook URL
+        self.translation_service.webhook_url = webhook_url
+        
+        logger.info(f"Translation LLM settings updated: provider={provider}, model={model_name}, url={webhook_url}")
 
     def get_current_file_path(self) -> str:
         """
@@ -188,13 +210,15 @@ class TranslationModel:
 
                 # Translate this batch
                 success, translated_text, error, metadata = (
-                    self.translation_service.translate_chunk(
-                        chunk=encoded_batch,
-                        target_language=target_language,
-                        chunk_index=batch_idx,
-                        total_chunks=len(batches),
-                        mode="srt_text_only"
-                    )
+                     self.translation_service.translate_chunk(
+                         chunk=encoded_batch,
+                         target_language=target_language,
+                         chunk_index=batch_idx,
+                         total_chunks=len(batches),
+                         mode="srt_text_only",
+                         provider=self.provider,
+                         model_name=self.model_name
+                     )
                 )
 
                 if success:
@@ -608,12 +632,14 @@ class TranslationModel:
         # Translate each chunk
         for i, chunk in enumerate(chunks, 1):
             success, translated_text, error, metadata = (
-                self.translation_service.translate_chunk(
-                    chunk=chunk,
-                    target_language=target_language,
-                    chunk_index=i,
-                    total_chunks=total_chunks,
-                )
+                     self.translation_service.translate_chunk(
+                         chunk=chunk,
+                         target_language=target_language,
+                         chunk_index=idx,
+                         total_chunks=len(chunks),
+                         provider=self.provider,
+                         model_name=self.model_name
+                     )
             )
 
             if success:

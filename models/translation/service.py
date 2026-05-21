@@ -9,6 +9,7 @@ import time
 from typing import Tuple, Optional, Dict, Any
 import requests
 from config import TRANSLATION_DEFAULT_URL, TRANSLATION_TIMEOUT
+from models.llm_client import LLMClient
 from utils.logger import logger
 
 
@@ -31,6 +32,7 @@ class TranslationService:
         self.timeout = timeout
         self.retry_count = 0
         self.max_retries = 3
+        self.llm_client = LLMClient()  # NEW: Use LLM client for provider-specific communication
 
     def translate_chunk(
         self,
@@ -38,7 +40,9 @@ class TranslationService:
         target_language: str,
         chunk_index: int = None,
         total_chunks: int = None,
-        mode: str = "plain"
+        mode: str = "plain",
+        provider: str = "lmstudio",
+        model_name: str = "local-model"
     ) -> Tuple[bool, str, Optional[str], Optional[Dict[str, Any]]]:
         """
         Translate a single chunk with retry logic.
@@ -48,6 +52,9 @@ class TranslationService:
             target_language: Target language
             chunk_index: Current chunk index (for logging)
             total_chunks: Total number of chunks (for logging)
+            mode: Translation mode (plain or srt_text_only)
+            provider: LLM provider (lmstudio or ollama-local)
+            model_name: Model name to use
 
         Returns:
             Tuple of (success, translated_text, error, response_metadata)
@@ -115,7 +122,7 @@ class TranslationService:
 
         while attempt <= self.max_retries:
             success, translated_text, error, metadata = self._make_translation_request(
-                payload
+                payload, provider, model_name
             )
 
             if success:
@@ -172,49 +179,45 @@ class TranslationService:
         )
 
     def _make_translation_request(
-        self, payload: Dict[str, Any]
+        self, payload: Dict[str, Any], provider: str = "lmstudio", model_name: str = "local-model"
     ) -> Tuple[bool, str, Optional[str], Optional[Dict[str, Any]]]:
-        """Make actual HTTP request to translation API."""
+        """Make translation request using LLM client for provider-specific communication."""
         try:
-            response = requests.post(
-                self.webhook_url,
-                headers={"Content-Type": "application/json"},
-                data=json.dumps(payload),
-                timeout=self.timeout,
+            # Configure LLM client with current settings
+            self.llm_client.config.webhook_url = self.webhook_url
+            self.llm_client.config.provider = provider
+            self.llm_client.config.model_name = model_name
+            
+            # Extract the prompt from payload
+            prompt = payload.get("prompt", "")
+            
+            # Use LLM client to send the translation request
+            # The LLM client will handle provider-specific endpoints and formats
+            success, translated_text, error = self.llm_client.send_content(
+                file_name="translation",
+                content="",  # Content not needed for prompt-based translation
+                prompt=prompt
             )
 
-            logger.debug(f"Translation API response status: {response.status_code}")
-
-            if response.status_code in [200, 201, 202]:
-                response_data = response.json()
-
-                # Extract translated text
-                translated_text = ""
-                if "choices" in response_data and len(response_data["choices"]) > 0:
-                    translated_text = response_data["choices"][0].get("text", "")
-                elif "text" in response_data:
-                    translated_text = response_data["text"]
-
-                # Extract metadata
+            if success:
+                # Create metadata for compatibility with existing code
                 metadata = {
-                    "status_code": response.status_code,
-                    "model": response_data.get("model", "unknown"),
-                    "finish_reason": response_data.get("choices", [{}])[0].get(
-                        "finish_reason", ""
-                    )
-                    if "choices" in response_data
-                    else "",
-                    "usage": response_data.get("usage", {}),
+                    "status_code": 200,
+                    "finish_reason": "stop",
+                    "provider": provider,
+                    "model": model_name
                 }
-
-                logger.info(
-                    f"Translation successful, received {len(translated_text)} characters"
-                )
                 return True, translated_text, None, metadata
             else:
-                error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
-                logger.error(f"Translation API error: {error_msg}")
+                # Provider-specific error message
+                error_msg = f"Translation failed ({provider}): {error}"
+                logger.error(error_msg)
                 return False, "", error_msg, None
+
+        except Exception as e:
+            error_msg = f"Translation error ({provider}): {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return False, "", error_msg, None
 
         except requests.exceptions.Timeout:
             error_msg = f"Request timed out after {self.timeout}s"
