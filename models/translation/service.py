@@ -208,8 +208,9 @@ class TranslationService:
             # The LLM client will handle provider-specific endpoints and formats
             success, translated_text, error = self.llm_client.send_content(
                 file_name="translation",
-                content="",  # Content not needed for prompt-based translation
-                prompt=prompt
+                content=chunk,  # Use actual content like Summarizer tab
+                prompt=prompt,
+                file_size_bytes=len(chunk.encode('utf-8'))  # Provide actual content length
             )
 
             if success:
