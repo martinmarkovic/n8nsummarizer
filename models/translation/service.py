@@ -183,15 +183,23 @@ class TranslationService:
     ) -> Tuple[bool, str, Optional[str], Optional[Dict[str, Any]]]:
         """Make translation request using LLM client for provider-specific communication."""
         try:
+            # Debug: Log incoming provider configuration
+            logger.info(f"TranslationService._make_translation_request called with: provider='{provider}', model='{model_name}'")
+            
             # Configure LLM client with current settings
             self.llm_client.config.webhook_url = self.webhook_url
             self.llm_client.config.provider = provider
             self.llm_client.config.model_name = model_name
             
             # Debug: Log the actual configuration being used
-            logger.info(f"TranslationService configured LLM client: provider={self.llm_client.config.provider}, "
-                       f"model={self.llm_client.config.model_name}, "
-                       f"url={self.llm_client.config.webhook_url}")
+            logger.info(f"TranslationService configured LLM client: provider='{self.llm_client.config.provider}', "
+                       f"model='{self.llm_client.config.model_name}', "
+                       f"url='{self.llm_client.config.webhook_url}'")
+            
+            # Verify the configuration was applied correctly
+            if self.llm_client.config.provider != provider:
+                logger.error(f"Provider configuration failed: expected '{provider}', got '{self.llm_client.config.provider}'")
+                return False, "", "Provider configuration error", None
             
             # Extract the prompt from payload
             prompt = payload.get("prompt", "")
