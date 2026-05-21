@@ -290,7 +290,9 @@ class TranslationModel:
                                         target_language=target_language,
                                         chunk_index=batch_idx,
                                         total_chunks=len(batches),
-                                        mode="srt_text_only"
+                                        mode="srt_text_only",
+                                        provider=self.provider,
+                                        model_name=self.model_name
                                     )
                                 )
                                 
@@ -471,7 +473,9 @@ class TranslationModel:
                         target_language=target_language,
                         chunk_index=99,  # Special index for retries
                         total_chunks=1,
-                        mode="srt_retry"
+                        mode="srt_retry",
+                        provider=self.provider,
+                        model_name=self.model_name
                     )
                 )
                 
@@ -509,7 +513,9 @@ class TranslationModel:
                             target_language=target_language,
                             chunk_index=99,  # Special index for retries
                             total_chunks=1,
-                            mode="srt_single_retry"
+                            mode="srt_single_retry",
+                            provider=self.provider,
+                            model_name=self.model_name
                         )
                     )
                     
@@ -597,6 +603,8 @@ class TranslationModel:
                 target_language=target_language,
                 chunk_index=1,
                 total_chunks=1,
+                provider=self.provider,
+                model_name=self.model_name
             )
         )
 
