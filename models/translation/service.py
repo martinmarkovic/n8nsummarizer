@@ -38,11 +38,11 @@ class TranslationService:
         self,
         chunk: str,
         target_language: str,
+        provider: str,
+        model_name: str,
         chunk_index: int = None,
         total_chunks: int = None,
-        mode: str = "plain",
-        provider: str = "lmstudio",
-        model_name: str = "local-model"
+        mode: str = "plain"
     ) -> Tuple[bool, str, Optional[str], Optional[Dict[str, Any]]]:
         """
         Translate a single chunk with retry logic.
@@ -208,9 +208,16 @@ class TranslationService:
             # Extract the prompt from payload
             prompt = payload.get("prompt", "")
             
-            # Add final debug log showing all configuration
+            # Add final diagnostic log showing all configuration
+            endpoint_used = f"{self.webhook_url}"  # Will be updated by LLM client based on provider
+            if provider == "lmstudio":
+                endpoint_used = f"{self.webhook_url.rstrip('/')}/v1/chat/completions"
+            elif provider == "ollama-local":
+                endpoint_used = f"{self.webhook_url.rstrip('/')}/chat"
+            
             logger.info(f"Final translation request: provider='{provider}', model='{model_name}', "
-                       f"base_url='{self.webhook_url}', content_length={len(chunk) if chunk else 0}")
+                       f"base_url='{self.webhook_url}', endpoint='{endpoint_used}', "
+                       f"content_length={len(chunk) if chunk else 0}")
             
             # Use LLM client to send the translation request
             # The LLM client will handle provider-specific endpoints and formats
