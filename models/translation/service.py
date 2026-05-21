@@ -188,6 +188,11 @@ class TranslationService:
             self.llm_client.config.provider = provider
             self.llm_client.config.model_name = model_name
             
+            # Debug: Log the actual configuration being used
+            logger.info(f"TranslationService configured LLM client: provider={self.llm_client.config.provider}, "
+                       f"model={self.llm_client.config.model_name}, "
+                       f"url={self.llm_client.config.webhook_url}")
+            
             # Extract the prompt from payload
             prompt = payload.get("prompt", "")
             

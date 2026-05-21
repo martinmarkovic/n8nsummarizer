@@ -147,7 +147,7 @@ hosted OpenAI-compatible endpoint.
             return False, None, error
         
         try:
-            # Construct proper endpoint based on provider
+             # Construct proper endpoint based on provider
             if self.config.provider == "lmstudio":
                 # LM Studio uses OpenAI-compatible /v1/chat/completions endpoint
                 base_url = self.config.webhook_url.strip()
@@ -161,6 +161,9 @@ hosted OpenAI-compatible endpoint.
             else:
                 # Fallback to original behavior for unknown providers
                 endpoint = self.config.webhook_url.strip()
+            
+            # Debug: Log the endpoint being used
+            logger.info(f"LLMClient using endpoint: {endpoint} (provider={self.config.provider})")
             
             # Construct request body based on provider
             if self.config.provider == "lmstudio":
