@@ -15,7 +15,11 @@ Follows the same pattern as other tabs in the project.
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
+from typing import List
+import threading
 
+from config import LLM_WEBHOOK_URL, LLM_MODEL, LLM_PROVIDER, PROVIDER_CONFIG
+from models.llm_client.discovery import discover_models, ModelOption
 from views.base_tab import BaseTab
 from views.resizable_panes import ResizablePanes
 
@@ -28,9 +32,17 @@ class TranslationTab(BaseTab):
 
         # State variables (UI state only)
         self.source_file_path = tk.StringVar(value="[No file selected]")
-        self.webhook_url = tk.StringVar(value="")
         self.target_language = tk.StringVar(value="Croatian")
         self.is_translating = tk.BooleanVar(value=False)
+
+        # LLM Settings (NEW)
+        self.provider_var = tk.StringVar(value=LLM_PROVIDER or "lmstudio")
+        self.webhook_var = tk.StringVar(value=LLM_WEBHOOK_URL or "http://127.0.0.1:1234/v1")
+        self.model_var = tk.StringVar(value=LLM_MODEL or "local-model")
+        self.save_settings_var = tk.BooleanVar(value=True)
+        self.models_status = tk.StringVar(value="")
+        self.available_models: List[ModelOption] = []
+        self.status_indicator = None
 
         # Callback properties - will be wired by controller
         self.on_file_selected = None
@@ -77,29 +89,18 @@ class TranslationTab(BaseTab):
         self.file_btn = file_btn
         self.translate_btn = translate_btn
 
-        # Webhook URL and language selection
-        ttk.Label(top_frame, text="Translation Webhook URL:").grid(
-            row=1, column=0, padx=(0, 8), pady=5, sticky=tk.W
-        )
-
-        webhook_entry = ttk.Entry(top_frame, textvariable=self.webhook_url)
-        webhook_entry.grid(row=1, column=1, padx=4, pady=5, sticky=(tk.W, tk.E))
-
-        # Restore defaults button
-        restore_btn = ttk.Button(
-            top_frame, text="Restore Default", command=self._restore_default_webhook
-        )
-        restore_btn.grid(row=1, column=2, padx=(8, 0), pady=5, sticky=tk.W)
+        # LLM Settings section (NEW - replaces webhook URL entry)
+        self._setup_llm_settings_section(top_frame)
 
         # Language dropdown
         ttk.Label(top_frame, text="Translate to:").grid(
-            row=1, column=3, padx=(8, 0), pady=5, sticky=tk.W
+            row=2, column=0, padx=(0, 8), pady=5, sticky=tk.W
         )
 
         language_dropdown = ttk.Combobox(
             top_frame, textvariable=self.target_language, values=["Croatian", "Deutsch"]
         )
-        language_dropdown.grid(row=1, column=4, padx=(0, 8), pady=5, sticky=tk.W)
+        language_dropdown.grid(row=2, column=1, padx=4, pady=5, sticky=tk.W)
 
         # Row 1: Resizable panes with source (left) and translation (right)
         self.panes = ResizablePanes(self)
@@ -133,6 +134,9 @@ class TranslationTab(BaseTab):
         target_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.target_text.configure(yscrollcommand=target_scroll.set)
 
+        # Trigger automatic model discovery after UI is set up
+        self.after(100, self._discover_models)
+
         # Wire context menu for translation export and forward functionality
         self._register_context_menu(
             self.target_text,
@@ -146,6 +150,76 @@ class TranslationTab(BaseTab):
                 },
             ],
         )
+
+    def _setup_llm_settings_section(self, parent_frame):
+        """Setup LLM settings section (replaces old webhook URL entry)"""
+        # Provider selection
+        ttk.Label(parent_frame, text="Provider:").grid(row=1, column=0, padx=(0, 8), pady=5, sticky=tk.W)
+
+        provider_frame = ttk.Frame(parent_frame)
+        provider_frame.grid(row=1, column=1, padx=4, pady=5, sticky=tk.W)
+
+        ttk.Radiobutton(
+            provider_frame,
+            text="LM Studio",
+            value="lmstudio",
+            variable=self.provider_var,
+            command=self._on_provider_changed
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Radiobutton(
+            provider_frame,
+            text="Ollama Local",
+            value="ollama-local",
+            variable=self.provider_var,
+            command=self._on_provider_changed
+        ).pack(side=tk.LEFT, padx=5)
+
+        # Status indicator
+        status_frame = ttk.Frame(parent_frame)
+        status_frame.grid(row=1, column=2, padx=(8, 0), pady=5, sticky=tk.W)
+
+        self.status_indicator = ttk.Label(status_frame, text="●", font=("Segoe UI", 10))
+        self.status_indicator.pack(side=tk.LEFT, padx=(0, 5))
+
+        self.status_label_llm = ttk.Label(status_frame, textvariable=self.models_status)
+        self.status_label_llm.pack(side=tk.LEFT)
+
+        # Base URL
+        ttk.Label(parent_frame, text="Base URL:").grid(row=1, column=3, padx=(8, 0), pady=5, sticky=tk.W)
+
+        self.webhook_entry = ttk.Entry(
+            parent_frame,
+            textvariable=self.webhook_var,
+            width=30
+        )
+        self.webhook_entry.grid(row=1, column=4, padx=(0, 8), pady=5, sticky=tk.W)
+
+        # Test connection button
+        ttk.Button(
+            parent_frame,
+            text="Test",
+            command=self._test_connection,
+            width=6
+        ).grid(row=1, column=5, padx=(0, 5), pady=5, sticky=tk.W)
+
+        # Remember settings checkbox
+        ttk.Checkbutton(
+            parent_frame,
+            text="Remember settings",
+            variable=self.save_settings_var
+        ).grid(row=1, column=6, sticky=tk.W, padx=5)
+
+        # Model selection
+        ttk.Label(parent_frame, text="Model:").grid(row=2, column=0, padx=(0, 8), pady=5, sticky=tk.W)
+
+        self.model_combo = ttk.Combobox(
+            parent_frame,
+            textvariable=self.model_var,
+            state="readonly",
+            width=30
+        )
+        self.model_combo.grid(row=2, column=1, columnspan=3, padx=4, pady=5, sticky=tk.W)
 
     # --- View Methods (called by controller) ---
 
@@ -215,6 +289,85 @@ class TranslationTab(BaseTab):
         if self.on_translate_clicked:
             self.on_translate_clicked()
 
+    def _on_provider_changed(self):
+        """Handle provider selection changes."""
+        provider = self.provider_var.get()
+        config = PROVIDER_CONFIG.get(provider)
+
+        if config:
+            # Update base URL to provider default
+            default_url = config['default_base_url']
+            self.webhook_var.set(default_url)
+
+            # Clear current model selection
+            self.model_var.set("")
+
+            # Trigger model discovery
+            self._discover_models()
+
+    def _test_connection(self):
+        """Test connection to LLM server and discover models."""
+        self._discover_models()
+
+    def _discover_models(self):
+        """Discover available models from current provider."""
+        provider = self.provider_var.get()
+        base_url = self.webhook_var.get().strip()
+
+        if not provider or not base_url:
+            self.models_status.set("Error: Provider and URL required")
+            if self.status_indicator:
+                self.status_indicator.config(foreground="red")
+            return
+
+        # Show loading state
+        self.models_status.set("Connecting...")
+        if self.status_indicator:
+            self.status_indicator.config(foreground="orange")
+        self.update()
+
+        # Run discovery in background to avoid UI freeze
+        def discovery_task():
+            try:
+                models, status, error = discover_models(provider, base_url)
+
+                # Update UI on main thread
+                self.after(0, lambda: self._update_models_ui(models, status, error))
+            except Exception as e:
+                self.after(0, lambda: self._update_models_ui([], 'error', str(e)))
+
+        # Start discovery in background thread
+        threading.Thread(target=discovery_task, daemon=True).start()
+
+    def _update_models_ui(self, models, status, error):
+        """Update UI with model discovery results."""
+        self.available_models = models
+
+        # Update status indicator
+        if status == 'ok':
+            self.models_status.set("Connected")
+            if self.status_indicator:
+                self.status_indicator.config(foreground="green")
+        elif status == 'error':
+            self.models_status.set("Cannot reach server")
+            if self.status_indicator:
+                self.status_indicator.config(foreground="red")
+        else:
+            self.models_status.set("Connecting...")
+            if self.status_indicator:
+                self.status_indicator.config(foreground="orange")
+
+        # Update model dropdown
+        if models:
+            model_names = [model['label'] for model in models]
+            self.model_combo.config(values=model_names)
+            # Select first model if none selected
+            if not self.model_var.get():
+                self.model_var.set(models[0]['id'])
+        else:
+            self.model_combo.config(values=[])
+            self.model_var.set("")
+
     def _restore_default_webhook(self):
         """Handle restore default webhook button click - emit callback to controller"""
         if self.on_restore_default_webhook:
@@ -237,6 +390,23 @@ class TranslationTab(BaseTab):
     def get_file_path(self) -> str:
         """Get the current file path"""
         return self.source_file_path.get()
+
+    # NEW LLM Settings Getters
+    def get_provider(self) -> str:
+        """Get current provider."""
+        return self.provider_var.get()
+
+    def get_webhook_url(self) -> str:
+        """Get current webhook URL."""
+        return self.webhook_var.get().strip()
+
+    def get_model_name(self) -> str:
+        """Get current model name."""
+        return self.model_var.get().strip()
+
+    def get_save_settings(self) -> bool:
+        """Get save settings preference."""
+        return self.save_settings_var.get()
 
     def _export_translation_txt(self):
         """Export translated text as .txt file via context menu."""

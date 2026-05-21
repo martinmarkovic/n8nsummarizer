@@ -97,7 +97,9 @@ def main():
         bulk_summarizer_controller = BulkSummarizerController(
             window.bulk_summarizer_tab
         )
-        logger.info("BulkSummarizerController initialized")
+        # NEW: Link Bulk Summarizer tab to Summarizer tab for LLM settings inheritance
+        window.bulk_summarizer_tab.set_summarizer_tab(window.summarizer_tab)
+        logger.info("BulkSummarizerController initialized with LLM settings inheritance")
 
         # Initialize Bulk Transcriber tab controller
         # Wires: BulkTranscriberTab UI ↔ BulkTranscriberController

@@ -16,6 +16,7 @@ import threading
 import queue
 import os
 from models.translation_model import TranslationModel
+from models.llm_client import LLMClient
 from utils.logger import logger
 
 
@@ -31,6 +32,7 @@ class TranslationController:
         """
         self.view = view
         self.model = TranslationModel()
+        self.llm_client = LLMClient()  # NEW: LLM client for direct LLM communication
 
         # Thread management
         self.translation_thread = None
@@ -42,8 +44,8 @@ class TranslationController:
         self.view.on_restore_default_webhook = self.handle_restore_default_webhook
         self.view.on_clear_clicked = self.handle_clear_clicked
 
-        # Show default webhook URL in the field on startup
-        self.view.set_webhook_url(self.model.webhook_url)
+        # Initialize LLM settings from view defaults
+        self._update_llm_client_from_view()
 
         logger.info("TranslationController initialized")
 
@@ -78,14 +80,11 @@ class TranslationController:
             )
             return
 
-        # Always use webhook field value; fall back to default if empty
-        webhook_url = self.view.get_webhook_url().strip()
-        if webhook_url:
-            self.model.set_webhook_url(webhook_url)
-        else:
-            default_url = self.model.restore_default_webhook()
-            self.view.set_webhook_url(default_url)
-            logger.info(f"Webhook field was empty, using default: {default_url}")
+        # Update LLM client with current view settings
+        self._update_llm_client_from_view()
+        
+        # Get target language
+        target_language = self.view.get_target_language()
 
         # Get target language
         target_language = self.view.get_target_language()
@@ -147,21 +146,52 @@ class TranslationController:
             if self.view.get_translating_state():
                 self.view.root.after(100, self._check_translation_result)
 
+    def _update_llm_client_from_view(self):
+        """Update LLM client configuration from view settings."""
+        try:
+            provider = self.view.get_provider()
+            webhook_url = self.view.get_webhook_url()
+            model_name = self.view.get_model_name()
+            
+            if not webhook_url:
+                webhook_url = "http://127.0.0.1:1234/v1"  # Fallback to default
+                self.view.webhook_var.set(webhook_url)
+            
+            if not model_name:
+                model_name = "local-model"  # Fallback to default
+                self.view.model_var.set(model_name)
+            
+            # Update LLM client configuration
+            self.llm_client.config.webhook_url = webhook_url
+            self.llm_client.config.model_name = model_name
+            self.llm_client.config.provider = provider
+            
+            # Save to .env if requested
+            if self.view.get_save_settings():
+                self.llm_client.save_settings_to_env(webhook_url, model_name, provider)
+            
+            logger.info(
+                f"Translation LLM client configured: provider={provider}, "
+                f"model={model_name}, url={webhook_url}"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update translation LLM client: {str(e)}")
+            return False
+
     def handle_restore_default_webhook(self):
         """Handle Restore Default Webhook button click"""
         logger.info("Restoring default translation webhook")
 
-        # Restore default in model
-        default_url = self.model.restore_default_webhook()
-
-        # Update view
-        self.view.set_webhook_url(default_url)
-
-        # Save to .env
-        if self.model.save_webhook_to_env(default_url):
-            self.view.set_status(f"Restored default webhook: {default_url}")
-        else:
-            self.view.show_error("Failed to save default webhook to .env")
+        # Restore default provider and URL
+        self.view.provider_var.set("lmstudio")
+        self.view.webhook_var.set("http://127.0.0.1:1234/v1")
+        self.view.model_var.set("local-model")
+        
+        # Update LLM client
+        self._update_llm_client_from_view()
+        
+        self.view.set_status("Restored default LLM settings")
 
     def handle_clear_clicked(self):
         """Handle Clear button click"""

@@ -29,6 +29,7 @@ import logging
 from docx import Document
 
 from models.n8n_model import N8NModel
+from models.llm_client import LLMClient
 from utils.file_scanner import FileScanner
 from utils.logger import logger
 
@@ -52,6 +53,7 @@ class BulkSummarizerController:
     def __init__(self, view):
         self.view = view
         self.n8n_model = N8NModel()
+        self.llm_client = LLMClient()  # NEW: LLM client for direct LLM communication
         self.is_processing = False
 
         self.view.set_on_start_requested(self.handle_start_processing)
@@ -83,6 +85,15 @@ class BulkSummarizerController:
             self.view.append_log("Error: At least one output format must be selected", "error")
             return
 
+        # NEW: Get LLM settings from Summarizer tab
+        summarizer_settings = self.view.get_summarizer_settings()
+        if not summarizer_settings:
+            self.view.append_log("Error: LLM settings not configured. Please configure in Summarizer tab.", "error")
+            return
+        
+        # Update LLM client with inherited settings
+        self._update_llm_client(summarizer_settings)
+
         recursive = self.view.get_recursive_option()
         files = self._discover_files(source_folder, file_types, recursive)
         if not files:
@@ -102,6 +113,9 @@ class BulkSummarizerController:
             f"Output formats: {'separate' if output_formats['separate'] else ''} "
             f"{'combined' if output_formats['combined'] else ''}",
             "info"
+        )
+        self.view.append_log(
+            f"Using LLM: {summarizer_settings['provider']} - {summarizer_settings['model_name']}", "info"
         )
         if recursive:
             self.view.append_log("Recursive scanning enabled - processing subfolders", "info")
@@ -166,6 +180,21 @@ class BulkSummarizerController:
             logger.error(f"Error discovering files: {str(e)}")
             return []
 
+    def _update_llm_client(self, settings: dict):
+        """Update LLM client configuration with inherited settings."""
+        try:
+            self.llm_client.config.webhook_url = settings['webhook_url']
+            self.llm_client.config.model_name = settings['model_name']
+            self.llm_client.config.provider = settings['provider']
+            logger.info(
+                f"LLM client configured: provider={settings['provider']}, "
+                f"model={settings['model_name']}, url={settings['webhook_url']}"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update LLM client: {str(e)}")
+            return False
+
     # ------------------------------------------------------------------
     # Background Processing
     # ------------------------------------------------------------------
@@ -204,9 +233,11 @@ class BulkSummarizerController:
 
                     logger.info(f"Processing {idx}/{total}: {file_path.name} ({len(content)} chars)")
 
-                    success, summary, error = self.n8n_model.send_content(
+                    # Use LLM client instead of N8N model for direct LLM communication
+                    success, summary, error = self.llm_client.send_content(
                         file_name=file_path.stem,
-                        content=content
+                        content=content,
+                        prompt=summarizer_settings['prompt']
                     )
 
                     if success and summary:

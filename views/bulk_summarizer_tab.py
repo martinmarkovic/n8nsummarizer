@@ -61,11 +61,14 @@ class BulkSummarizerTab(BaseTab):
         self.prompt_manager = prompt_manager
         self._last_valid_preset = None
 
+        # LLM Settings inheritance - reference to SummarizerTab
+        self.summarizer_tab = None
+
         # Callback registration
         self.on_start_requested = None
         self.on_cancel_requested = None
 
-        super().__init__(notebook, "\U0001f4e6 Bulk Summarizer")
+        super().__init__(notebook, "📦 Bulk Summarizer")
         self._load_preferences()
         logger.info("BulkSummarizerTab initialized (v5.1)")
 
@@ -136,6 +139,7 @@ class BulkSummarizerTab(BaseTab):
         self._left_inner = inner
 
         # Build all left-column control sections inside inner frame
+        self._setup_llm_settings_info()  # NEW: LLM settings from Summarizer tab
         self._setup_file_type()
         self._setup_recursive_option()
         self._setup_output_format()
@@ -288,6 +292,42 @@ class BulkSummarizerTab(BaseTab):
             text="Note: At least one output format must be selected",
             foreground="gray"
         ).pack(anchor=tk.W, padx=10, pady=(10, 5))
+
+    def _setup_llm_settings_info(self):
+        """LLM Settings info panel - displays settings inherited from Summarizer tab"""
+        llm_frame = ttk.LabelFrame(self._left_inner, text="LLM Settings (from Summarizer tab)")
+        llm_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        # Provider info
+        self.provider_info_var = tk.StringVar(value="Provider: Not connected")
+        ttk.Label(llm_frame, textvariable=self.provider_info_var).pack(anchor=tk.W, padx=10, pady=2)
+        
+        # Base URL info
+        self.webhook_info_var = tk.StringVar(value="Base URL: Not configured")
+        ttk.Label(llm_frame, textvariable=self.webhook_info_var).pack(anchor=tk.W, padx=10, pady=2)
+        
+        # Model info
+        self.model_info_var = tk.StringVar(value="Model: Not selected")
+        ttk.Label(llm_frame, textvariable=self.model_info_var).pack(anchor=tk.W, padx=10, pady=2)
+        
+        # Prompt preset info
+        self.prompt_info_var = tk.StringVar(value="Prompt: Not selected")
+        ttk.Label(llm_frame, textvariable=self.prompt_info_var).pack(anchor=tk.W, padx=10, pady=2)
+        
+        # Refresh button
+        ttk.Button(
+            llm_frame,
+            text="Refresh Settings",
+            command=self._refresh_llm_settings_display
+        ).pack(anchor=tk.W, padx=10, pady=5)
+        
+        # Note about inheritance
+        ttk.Label(
+            llm_frame,
+            text="Note: LLM settings are inherited from the Summarizer tab",
+            foreground="gray",
+            font=("TkDefaultFont", 9)
+        ).pack(anchor=tk.W, padx=10, pady=(5, 0))
 
     def _setup_output_location(self):
         """Output location radio buttons - inside scrollable left panel"""
@@ -479,6 +519,22 @@ class BulkSummarizerTab(BaseTab):
         self.start_button.config(state=tk.DISABLED)
         self.cancel_button.config(state=tk.DISABLED)
 
+    def set_summarizer_tab(self, tab):
+        """Set reference to SummarizerTab for inheriting LLM settings."""
+        self.summarizer_tab = tab
+        logger.info("BulkSummarizerTab linked to SummarizerTab for LLM settings")
+
+    def get_summarizer_settings(self) -> dict:
+        """Returns LLM settings read from the SummarizerTab instance."""
+        if not self.summarizer_tab:
+            return None
+        return {
+            'provider': self.summarizer_tab.get_provider(),
+            'webhook_url': self.summarizer_tab.get_webhook_url(),
+            'model_name': self.summarizer_tab.get_model_name(),
+            'prompt': self.summarizer_tab.get_prompt()
+        }
+
     def get_content(self) -> str:
         return self.status_log.get('1.0', tk.END)
 
@@ -487,8 +543,36 @@ class BulkSummarizerTab(BaseTab):
     # ------------------------------------------------------------------
 
     def _on_start_clicked(self):
+        # Refresh LLM settings display before starting
+        self._refresh_llm_settings_display()
         if self.on_start_requested:
             self.on_start_requested()
+    
+    def _refresh_llm_settings_display(self):
+        """Update the LLM settings info panel with current values from Summarizer tab"""
+        if not self.summarizer_tab:
+            self.provider_info_var.set("Provider: Not connected")
+            self.webhook_info_var.set("Base URL: Not configured")
+            self.model_info_var.set("Model: Not selected")
+            self.prompt_info_var.set("Prompt: Not selected")
+            return
+        
+        settings = self.get_summarizer_settings()
+        if settings:
+            provider = settings['provider']
+            webhook_url = settings['webhook_url']
+            model_name = settings['model_name']
+            prompt_preview = settings['prompt'][:50] + "..." if len(settings['prompt']) > 50 else settings['prompt']
+            
+            self.provider_info_var.set(f"Provider: {provider}")
+            self.webhook_info_var.set(f"Base URL: {webhook_url}")
+            self.model_info_var.set(f"Model: {model_name}")
+            self.prompt_info_var.set(f"Prompt: {prompt_preview}")
+        else:
+            self.provider_info_var.set("Provider: Not configured")
+            self.webhook_info_var.set("Base URL: Not configured")
+            self.model_info_var.set("Model: Not selected")
+            self.prompt_info_var.set("Prompt: Not selected")
 
     def _on_cancel_clicked(self):
         if self.on_cancel_requested:
