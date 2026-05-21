@@ -147,23 +147,29 @@ hosted OpenAI-compatible endpoint.
             return False, None, error
         
         try:
-             # Construct proper endpoint based on provider
+             # Debug: Log provider value for debugging
+            logger.info(f"LLMClient provider value: '{self.config.provider}' (type: {type(self.config.provider)})")
+            
+            # Construct proper endpoint based on provider
             if self.config.provider == "lmstudio":
+                logger.info("Using LM Studio endpoint logic")
                 # LM Studio uses OpenAI-compatible /v1/chat/completions endpoint
                 base_url = self.config.webhook_url.strip()
                 if not base_url.endswith("/v1"):
                     base_url = base_url.rstrip("/") + "/v1"
                 endpoint = f"{base_url}/chat/completions"
             elif self.config.provider == "ollama-local":
+                logger.info("Using Ollama Local endpoint logic")
                 # Use Ollama's native API endpoint (/api/chat)
                 base_url = self.config.webhook_url.strip()
                 endpoint = f"{base_url}/chat"
             else:
+                logger.warning(f"Unknown provider: '{self.config.provider}', using fallback")
                 # Fallback to original behavior for unknown providers
                 endpoint = self.config.webhook_url.strip()
             
             # Debug: Log the endpoint being used
-            logger.info(f"LLMClient using endpoint: {endpoint} (provider={self.config.provider})")
+            logger.info(f"LLMClient constructed endpoint: {endpoint} (provider={self.config.provider})")
             
             # Construct request body based on provider
             if self.config.provider == "lmstudio":
