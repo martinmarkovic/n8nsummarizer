@@ -195,6 +195,36 @@ class SummarizerController:
     
     def _start_video_url_summarize(self):
         """Start video URL transcription and summarization workflow."""
+        
+        # NEW BLOCK START
+        # Check if content is already loaded in the preview box
+        existing_content = self.view.get_content()
+        if existing_content and existing_content.strip() and not self.view.get_force_retranscribe():
+            # Content already available — skip download+transcribe, go directly to LLM
+            logger.info("Existing content found in preview box — skipping transcription pipeline")
+            
+            if not self._update_llm_client():
+                return
+            
+            prompt = self.view.get_prompt()
+            
+            self.view.set_status("Sending existing content to LLM...")
+            self.view.display_response(
+                "Using content from preview box...\n"
+                "Sending to LLM webhook..."
+            )
+            self.view.show_loading(True)
+            
+            thread = threading.Thread(
+                target=self._summarize_transcript_thread,
+                args=(existing_content.strip(), prompt),
+                daemon=True
+            )
+            thread.start()
+            return
+        # NEW BLOCK END
+        
+        # Original flow continues below — no changes to anything below this point
         video_url = self.view.get_youtube_url()
         if not video_url or video_url == "https://":
             self.view.show_error("Please enter a video URL.")

@@ -194,7 +194,15 @@ class SummarizerTab(BaseTab):
             width=8
         )
         format_combo.grid(row=youtube_row, column=1, sticky="w", padx=5)
-        
+
+        youtube_row += 1
+        self.force_retranscribe_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            self._youtube_frame,
+            text="Force re-transcribe (ignore loaded content)",
+            variable=self.force_retranscribe_var
+        ).grid(row=youtube_row, column=1, sticky="w", padx=5)
+
         self._youtube_frame.grid(row=1, column=0, sticky="ew", pady=5)
         
         # Configure column weights
@@ -749,7 +757,11 @@ class SummarizerTab(BaseTab):
     def get_transcription_format(self) -> str:
         """Get transcription format."""
         return self.format_var.get()
-    
+
+    def get_force_retranscribe(self) -> bool:
+        """Get force re-transcribe preference."""
+        return getattr(self, 'force_retranscribe_var', tk.BooleanVar()).get()
+
     def get_webhook_url(self) -> str:
         """Get webhook URL."""
         return self.webhook_var.get().strip()
