@@ -5,9 +5,10 @@ Test script for LLM Client implementation (v9.1)
 
 import sys
 import os
+from pathlib import Path
 
 # Add the project root to Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def test_llm_client_import():
     """Test that LLMClient can be imported correctly"""

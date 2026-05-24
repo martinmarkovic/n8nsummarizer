@@ -450,6 +450,18 @@ class BulkSummarizerTab(BaseTab):
         )
         self.status_log.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         scrollbar.config(command=self.status_log.yview)
+        
+        # Add context menu to status log
+        menu = self._register_context_menu(
+            self.status_log,
+            [
+                {"label": "Copy All", "command": self._copy_status_log},
+                {"label": "Clear", "command": self._clear_status_log}
+            ]
+        )
+        # Add TTS command to status log context menu
+        menu.add_tts_command(lambda: self.status_log.get("1.0", tk.END))
+        menu.rebuild()
 
     # ------------------------------------------------------------------
     # Public API
@@ -505,6 +517,20 @@ class BulkSummarizerTab(BaseTab):
         indicator = indicators.get(status, "\u2022")
         self.status_log.insert(tk.END, f"[{timestamp}] {indicator} {message}\n")
         self.status_log.see(tk.END)
+        self.status_log.config(state=tk.DISABLED)
+
+    def _copy_status_log(self):
+        """Copy all status log content to clipboard."""
+        content = self.status_log.get("1.0", tk.END).strip()
+        if content:
+            self.clipboard_clear()
+            self.clipboard_append(content)
+            self.update()
+
+    def _clear_status_log(self):
+        """Clear status log content."""
+        self.status_log.config(state=tk.NORMAL)
+        self.status_log.delete("1.0", tk.END)
         self.status_log.config(state=tk.DISABLED)
 
     def clear_all(self):

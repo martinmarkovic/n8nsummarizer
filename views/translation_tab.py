@@ -138,7 +138,7 @@ class TranslationTab(BaseTab):
         self.after(100, self._discover_models)
 
         # Wire context menu for translation export and forward functionality
-        self._register_context_menu(
+        menu = self._register_context_menu(
             self.target_text,
             [
                 {"label": "Export as .txt", "command": self._export_translation_txt},
@@ -150,6 +150,9 @@ class TranslationTab(BaseTab):
                 },
             ],
         )
+        # Add TTS command to translation text context menu
+        menu.add_tts_command(lambda: self.target_text.get("1.0", tk.END))
+        menu.rebuild()
 
     def _setup_llm_settings_section(self, parent_frame):
         """Setup LLM settings section with multi-row layout to prevent overlap"""

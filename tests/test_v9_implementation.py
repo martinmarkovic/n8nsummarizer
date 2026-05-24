@@ -5,9 +5,10 @@ Test script for prompt presets and LLM configuration
 
 import sys
 import os
+from pathlib import Path
 
 # Add the project root to Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def test_prompt_presets():
     """Test the prompt presets module"""

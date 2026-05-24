@@ -23,6 +23,10 @@ python -m pytest tests/ -v
 |------|----------|-------------|
 | `test_file_scanner.py` | FileReader model | Tests file reading, validation, and file info operations |
 | `test_http_client.py` | HTTP client | Tests webhook communication and error handling |
+| `test_v9_1_llm_client.py` | LLM Client | Tests LLM client implementation and imports |
+| `test_v9_2_summarizer_tab.py` | SummarizerTab | Tests unified summarizer interface functionality |
+| `test_v9_3_summarizer_controller.py` | SummarizerController | Tests summarization controller workflows |
+| `test_v9_implementation.py` | Prompt presets & LLM config | Tests prompt presets and LLM configuration |
 
 **Test Scenarios Covered**:
 
@@ -55,10 +59,13 @@ python -m pytest tests/ -v
 
 ```
 tests/
-├── __init__.py          # Test package initialization
-├── test_file_scanner.py # File reading tests
-├── test_http_client.py  # HTTP client tests
-└── [future tests]      # Areas needing coverage
+├── __init__.py                  # Test package initialization
+├── test_file_scanner.py         # File reading tests
+├── test_http_client.py          # HTTP client tests
+├── test_v9_1_llm_client.py      # LLM client implementation tests
+├── test_v9_2_summarizer_tab.py  # Summarizer tab UI tests
+├── test_v9_3_summarizer_controller.py # Summarizer controller tests
+└── test_v9_implementation.py   # Prompt presets and LLM config tests
 ```
 
 ## Issues and Notes
@@ -184,8 +191,9 @@ jobs:
 1. ✅ Document existing tests
 2. ✅ Identify coverage gaps
 3. ✅ Flag location issues
-4. **Next**: Add controller tests
-5. **Next**: Add translation tests
+4. ✅ Move root test files to tests/ folder
+5. **Next**: Add controller tests
+6. **Next**: Add translation tests
 
 ### Long-Term Goals
 1. 80%+ code coverage

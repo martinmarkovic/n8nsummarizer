@@ -7,11 +7,12 @@ Comprehensive tests for the unified summarizer interface.
 
 import sys
 import os
+from pathlib import Path
 import tkinter as tk
 from unittest.mock import Mock
 
 # Add the project root to Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def test_import():
     """Test that SummarizerTab can be imported correctly."""

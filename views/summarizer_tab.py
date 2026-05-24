@@ -584,10 +584,13 @@ class SummarizerTab(BaseTab):
         self.response_text.pack(fill="both", expand=True)
         
         # Add context menu to response text
-        self._register_context_menu(self.response_text, [
+        menu = self._register_context_menu(self.response_text, [
             {"label": "Copy All", "command": self._copy_all_response},
             {"label": "Clear", "command": self._clear_response}
         ])
+        # Add TTS command to response text context menu
+        menu.add_tts_command(lambda: self.response_text.get("1.0", tk.END))
+        menu.rebuild()
         
         # Initial response content
         self.response_text.config(state="normal")

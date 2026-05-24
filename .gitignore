@@ -62,3 +62,7 @@ temp_subtitler/
 *.avi
 *.mov
 *.mkv
+
+# TTS model files
+models/kokoro/*.onnx
+models/kokoro/*.bin

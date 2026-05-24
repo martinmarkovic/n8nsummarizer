@@ -179,7 +179,7 @@ class YouTubeSummarizerTab(BaseTab):
         self.summary_text.config(state=tk.DISABLED)
 
         # Register context menu for paste functionality
-        self._register_context_menu(
+        menu = self._register_context_menu(
             self.summary_text,
             [
                 {
@@ -191,6 +191,9 @@ class YouTubeSummarizerTab(BaseTab):
                 {"label": "Clear", "command": self._clear_content},
             ],
         )
+        # Add TTS command to summary text context menu
+        menu.add_tts_command(lambda: self.summary_text.get("1.0", tk.END))
+        menu.rebuild()
 
         # Button frame
         button_frame = ttk.Frame(output_frame)

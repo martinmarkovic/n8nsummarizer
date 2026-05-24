@@ -7,11 +7,12 @@ Comprehensive tests for the unified summarization controller.
 
 import sys
 import os
+from pathlib import Path
 import tkinter as tk
 from unittest.mock import Mock, MagicMock, patch
 
 # Add the project root to Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def test_import():
     """Test that SummarizerController can be imported correctly."""
