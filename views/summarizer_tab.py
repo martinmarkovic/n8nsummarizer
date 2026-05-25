@@ -583,6 +583,13 @@ class SummarizerTab(BaseTab):
         )
         self.content_text.pack(fill="both", expand=True)
         
+        # Add TTS context menu to content preview text
+        from views.context_menu import AppContextMenu
+        content_menu = AppContextMenu(self.content_text)
+        content_menu.add_tts_read_command(lambda: self.content_text.get("1.0", tk.END))
+        content_menu.add_tts_stop_command()
+        content_menu.bind()
+        
         # Response display (right)
         response_frame = ttk.LabelFrame(
             content_frame,
