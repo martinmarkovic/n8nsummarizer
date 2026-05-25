@@ -73,14 +73,27 @@ class KokoroModel(nn.Module):
                 new_state_dict[key] = value
         return new_state_dict
     
+    def _clean_parameter_names(self, state_dict):
+        """Clean parameter names by replacing dots with underscores."""
+        if not state_dict:
+            return {}
+            
+        cleaned = {}
+        for key, value in state_dict.items():
+            # Replace dots with underscores to avoid PyTorch parameter name errors
+            clean_key = key.replace('.', '_')
+            cleaned[clean_key] = value
+        return cleaned
+    
     def _create_bert_model(self, state_dict):
         """Create BERT model from state dict."""
         if not state_dict:
             return None
             
         try:
-            # Strip module prefix
+            # Strip module prefix and clean parameter names
             cleaned_state = self._strip_module_prefix(state_dict)
+            cleaned_state = self._clean_parameter_names(cleaned_state)
             
             # Create a simple container that can handle the BERT state
             # In a real implementation, this would use the actual BERT architecture
@@ -109,6 +122,7 @@ class KokoroModel(nn.Module):
             
         try:
             cleaned_state = self._strip_module_prefix(state_dict)
+            cleaned_state = self._clean_parameter_names(cleaned_state)
             
             class BERTEncoderWrapper(nn.Module):
                 def __init__(self, state):
@@ -133,6 +147,7 @@ class KokoroModel(nn.Module):
             
         try:
             cleaned_state = self._strip_module_prefix(state_dict)
+            cleaned_state = self._clean_parameter_names(cleaned_state)
             
             class TextEncoderWrapper(nn.Module):
                 def __init__(self, state):
@@ -164,6 +179,7 @@ class KokoroModel(nn.Module):
             
         try:
             cleaned_state = self._strip_module_prefix(state_dict)
+            cleaned_state = self._clean_parameter_names(cleaned_state)
             
             class PredictorWrapper(nn.Module):
                 def __init__(self, state):
@@ -193,6 +209,7 @@ class KokoroModel(nn.Module):
             
         try:
             cleaned_state = self._strip_module_prefix(state_dict)
+            cleaned_state = self._clean_parameter_names(cleaned_state)
             
             class DecoderWrapper(nn.Module):
                 def __init__(self, state):
@@ -555,6 +572,15 @@ def speak(text: str, voice_name: str = None):
                 # Convert to numpy array for sounddevice
                 audio_np = audio_tensor.cpu().numpy()
                 sample_rate = 24000  # Typical sample rate
+                
+                # Fix audio shape: sounddevice expects (samples,) not (1, samples)
+                if audio_np.ndim > 1:
+                    audio_np = audio_np.squeeze(0)  # Remove batch dimension
+                
+                # Ensure mono audio (1 channel)
+                if audio_np.ndim > 1:
+                    audio_np = audio_np.mean(axis=0)  # Convert to mono
+                
                 print(f"[TTS] Generated audio: {audio_np.shape}, sample rate: {sample_rate}")
                 
             elif _model['format'] == 'onnx':
@@ -566,19 +592,33 @@ def speak(text: str, voice_name: str = None):
                     speed=1.0, 
                     lang="en-us"
                 )
-                audio_np = samples
+                # Fix audio shape for sounddevice
+                if audio_np.ndim > 1:
+                    audio_np = audio_np.squeeze(0)  # Remove batch dimension
+                if audio_np.ndim > 1:
+                    audio_np = audio_np.mean(axis=0)  # Convert to mono
+                
                 print(f"[TTS] Generated audio: {audio_np.shape}, sample rate: {sample_rate}")
             
             # Play audio
             print("[TTS] Starting playback...")
-            _sd.play(audio_np, sample_rate)
-            _playback_active = True
+            print(f"[TTS DEBUG] Audio shape: {audio_np.shape}, dtype: {audio_np.dtype}")
+            print(f"[TTS DEBUG] Sample rate: {sample_rate}")
             
             try:
+                _sd.play(audio_np, sample_rate)
+                _playback_active = True
+                print("[TTS] Audio playback started successfully")
+                
                 _sd.wait()  # Wait for playback to complete
                 print("[TTS] Playback completed")
             except Exception as e:
-                print(f"[TTS] Playback interrupted: {e}")
+                print(f"[TTS ERROR] Playback failed: {e}")
+                if "Invalid number of channels" in str(e):
+                    print("[TTS ERROR] Audio channel issue - check audio tensor shape")
+                elif "PortAudio" in str(e):
+                    print("[TTS ERROR] Audio device issue - check sounddevice configuration")
+                _playback_active = False
             finally:
                 _playback_active = False
                 
