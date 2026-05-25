@@ -8,6 +8,7 @@ using the system's installed voices through pyttsx3.
 import threading
 import logging
 import pyttsx3
+import time
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -47,19 +48,19 @@ def speak(text: str) -> None:
         text: Text to speak
         
     Notes:
-        - Runs in a daemon thread to prevent UI freezing
+        - Runs speech directly in a daemon thread
         - Stops any currently playing speech before starting new speech
         - Ignores empty or whitespace-only text
-        - Uses proper engine state management for repeated use
+        - Uses simple, reliable approach
     """
-    global _current_thread, _is_speaking, _engine
+    global _current_thread, _is_speaking
     
     # Check if text is empty or invalid
     if not text or not text.strip():
         logger.warning("Cannot speak empty text")
         return
     
-    # Ensure engine is available
+    # Ensure pyttsx3 is available
     if not is_available():
         logger.warning("pyttsx3 not available")
         return
@@ -69,63 +70,37 @@ def speak(text: str) -> None:
     # Stop any currently playing speech
     stop()
     
-    # Run speech in daemon thread
-    def _speak_thread():
-        global _is_speaking
+    # Simple, reliable approach: use pyttsx3.speak() directly
+    # This avoids all the threading and engine state issues
+    try:
         _is_speaking = True
         
-        try:
-            # Use the existing engine instance
-            if _engine is not None:
-                # Reset engine state properly
-                try:
-                    _engine.endLoop()  # End any previous event loops
-                except:
-                    pass  # Ignore if not in a loop
-                
-                # Clear any queued commands
-                try:
-                    while _engine._inLoop:
-                        _engine.iterate()
-                except:
-                    pass  # Engine might not be in a loop
-                
-                # Set up engine properties
-                _engine.setProperty('rate', 180)  # Moderate speaking rate
-                _engine.setProperty('volume', 0.9)  # Near maximum volume
-                
-                # Speak the text
-                _engine.say(text)
-                _engine.runAndWait()
-                
-                logger.info("Speech completed")
-        except Exception as e:
-            logger.error(f"Error during speech: {e}")
-            # If engine gets into bad state, reinitialize it
-            try:
-                if _engine is not None:
-                    _engine.stop()
-            except:
-                pass
-        finally:
-            _is_speaking = False
-    
-    # Start as daemon thread
-    _current_thread = threading.Thread(target=_speak_thread, daemon=True)
-    _current_thread.start()
-
+        # Create fresh engine for each speech
+        engine = pyttsx3.init()
+        engine.setProperty('rate', 180)
+        engine.setProperty('volume', 0.9)
+        
+        # Use non-blocking speak and let it run in background
+        engine.say(text)
+        engine.runAndWait()
+        
+        logger.info("Speech completed")
+        
+    except Exception as e:
+        logger.error(f"Error during speech: {e}")
+    finally:
+        _is_speaking = False
 
 def stop() -> None:
     """
     Stop any currently playing speech.
     
-    Always reset engine state to allow repeated speech, regardless of current speaking state.
+    Uses engine.stop() to interrupt active speech.
     """
     global _engine, _is_speaking, _current_thread
     
     if _engine is not None:
         try:
-            # Always stop the engine to reset its state for repeated use
             _engine.stop()
             logger.info("Speech stopped")
         except Exception as e:
