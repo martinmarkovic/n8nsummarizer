@@ -588,8 +588,9 @@ class SummarizerTab(BaseTab):
             {"label": "Copy All", "command": self._copy_all_response},
             {"label": "Clear", "command": self._clear_response}
         ])
-        # Add TTS command to response text context menu
+        # Add TTS commands to response text context menu
         menu.add_tts_command(lambda: self.response_text.get("1.0", tk.END))
+        menu.add_stop_command()
         menu.rebuild()
         
         # Initial response content

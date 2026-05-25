@@ -56,6 +56,10 @@ class AppContextMenu:
         label = "Read in Voice" if tts_engine.is_available() else "Read in Voice (model not found)"
         self.add_command(label, lambda: tts_engine.speak(text_getter()))
 
+    def add_stop_command(self):
+        """Add 'Stop Reading' command to context menu."""
+        self.add_command("Stop Reading", tts_engine.stop)
+
     def bind(self):
         """Build the menu and bind it to the widget's right-click event."""
         self._build_menu()
