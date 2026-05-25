@@ -39,13 +39,14 @@ class SummarizerTab(BaseTab):
     OpenAI-compatible LLM webhooks instead of using n8n workflows.
     """
     
-    def __init__(self, parent, prompt_manager=None):
+    def __init__(self, parent, prompt_manager=None, settings_manager=None):
         """
         Initialize Summarizer tab.
 
         Args:
             parent: Parent widget (ttk.Notebook)
             prompt_manager: Optional PromptManager instance for managing prompts
+            settings_manager: Optional SettingsManager instance for persistent preferences
         """
         # Initialize variables BEFORE calling super().__init__()
         # Input mode
@@ -75,6 +76,9 @@ class SummarizerTab(BaseTab):
         # Prompt management
         self.prompt_manager = prompt_manager
         self._last_valid_preset = DEFAULT_PROMPT_KEY
+        
+        # Settings management
+        self.settings = settings_manager
 
         # Initialize model discovery on first load
         # Note: We'll call this after UI is fully set up
@@ -291,7 +295,8 @@ class SummarizerTab(BaseTab):
         self.model_combo = ttk.Combobox(
             settings_frame,
             textvariable=self.model_var,
-            state="readonly"
+            state="readonly",
+            width=30  # Set moderate width for model names
         )
         self.model_combo.grid(row=row, column=1, sticky="ew", padx=5)
         
@@ -441,7 +446,19 @@ class SummarizerTab(BaseTab):
             self._last_valid_preset = fallback
             self.prompt_text.delete("1.0", tk.END)
             self.prompt_text.insert("1.0", self.prompt_manager.get_prompt(fallback))
-    
+        
+
+
+    def _speak_text(self, text):
+        """
+        Speak text using pyttsx3 TTS.
+        
+        Args:
+            text: Text to speak
+        """
+        from utils import tts_engine_pyttsx3
+        tts_engine_pyttsx3.speak(text)
+
     def _on_prompt_text_rightclick(self, event):
         """Handle right-click on prompt textbox"""
         if not self.prompt_manager:
@@ -566,6 +583,13 @@ class SummarizerTab(BaseTab):
         )
         self.content_text.pack(fill="both", expand=True)
         
+        # Add TTS context menu to content preview text
+        from views.context_menu import AppContextMenu
+        content_menu = AppContextMenu(self.content_text)
+        content_menu.add_tts_read_command(lambda: self.content_text.get("1.0", tk.END))
+        content_menu.add_tts_stop_command()
+        content_menu.bind()
+        
         # Response display (right)
         response_frame = ttk.LabelFrame(
             content_frame,
@@ -588,6 +612,13 @@ class SummarizerTab(BaseTab):
             {"label": "Copy All", "command": self._copy_all_response},
             {"label": "Clear", "command": self._clear_response}
         ])
+        
+        # Add TTS commands to response text context menu
+        from views.context_menu import AppContextMenu
+        menu = AppContextMenu(self.response_text)
+        menu.add_tts_read_command(lambda: self.response_text.get("1.0", tk.END))
+        menu.add_tts_stop_command()
+        menu.bind()
         
         # Initial response content
         self.response_text.config(state="normal")

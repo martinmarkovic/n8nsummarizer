@@ -6,6 +6,7 @@ by any tab in the application without duplicating boilerplate code.
 """
 
 import tkinter as tk
+from utils import tts_engine_pyttsx3
 
 
 class AppContextMenu:
@@ -44,6 +45,33 @@ class AppContextMenu:
     def add_separator(self):
         """Add a separator line to the context menu."""
         self._items.append({"type": "separator"})
+
+    def add_tts_read_command(self, text_getter):
+        """
+        Add a TTS 'Read in Voice' command to the context menu.
+        
+        Args:
+            text_getter: Callable that returns the text to speak (evaluated at click-time)
+        """
+        def read_command():
+            text = text_getter()
+            tts_engine_pyttsx3.speak(text)
+        
+        self._items.append({
+            "type": "command",
+            "label": "Read in Voice",
+            "command": read_command
+        })
+
+    def add_tts_stop_command(self):
+        """
+        Add a TTS 'Stop Reading' command to the context menu.
+        """
+        self._items.append({
+            "type": "command",
+            "label": "Stop Reading",
+            "command": tts_engine_pyttsx3.stop
+        })
 
     def bind(self):
         """Build the menu and bind it to the widget's right-click event."""
