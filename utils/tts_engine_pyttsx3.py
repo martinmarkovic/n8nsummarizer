@@ -65,7 +65,7 @@ def speak(text: str) -> None:
     
     logger.info(f"Speaking: {text[:50]}{'...' if len(text) > 50 else ''}")
     
-    # Stop any currently playing speech
+    # Stop any currently playing speech and reset engine state
     stop()
     
     # Run speech in daemon thread
@@ -74,15 +74,25 @@ def speak(text: str) -> None:
         _is_speaking = True
         
         try:
+            # Ensure engine is in clean state
+            if _engine is not None:
+                try:
+                    # Reset engine to handle repeated calls
+                    _engine.endLoop()  # End any previous loops
+                except:
+                    # Ignore errors - engine might not be in a loop state
+                    pass
+            
             # Set up engine properties
-            _engine.setProperty('rate', 180)  # Moderate speaking rate
-            _engine.setProperty('volume', 0.9)  # Near maximum volume
-            
-            # Speak the text
-            _engine.say(text)
-            _engine.runAndWait()
-            
-            logger.info("Speech completed")
+            if _engine is not None:
+                _engine.setProperty('rate', 180)  # Moderate speaking rate
+                _engine.setProperty('volume', 0.9)  # Near maximum volume
+                
+                # Speak the text
+                _engine.say(text)
+                _engine.runAndWait()
+                
+                logger.info("Speech completed")
         except Exception as e:
             logger.error(f"Error during speech: {e}")
         finally:
@@ -97,12 +107,13 @@ def stop() -> None:
     """
     Stop any currently playing speech.
     
-    Uses engine.stop() to interrupt active speech.
+    Always reset engine state to allow repeated speech, regardless of current speaking state.
     """
     global _engine, _is_speaking, _current_thread
     
-    if _engine is not None and _is_speaking:
+    if _engine is not None:
         try:
+            # Always stop the engine to reset its state for repeated use
             _engine.stop()
             logger.info("Speech stopped")
         except Exception as e:
