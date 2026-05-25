@@ -3,18 +3,20 @@ pyttsx3 TTS Engine - Offline text-to-speech functionality using pyttsx3.
 
 This module provides simple offline/local text-to-speech capabilities
 using the system's installed voices through pyttsx3.
+
+Key design: Each utterance uses a fresh engine instance to avoid
+state management issues and event loop conflicts.
 """
 
 import threading
 import logging
 import pyttsx3
-import time
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Global engine reference
-_engine = None
+# Thread safety and state
+_state_lock = threading.Lock()
 _current_thread = None
 _is_speaking = False
 
@@ -26,17 +28,13 @@ def is_available() -> bool:
     Returns:
         bool: True if pyttsx3 can be used, False otherwise
     """
-    global _engine
-    
     try:
-        if _engine is None:
-            # Try to initialize engine
-            _engine = pyttsx3.init()
-            logger.info("pyttsx3 engine initialized successfully")
+        # Test initialization
+        test_engine = pyttsx3.init()
+        del test_engine  # Clean up
         return True
     except Exception as e:
         logger.error(f"Failed to initialize pyttsx3: {e}")
-        _engine = None
         return False
 
 
@@ -48,10 +46,11 @@ def speak(text: str) -> None:
         text: Text to speak
         
     Notes:
-        - Runs speech directly in a daemon thread
+        - Runs in a daemon thread to prevent UI freezing
         - Stops any currently playing speech before starting new speech
         - Ignores empty or whitespace-only text
-        - Uses simple, reliable approach
+        - Creates fresh engine for each utterance (per-utterance model)
+        - Uses COM initialization for each thread to avoid conflicts
     """
     global _current_thread, _is_speaking
     
@@ -70,44 +69,61 @@ def speak(text: str) -> None:
     # Stop any currently playing speech
     stop()
     
-    # Simple, reliable approach: use pyttsx3.speak() directly
-    # This avoids all the threading and engine state issues
-    try:
-        _is_speaking = True
+    # Run speech in daemon thread to prevent UI freezing
+    def _speak_thread():
+        global _is_speaking
+        with _state_lock:
+            _is_speaking = True
         
-        # Create fresh engine for each speech
-        engine = pyttsx3.init()
-        engine.setProperty('rate', 180)
-        engine.setProperty('volume', 0.9)
-        
-        # Use non-blocking speak and let it run in background
-        engine.say(text)
-        engine.runAndWait()
-        
-        logger.info("Speech completed")
-        
-    except Exception as e:
-        logger.error(f"Error during speech: {e}")
-    finally:
-        _is_speaking = False
+        try:
+            # Initialize COM for this thread
+            import pythoncom
+            pythoncom.CoInitialize()
+            
+            try:
+                # Per-utterance engine model: create fresh engine
+                engine = pyttsx3.init(driverName='sapi5')
+                
+                # Configure engine
+                engine.setProperty('rate', 180)
+                engine.setProperty('volume', 0.9)
+                
+                # Speak the text (blocking but in daemon thread)
+                engine.say(text)
+                engine.runAndWait()
+                
+                logger.info("Speech completed")
+                
+            finally:
+                # Clean up COM
+                pythoncom.CoUninitialize()
+                
+        except Exception as e:
+            logger.error(f"Error during speech: {e}")
+        finally:
+            with _state_lock:
+                _is_speaking = False
+    
+    # Start as daemon thread (UI remains responsive)
+    with _state_lock:
+        _current_thread = threading.Thread(target=_speak_thread, daemon=True)
+        _current_thread.start()
 
 def stop() -> None:
     """
     Stop any currently playing speech.
     
-    Uses engine.stop() to interrupt active speech.
+    Since each utterance uses its own engine instance, stopping is handled
+    by clearing state and letting the current speech complete naturally.
     """
-    global _engine, _is_speaking, _current_thread
+    global _is_speaking, _current_thread
     
-    if _engine is not None:
-        try:
-            _engine.stop()
-            logger.info("Speech stopped")
-        except Exception as e:
-            logger.error(f"Error stopping speech: {e}")
-    
-    _is_speaking = False
-    _current_thread = None
+    with _state_lock:
+        # Mark as not speaking
+        _is_speaking = False
+        # Clear thread reference
+        _current_thread = None
+        logger.info("Speech stop requested")
 
 
 def is_speaking() -> bool:
