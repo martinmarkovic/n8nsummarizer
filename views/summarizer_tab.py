@@ -39,13 +39,14 @@ class SummarizerTab(BaseTab):
     OpenAI-compatible LLM webhooks instead of using n8n workflows.
     """
     
-    def __init__(self, parent, prompt_manager=None):
+    def __init__(self, parent, prompt_manager=None, settings_manager=None):
         """
         Initialize Summarizer tab.
 
         Args:
             parent: Parent widget (ttk.Notebook)
             prompt_manager: Optional PromptManager instance for managing prompts
+            settings_manager: Optional SettingsManager instance for persistent preferences
         """
         # Initialize variables BEFORE calling super().__init__()
         # Input mode
@@ -75,6 +76,14 @@ class SummarizerTab(BaseTab):
         # Prompt management
         self.prompt_manager = prompt_manager
         self._last_valid_preset = DEFAULT_PROMPT_KEY
+        
+        # Settings management
+        self.settings = settings_manager
+        
+        # Audio device management
+        self.audio_device_var = tk.StringVar()
+        self.audio_devices = []  # List to store available devices
+        self.current_device_index = None
 
         # Initialize model discovery on first load
         # Note: We'll call this after UI is fully set up
@@ -291,9 +300,40 @@ class SummarizerTab(BaseTab):
         self.model_combo = ttk.Combobox(
             settings_frame,
             textvariable=self.model_var,
-            state="readonly"
+            state="readonly",
+            width=30  # Set moderate width for model names
         )
         self.model_combo.grid(row=row, column=1, sticky="ew", padx=5)
+        
+        # Audio output device selector
+        row += 1
+        ttk.Label(settings_frame, text="Audio Output:").grid(row=row, column=0, sticky="w")
+        
+        # Device selection frame
+        device_frame = ttk.Frame(settings_frame)
+        device_frame.grid(row=row, column=1, sticky="ew", padx=5)
+        
+        # Device dropdown
+        self.audio_device_var = tk.StringVar()
+        self.device_combo = ttk.Combobox(
+            device_frame,
+            textvariable=self.audio_device_var,
+            state="readonly",
+            width=40  # Wider for device names
+        )
+        self.device_combo.pack(side=tk.LEFT, expand=True, fill="x")
+        
+        # Refresh button
+        refresh_btn = ttk.Button(
+            device_frame,
+            text="🔄",
+            width=2,
+            command=self._refresh_audio_devices
+        )
+        refresh_btn.pack(side=tk.LEFT, padx=(5, 0))
+        
+        # Bind device selection event
+        self.device_combo.bind("<<ComboboxSelected>>", self._on_device_selected)
         
         # Prompt preset
         row += 1
@@ -441,7 +481,184 @@ class SummarizerTab(BaseTab):
             self._last_valid_preset = fallback
             self.prompt_text.delete("1.0", tk.END)
             self.prompt_text.insert("1.0", self.prompt_manager.get_prompt(fallback))
-    
+        
+        # Initialize audio devices on first load
+        self.after(100, self._refresh_audio_devices)
+
+    def _refresh_audio_devices(self):
+        """
+        Refresh list of available audio output devices.
+        
+        Filters out ambiguous pseudo-devices and prioritizes real hardware.
+        """
+        try:
+            import utils.tts_engine as tts_engine
+            devices = tts_engine.get_audio_output_devices()
+
+            # Filter and prioritize real devices
+            filtered_devices = []
+            for device in devices:
+                name = device['name']
+
+                # Skip ambiguous pseudo-devices
+                if any(skip in name for skip in [
+                    "Microsoft Sound Mapper",
+                    "Primary Sound Driver"
+                ]):
+                    continue
+
+                filtered_devices.append({
+                    'index': device['index'],
+                    'name': name,
+                    'display_name': self._format_device_name(name),
+                    'is_default': device.get('is_default', False)
+                })
+
+            # Sort by device type (prefer real hardware)
+            filtered_devices.sort(key=lambda x: (
+                0 if "Speakers" in x['name'] else
+                1 if "Headphones" in x['name'] else
+                2 if "USB" in x['name'] else
+                3 if "HDMI" in x['name'] else
+                4 if "Digital Audio" in x['name'] else
+                5
+            ))
+
+            self.audio_devices = filtered_devices
+            device_names = [d['display_name'] for d in filtered_devices]
+
+            # Update dropdown
+            current_selection = self.audio_device_var.get()
+            self.device_combo['values'] = device_names
+
+            # Auto-select first real device if none selected
+            if not current_selection and device_names:
+                self.audio_device_var.set(device_names[0])
+                self.current_device_index = filtered_devices[0]['index']
+            elif current_selection:
+                # Try to restore previous selection
+                self._restore_device_selection()
+
+            logger.info(f"Found {len(filtered_devices)} audio output devices")
+
+        except Exception as e:
+            logger.error(f"Failed to refresh audio devices: {e}")
+            self.audio_devices = []
+            self.device_combo['values'] = []
+            self.audio_device_var.set("No devices found")
+
+    def _restore_device_selection(self):
+        """
+        Restore previously selected device if still available.
+        
+        Tries to restore from settings first, then falls back to current selection.
+        """
+        try:
+            restored = False
+            
+            # Try to restore from settings
+            if self.settings:
+                saved_device_index = self.settings.get("audio_device_index")
+                if saved_device_index is not None:
+                    for device in self.audio_devices:
+                        if device['index'] == saved_device_index:
+                            self.audio_device_var.set(device['display_name'])
+                            self.current_device_index = device['index']
+                            restored = True
+                            logger.info(f"Restored audio device from settings: {device['name']}")
+                            break
+            
+            # If not restored from settings, try current selection
+            if not restored:
+                current_name = self.audio_device_var.get()
+                for device in self.audio_devices:
+                    if device['display_name'] == current_name:
+                        self.current_device_index = device['index']
+                        restored = True
+                        break
+            
+            # If still not restored, select first device
+            if not restored and self.audio_devices:
+                first_device = self.audio_devices[0]
+                self.audio_device_var.set(first_device['display_name'])
+                self.current_device_index = first_device['index']
+                if self.settings:
+                    self.settings.set("audio_device_index", first_device['index'])
+        except Exception as e:
+            logger.error(f"Failed to restore device selection: {e}")
+
+    def _format_device_name(self, name):
+        """
+        Format device name for display (shorten long names).
+        
+        Args:
+            name: Original device name
+            
+        Returns:
+            str: Formatted device name suitable for UI
+        """
+        # Remove redundant prefixes
+        for prefix in ["(2- ", "(3- ", "(4- ", "(5- "]:
+            if name.startswith(prefix):
+                name = name[len(prefix):]
+                break
+
+        # Shorten very long names
+        if len(name) > 50:
+            name = name[:47] + "..."
+        return name
+
+    def _on_device_selected(self, event=None):
+        """
+        Handle device selection change.
+        
+        Updates current_device_index when user selects a device and saves to settings.
+        """
+        try:
+            current_name = self.audio_device_var.get()
+            for device in self.audio_devices:
+                if device['display_name'] == current_name:
+                    self.current_device_index = device['index']
+                    logger.debug(f"Selected audio device: {device['name']} (index: {device['index']})")
+                    
+                    # Save selection to settings
+                    if self.settings:
+                        self.settings.set("audio_device_index", device['index'])
+                    
+                    return
+            
+            # If selection not found, clear current index
+            self.current_device_index = None
+            if self.settings:
+                self.settings.remove("audio_device_index")
+        except Exception as e:
+            logger.error(f"Failed to handle device selection: {e}")
+
+    def get_selected_audio_device(self):
+        """
+        Get currently selected audio device index.
+        
+        Returns:
+            int: Device index or None if no selection
+        """
+        return self.current_device_index
+
+    def _speak_with_device(self, text):
+        """
+        Speak text using selected audio device.
+        
+        Args:
+            text: Text to speak
+        """
+        try:
+            import utils.tts_engine as tts_engine
+            device_index = self.get_selected_audio_device()
+            tts_engine.speak(text, device_name=None, device_index=device_index)
+        except Exception as e:
+            logger.error(f"Failed to speak with selected device: {e}")
+            # Fallback to default device
+            tts_engine.speak(text)
+
     def _on_prompt_text_rightclick(self, event):
         """Handle right-click on prompt textbox"""
         if not self.prompt_manager:
@@ -588,6 +805,13 @@ class SummarizerTab(BaseTab):
             {"label": "Copy All", "command": self._copy_all_response},
             {"label": "Clear", "command": self._clear_response}
         ])
+        
+        # Add TTS commands to response text context menu
+        from views.context_menu import AppContextMenu
+        menu = AppContextMenu(self.response_text)
+        menu.add_tts_read_command(lambda: self.response_text.get("1.0", tk.END))
+        menu.add_tts_stop_command()
+        menu.bind()
         
         # Initial response content
         self.response_text.config(state="normal")
