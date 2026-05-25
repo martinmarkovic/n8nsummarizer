@@ -50,8 +50,9 @@ def speak(text: str) -> None:
         - Runs in a daemon thread to prevent UI freezing
         - Stops any currently playing speech before starting new speech
         - Ignores empty or whitespace-only text
+        - Reinitializes engine for each speech to ensure clean state
     """
-    global _current_thread, _is_speaking
+    global _current_thread, _is_speaking, _engine
     
     # Check if text is empty or invalid
     if not text or not text.strip():
@@ -62,7 +63,7 @@ def speak(text: str) -> None:
     if not is_available():
         logger.warning("pyttsx3 not available")
         return
-    
+
     logger.info(f"Speaking: {text[:50]}{'...' if len(text) > 50 else ''}")
     
     # Stop any currently playing speech and reset engine state
@@ -70,18 +71,26 @@ def speak(text: str) -> None:
     
     # Run speech in daemon thread
     def _speak_thread():
-        global _is_speaking
+        global _is_speaking, _engine
         _is_speaking = True
         
         try:
-            # Ensure engine is in clean state
+            # Reinitialize engine to ensure clean state for each speech
+            # This fixes issues when switching between multiple text boxes
             if _engine is not None:
                 try:
-                    # Reset engine to handle repeated calls
                     _engine.endLoop()  # End any previous loops
                 except:
-                    # Ignore errors - engine might not be in a loop state
-                    pass
+                    pass  # Ignore errors
+                
+                try:
+                    # Create fresh engine instance for reliable operation
+                    _engine = pyttsx3.init()
+                    logger.debug("Created fresh pyttsx3 engine instance")
+                except Exception as init_error:
+                    logger.error(f"Failed to reinitialize engine: {init_error}")
+                    _is_speaking = False
+                    return
             
             # Set up engine properties
             if _engine is not None:
