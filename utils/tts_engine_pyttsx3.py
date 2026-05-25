@@ -50,7 +50,7 @@ def speak(text: str) -> None:
         - Runs in a daemon thread to prevent UI freezing
         - Stops any currently playing speech before starting new speech
         - Ignores empty or whitespace-only text
-        - Reinitializes engine for each speech to ensure clean state
+        - Uses proper engine state management for repeated use
     """
     global _current_thread, _is_speaking, _engine
     
@@ -66,34 +66,31 @@ def speak(text: str) -> None:
 
     logger.info(f"Speaking: {text[:50]}{'...' if len(text) > 50 else ''}")
     
-    # Stop any currently playing speech and reset engine state
+    # Stop any currently playing speech
     stop()
     
     # Run speech in daemon thread
     def _speak_thread():
-        global _is_speaking, _engine
+        global _is_speaking
         _is_speaking = True
         
         try:
-            # Reinitialize engine to ensure clean state for each speech
-            # This fixes issues when switching between multiple text boxes
+            # Use the existing engine instance
             if _engine is not None:
+                # Reset engine state properly
                 try:
-                    _engine.endLoop()  # End any previous loops
+                    _engine.endLoop()  # End any previous event loops
                 except:
-                    pass  # Ignore errors
+                    pass  # Ignore if not in a loop
                 
+                # Clear any queued commands
                 try:
-                    # Create fresh engine instance for reliable operation
-                    _engine = pyttsx3.init()
-                    logger.debug("Created fresh pyttsx3 engine instance")
-                except Exception as init_error:
-                    logger.error(f"Failed to reinitialize engine: {init_error}")
-                    _is_speaking = False
-                    return
-            
-            # Set up engine properties
-            if _engine is not None:
+                    while _engine._inLoop:
+                        _engine.iterate()
+                except:
+                    pass  # Engine might not be in a loop
+                
+                # Set up engine properties
                 _engine.setProperty('rate', 180)  # Moderate speaking rate
                 _engine.setProperty('volume', 0.9)  # Near maximum volume
                 
@@ -104,6 +101,12 @@ def speak(text: str) -> None:
                 logger.info("Speech completed")
         except Exception as e:
             logger.error(f"Error during speech: {e}")
+            # If engine gets into bad state, reinitialize it
+            try:
+                if _engine is not None:
+                    _engine.stop()
+            except:
+                pass
         finally:
             _is_speaking = False
     
