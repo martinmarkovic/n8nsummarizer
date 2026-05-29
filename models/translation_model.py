@@ -117,19 +117,23 @@ class TranslationModel:
             logger.error(error_msg)
             raise ValueError(error_msg)
         
+        # Update model state atomically
         self.provider = provider
         self.webhook_url = webhook_url
         self.model_name = model_name
         
-        # Update the translation service with all LLM settings atomically
+        # Propagate atomically to TranslationService - all 3 settings together
         self.translation_service.webhook_url = webhook_url
         self.translation_service.provider = provider
         self.translation_service.model_name = model_name
-        # Note: webhook_url is set directly above, no need for separate update method call
         
+        # Propagate atomically to TranslationService - all 3 settings together
+        # LLMClient is accessed through TranslationService, which will use its configured LLMClient
+
         logger.info(f"Translation LLM settings updated: provider={provider}, model={model_name}, url={webhook_url}")
-        logger.debug(f"TranslationModel state after update: provider={self.provider}, model={self.model_name}, url={self.webhook_url}")
-        logger.debug(f"TranslationService state after update: provider={self.translation_service.provider}, model={self.translation_service.model_name}, url={self.translation_service.webhook_url}")
+        logger.debug(f"TranslationModel state: provider={self.provider}, model={self.model_name}, url={self.webhook_url}")
+        logger.debug(f"TranslationService state: provider={self.translation_service.provider}, model={self.translation_service.model_name}, url={self.translation_service.webhook_url}")
+        logger.debug(f"TranslationService LLMClient state: provider={self.translation_service.llm_client.config.provider}, model={self.translation_service.llm_client.config.model_name}, url={self.translation_service.llm_client.config.webhook_url}")
 
     def get_current_file_path(self) -> str:
         """

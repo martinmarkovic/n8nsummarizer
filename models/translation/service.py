@@ -202,6 +202,14 @@ class TranslationService:
                 logger.error(error_msg)
                 return False, "", error_msg, None
             
+            # Ensure our service state matches the expected config
+            if (self.provider != provider or self.model_name != model_name or 
+                self.webhook_url != self.llm_client.config.webhook_url):
+                error_msg = (f"Config mismatch: Service has ({self.provider}/{self.model_name}/{self.webhook_url}) "
+                           f"but request uses ({provider}/{model_name}/{self.llm_client.config.webhook_url})")
+                logger.error(error_msg)
+                return False, "", error_msg, None
+            
             # Debug: Log incoming provider configuration
             logger.info(f"TranslationService._make_translation_request called with: provider='{provider}', model='{model_name}'")
             
