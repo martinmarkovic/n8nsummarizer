@@ -64,6 +64,29 @@ class TranslationController:
             self.llm_client.config.webhook_url
         )
 
+    def register_llm_settings_callback(self, callback):
+        """Register a callback to be notified when LLM settings change.
+        
+        Args:
+            callback: Function that takes (provider, model, url) parameters
+        """
+        self._llm_settings_callbacks.append(callback)
+        logger.info(f"Registered LLM settings callback, total callbacks: {len(self._llm_settings_callbacks)}")
+
+    def _notify_llm_settings_changed(self):
+        """Notify all registered callbacks that LLM settings have changed."""
+        provider = self.model.provider
+        model = self.model.model_name
+        url = self.llm_client.config.webhook_url
+        
+        for callback in self._llm_settings_callbacks:
+            try:
+                callback(provider, model, url)
+            except Exception as e:
+                logger.error(f"Error calling LLM settings callback: {e}")
+        
+        logger.info(f"Notified {len(self._llm_settings_callbacks)} callbacks about LLM settings change")
+
     def handle_file_selected(self, file_path: str):
         """Handle file selection from view"""
         logger.info(f"File selected for translation: {file_path}")
