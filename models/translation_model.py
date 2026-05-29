@@ -122,13 +122,12 @@ class TranslationModel:
         self.webhook_url = webhook_url
         self.model_name = model_name
         
-        # Propagate atomically to TranslationService - all 3 settings together
+         # Propagate atomically to TranslationService - all 3 settings together
         self.translation_service.webhook_url = webhook_url
         self.translation_service.provider = provider
         self.translation_service.model_name = model_name
-        
-        # Propagate atomically to TranslationService - all 3 settings together
-        # LLMClient is accessed through TranslationService, which will use its configured LLMClient
+        # Also update the LLMClient through TranslationService to ensure synchronization
+        self.translation_service.update_webhook_url(webhook_url)
 
         logger.info(f"Translation LLM settings updated: provider={provider}, model={model_name}, url={webhook_url}")
         logger.debug(f"TranslationModel state: provider={self.provider}, model={self.model_name}, url={self.webhook_url}")
