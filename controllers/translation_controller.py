@@ -38,6 +38,9 @@ class TranslationController:
         self.translation_thread = None
         self.translation_queue = queue.Queue()
 
+        # Callbacks for LLM settings changes
+        self._llm_settings_callbacks = []
+
         # Wire up view callbacks
         self.view.on_file_selected = self.handle_file_selected
         self.view.on_translate_clicked = self.handle_translate_clicked
@@ -48,6 +51,29 @@ class TranslationController:
         self._update_llm_client_from_view()
 
         logger.info("TranslationController initialized")
+
+    def register_llm_settings_callback(self, callback):
+        """Register a callback to be notified when LLM settings change.
+        
+        Args:
+            callback: Function that takes (provider, model, url) parameters
+        """
+        self._llm_settings_callbacks.append(callback)
+        logger.info(f"Registered LLM settings callback, total callbacks: {len(self._llm_settings_callbacks)}")
+
+    def _notify_llm_settings_changed(self):
+        """Notify all registered callbacks that LLM settings have changed."""
+        provider = self.view.get_provider()
+        model = self.view.get_model_name()
+        url = self.view.get_webhook_url()
+        
+        for callback in self._llm_settings_callbacks:
+            try:
+                callback(provider, model, url)
+            except Exception as e:
+                logger.error(f"Error calling LLM settings callback: {e}")
+        
+        logger.info(f"Notified {len(self._llm_settings_callbacks)} callbacks about LLM settings change")
 
     def handle_file_selected(self, file_path: str):
         """Handle file selection from view"""
@@ -180,6 +206,10 @@ class TranslationController:
                 f"Translation LLM client configured: provider={provider}, "
                 f"model={model_name}, url={webhook_url}"
             )
+            
+            # Notify registered callbacks about the settings change
+            self._notify_llm_settings_changed()
+            
             return True
         except Exception as e:
             logger.error(f"Failed to update translation LLM client: {str(e)}")

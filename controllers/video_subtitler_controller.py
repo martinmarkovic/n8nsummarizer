@@ -41,6 +41,11 @@ class VideoSubtitlerController:
         self._output_dir = None
         self._original_video_title = None
         
+        # LLM configuration for translation (inherited from Translation tab)
+        self._translation_provider = None
+        self._translation_model_name = None
+        self._translation_webhook_url = None
+        
         # Load saved output directory
         if self.settings:
             saved_dir = self.settings.get("SUBTITLER_OUTPUT_DIR", "")
@@ -283,6 +288,20 @@ class VideoSubtitlerController:
             # Set file path so TranslationModel detects SRT mode
             self.translation_model.set_current_file_path(str(self.srt_path))
             
+            # Use stored LLM config if available, otherwise fall back to defaults
+            provider = self._translation_provider or "lmstudio"
+            model = self._translation_model_name or "local-model"
+            url = self._translation_webhook_url or "http://127.0.0.1:1234/v1/completions"
+            
+            # Log what we're using
+            if self._translation_provider:
+                logger.info(f"Using inherited LLM config for translation: provider={provider}, model={model}")
+            else:
+                logger.warning("Using default LLM config - check if real values were passed from controller")
+            
+            # Set LLM settings on translation model
+            self.translation_model.set_llm_settings(provider, url, model)
+            
             # Translate the SRT
             success, translated, error = self.translation_model.translate_srt(srt_text, lang)
             
@@ -446,6 +465,23 @@ class VideoSubtitlerController:
         if self.settings:
             self.settings.set("SUBTITLER_OUTPUT_DIR", path)
         self._output_dir = Path(path)
+
+    def set_translation_llm_config(self, provider, model, url):
+        """Set LLM configuration for translation from Translation tab.
+        
+        Args:
+            provider: LLM provider (e.g., 'lmstudio', 'ollama-local')
+            model: Model name to use
+            url: Base URL for the LLM provider
+        """
+        self._translation_provider = provider
+        self._translation_model_name = model
+        self._translation_webhook_url = url
+        logger.info(f"VideoSubtitlerController: Set translation LLM config - provider={provider}, model={model}, url={url}")
+        
+        # Update UI label to show current LLM config
+        if hasattr(self.tab, 'update_translation_llm_label'):
+            self.tab.update_translation_llm_label(provider, model)
     
     def on_auto(self):
         """Handle auto pipeline request."""
