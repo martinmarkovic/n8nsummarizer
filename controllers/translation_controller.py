@@ -52,28 +52,17 @@ class TranslationController:
 
         logger.info("TranslationController initialized")
 
-    def register_llm_settings_callback(self, callback):
-        """Register a callback to be notified when LLM settings change.
+    def get_current_llm_config(self) -> tuple:
+        """Get current LLM configuration from model (not UI widgets).
         
-        Args:
-            callback: Function that takes (provider, model, url) parameters
+        Returns:
+            Tuple of (provider, model_name, webhook_url)
         """
-        self._llm_settings_callbacks.append(callback)
-        logger.info(f"Registered LLM settings callback, total callbacks: {len(self._llm_settings_callbacks)}")
-
-    def _notify_llm_settings_changed(self):
-        """Notify all registered callbacks that LLM settings have changed."""
-        provider = self.view.get_provider()
-        model = self.view.get_model_name()
-        url = self.view.get_webhook_url()
-        
-        for callback in self._llm_settings_callbacks:
-            try:
-                callback(provider, model, url)
-            except Exception as e:
-                logger.error(f"Error calling LLM settings callback: {e}")
-        
-        logger.info(f"Notified {len(self._llm_settings_callbacks)} callbacks about LLM settings change")
+        return (
+            self.model.provider,
+            self.model.model_name, 
+            self.llm_client.config.webhook_url
+        )
 
     def handle_file_selected(self, file_path: str):
         """Handle file selection from view"""

@@ -129,9 +129,8 @@ def main():
         translation_controller.register_llm_settings_callback(update_video_subtitler_llm_config)
         
         # Initial sync with current Translation settings
-        provider = window.translation_tab.get_provider()
-        model = window.translation_tab.get_model_name()
-        url = window.translation_tab.get_webhook_url()
+        # Get config from controller/model (already loaded from .env), NOT from UI widgets
+        provider, model, url = translation_controller.get_current_llm_config()
         video_subtitler_controller.set_translation_llm_config(provider, model, url)
         logger.info(f"Initial sync: VideoSubtitler using Translation LLM settings: {provider}/{model}")
 

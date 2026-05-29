@@ -125,9 +125,20 @@ class VideoSubtitlerController:
             video_path = self.video_subtitler_model.download_and_process_video(url, download_progress_wrapper)
             
             self.tab.after(0, lambda: self.tab.update_progress(100, "Download complete."))
-            
+
             # Run transcription
             self._run_transcription(str(video_path))
+
+            # Set up LLM configuration for translation
+            provider = self._translation_provider or "lmstudio"
+            model = self._translation_model_name or "local-model"
+            url = self._translation_webhook_url or "http://127.0.0.1:1234/v1/completions"
+            if self._translation_provider:
+                logger.info(f"Auto pipeline: using inherited LLM: {provider}/{model}")
+            else:
+                logger.warning("Auto pipeline: using default LLM config - no inherited settings")
+            self.translation_model.set_current_file_path(str(self.srt_path))
+            self.translation_model.set_llm_settings(provider, url, model)
             
             # Run translation
             ok = run_translation_sync(
@@ -161,6 +172,17 @@ class VideoSubtitlerController:
             
             # Run transcription
             self._run_transcription(str(video_path))
+
+            # Set up LLM configuration for translation
+            provider = self._translation_provider or "lmstudio"
+            model = self._translation_model_name or "local-model"
+            url = self._translation_webhook_url or "http://127.0.0.1:1234/v1/completions"
+            if self._translation_provider:
+                logger.info(f"Auto pipeline: using inherited LLM: {provider}/{model}")
+            else:
+                logger.warning("Auto pipeline: using default LLM config - no inherited settings")
+            self.translation_model.set_current_file_path(str(self.srt_path))
+            self.translation_model.set_llm_settings(provider, url, model)
             
             # Run translation
             ok = run_translation_sync(
