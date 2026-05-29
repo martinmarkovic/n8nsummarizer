@@ -28,9 +28,10 @@ from utils.video_utils import (
 
 
 class VideoSubtitlerController:
-    def __init__(self, tab, settings_manager=None):
+    def __init__(self, tab, settings_manager=None, translation_controller=None):
         self.tab = tab
         self.settings = settings_manager
+        self.translation_controller = translation_controller
         self.transcribe_model = TranscribeModel()
         self.translation_model = TranslationModel()
         self.video_subtitler_model = VideoSubtitlerModel()
@@ -55,6 +56,19 @@ class VideoSubtitlerController:
 
         tab.set_controller(self)
         logger.info("VideoSubtitlerController initialized")
+
+    def _refresh_translation_llm_config(self):
+        """Refresh translation LLM config from TranslationController.
+        
+        Fetches current settings from TranslationController and applies them
+        to ensure Video Subtitler uses the same config as Translation tab.
+        """
+        if self.translation_controller:
+            provider, model, url = self.translation_controller.get_current_llm_config()
+            self.set_translation_llm_config(provider, model, url)
+            logger.info(f"Refreshed translation config from TranslationController: {provider}/{model} @ {url}")
+        else:
+            logger.warning("No TranslationController attached; using cached/fallback translation config")
         
         # Create callback for video utils (instance method to avoid scope issues)
         self.tab_progress_callback = lambda percent, message: self.tab.after(0, lambda p=percent, m=message: self.tab.update_progress(p, m))
@@ -129,6 +143,10 @@ class VideoSubtitlerController:
             # Run transcription
             self._run_transcription(str(video_path))
 
+            # Refresh LLM config from TranslationController if available
+            if self.translation_controller:
+                self._refresh_translation_llm_config()
+
             # Set up LLM configuration for translation
             provider = self._translation_provider or "lmstudio"
             model = self._translation_model_name or "local-model"
@@ -139,7 +157,7 @@ class VideoSubtitlerController:
                 logger.warning("Auto pipeline: using default LLM config - no inherited settings")
             self.translation_model.set_current_file_path(str(self.srt_path))
             self.translation_model.set_llm_settings(provider, url, model)
-            
+
             # Run translation
             ok = run_translation_sync(
                 self.translation_model, 
@@ -172,6 +190,10 @@ class VideoSubtitlerController:
             
             # Run transcription
             self._run_transcription(str(video_path))
+
+            # Refresh LLM config from TranslationController if available
+            if self.translation_controller:
+                self._refresh_translation_llm_config()
 
             # Set up LLM configuration for translation
             provider = self._translation_provider or "lmstudio"
@@ -310,6 +332,10 @@ class VideoSubtitlerController:
             # Set file path so TranslationModel detects SRT mode
             self.translation_model.set_current_file_path(str(self.srt_path))
             
+            # Refresh LLM config from TranslationController if available
+            if self.translation_controller:
+                self._refresh_translation_llm_config()
+
             # Use stored LLM config if available, otherwise fall back to defaults
             provider = self._translation_provider or "lmstudio"
             model = self._translation_model_name or "local-model"
