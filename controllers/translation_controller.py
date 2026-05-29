@@ -40,6 +40,8 @@ class TranslationController:
 
         # Callbacks for LLM settings changes
         self._llm_settings_callbacks = []
+        # Callbacks for translation progress updates
+        self._translation_progress_callbacks = []
 
         # Wire up view callbacks
         self.view.on_file_selected = self.handle_file_selected
@@ -73,6 +75,15 @@ class TranslationController:
         self._llm_settings_callbacks.append(callback)
         logger.info(f"Registered LLM settings callback, total callbacks: {len(self._llm_settings_callbacks)}")
 
+    def register_translation_progress_callback(self, callback):
+        """Register a callback to receive translation progress updates.
+        
+        Args:
+            callback: Function that takes (message, progress_pct) parameters
+        """
+        self._translation_progress_callbacks.append(callback)
+        logger.info(f"Registered translation progress callback, total callbacks: {len(self._translation_progress_callbacks)}")
+
     def _notify_llm_settings_changed(self):
         """Notify all registered callbacks that LLM settings have changed."""
         provider = self.model.provider
@@ -86,6 +97,24 @@ class TranslationController:
                 logger.error(f"Error calling LLM settings callback: {e}")
         
         logger.info(f"Notified {len(self._llm_settings_callbacks)} callbacks about LLM settings change")
+
+    def _notify_translation_progress(self, message: str, progress_pct: float = None):
+        """Notify all registered callbacks about translation progress.
+        
+        Args:
+            message: Progress message to display
+            progress_pct: Optional progress percentage (0-100)
+        """
+        for callback in self._translation_progress_callbacks:
+            try:
+                if progress_pct is not None:
+                    callback(message, progress_pct)
+                else:
+                    callback(message)
+            except Exception as e:
+                logger.error(f"Error calling translation progress callback: {e}")
+        
+        logger.debug(f"Notified {len(self._translation_progress_callbacks)} callbacks about progress: {message}")
 
     def handle_file_selected(self, file_path: str):
         """Handle file selection from view"""

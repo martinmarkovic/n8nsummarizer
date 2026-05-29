@@ -17,7 +17,8 @@ class TranslationService:
     """Handles translation API calls with retry and error handling."""
 
     def __init__(
-        self, webhook_url: str = None, max_tokens: int = 70000, timeout: int = 300
+        self, webhook_url: str = None, max_tokens: int = 70000, timeout: int = 300, 
+        progress_callback: callable = None
     ):
         """
         Initialize translation service.
@@ -26,6 +27,7 @@ class TranslationService:
             webhook_url: LM Studio/OpenAI-compatible endpoint
             max_tokens: Maximum tokens for each API call
             timeout: Request timeout in seconds
+            progress_callback: Optional callback for progress updates
         """
         self.webhook_url = webhook_url or TRANSLATION_DEFAULT_URL
         self.max_tokens = max_tokens
@@ -33,6 +35,7 @@ class TranslationService:
         self.retry_count = 0
         self.max_retries = 3
         self.llm_client = LLMClient(webhook_url=webhook_url)  # Pass webhook_url to LLMClient
+        self._progress_callback = progress_callback  # Store progress callback
         
         logger.info(f"TranslationService initialized with webhook: {self.webhook_url}")
 
@@ -131,10 +134,15 @@ class TranslationService:
                 "total_chunks": total_chunks,
             }
 
-        logger.info(
-            f"Translating chunk {chunk_index}/{total_chunks} ({len(chunk)} chars, max_tokens={current_max_tokens})"
-        )
-        logger.debug(f"Translation payload: {json.dumps(payload, indent=2)[:500]}...")
+         logger.info(
+             f"Translating chunk {chunk_index}/{total_chunks} ({len(chunk)} chars, max_tokens={current_max_tokens})"
+         )
+         logger.debug(f"Translation payload: {json.dumps(payload, indent=2)[:500]}...")
+         
+         # Notify progress through controller if available
+         if hasattr(self, '_progress_callback'):
+             progress_pct = int((chunk_index / total_chunks) * 100) if total_chunks > 0 else 0
+             self._progress_callback(f"Translating chunk {chunk_index}/{total_chunks}...", progress_pct)
 
         attempt = 1
         last_error = None
