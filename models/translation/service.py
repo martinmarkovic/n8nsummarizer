@@ -124,7 +124,6 @@ class TranslationService:
             "prompt": prompt_template,
             "temperature": 0.3,
             "max_tokens": current_max_tokens,
-            "stream": False,
         }
 
         # Add chunk metadata if available
@@ -134,15 +133,15 @@ class TranslationService:
                 "total_chunks": total_chunks,
             }
 
-         logger.info(
-             f"Translating chunk {chunk_index}/{total_chunks} ({len(chunk)} chars, max_tokens={current_max_tokens})"
-         )
-         logger.debug(f"Translation payload: {json.dumps(payload, indent=2)[:500]}...")
-         
-         # Notify progress through controller if available
-         if hasattr(self, '_progress_callback'):
-             progress_pct = int((chunk_index / total_chunks) * 100) if total_chunks > 0 else 0
-             self._progress_callback(f"Translating chunk {chunk_index}/{total_chunks}...", progress_pct)
+        logger.info(
+            f"Translating chunk {chunk_index}/{total_chunks} ({len(chunk)} chars, max_tokens={current_max_tokens})"
+        )
+        logger.debug(f"Translation payload: {json.dumps(payload, indent=2)[:500]}...")
+        
+        # Notify progress through controller if available
+        if hasattr(self, '_progress_callback') and self._progress_callback is not None:
+            progress_pct = int((chunk_index / total_chunks) * 100) if total_chunks > 0 else 0
+            self._progress_callback(f"Translating chunk {chunk_index}/{total_chunks}...", progress_pct)
 
         attempt = 1
         last_error = None
