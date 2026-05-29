@@ -55,20 +55,6 @@ class VideoSubtitlerController:
                 tab.output_dir_var.set(saved_dir)
 
         tab.set_controller(self)
-        logger.info("VideoSubtitlerController initialized")
-
-    def _refresh_translation_llm_config(self):
-        """Refresh translation LLM config from TranslationController.
-        
-        Fetches current settings from TranslationController and applies them
-        to ensure Video Subtitler uses the same config as Translation tab.
-        """
-        if self.translation_controller:
-            provider, model, url = self.translation_controller.get_current_llm_config()
-            self.set_translation_llm_config(provider, model, url)
-            logger.info(f"Refreshed translation config from TranslationController: {provider}/{model} @ {url}")
-        else:
-            logger.warning("No TranslationController attached; using cached/fallback translation config")
         
         # Create callback for video utils (instance method to avoid scope issues)
         self.tab_progress_callback = lambda percent, message: self.tab.after(0, lambda p=percent, m=message: self.tab.update_progress(p, m))
@@ -83,6 +69,21 @@ class VideoSubtitlerController:
                 'enable_burn_btn': lambda: self.tab.enable_burn_btn()
             }
         self.create_translation_callbacks = create_translation_callbacks.__get__(self, self.__class__)
+        
+        logger.info("VideoSubtitlerController initialized")
+
+    def _refresh_translation_llm_config(self):
+        """Refresh translation LLM config from TranslationController.
+        
+        Fetches current settings from TranslationController and applies them
+        to ensure Video Subtitler uses the same config as Translation tab.
+        """
+        if self.translation_controller:
+            provider, model, url = self.translation_controller.get_current_llm_config()
+            self.set_translation_llm_config(provider, model, url)
+            logger.info(f"Refreshed translation config from TranslationController: {provider}/{model} @ {url}")
+        else:
+            logger.warning("No TranslationController attached; using cached/fallback translation config")
 
     def on_start(self):
         if self._thread and self._thread.is_alive():
@@ -185,7 +186,7 @@ class VideoSubtitlerController:
             source_path = Path(file_path)
             video_path = self.video_subtitler_model.process_local_video_file(
                 source_path, 
-                lambda p, s=0, e=0, m=None: model_progress_callback(p, s, e, m, tab_callback=tab_progress_callback)
+                lambda p, s=0, e=0, m=None: model_progress_callback(p, s, e, m, tab_callback=self.tab_progress_callback)
             )
             
             # Run transcription
@@ -229,8 +230,10 @@ class VideoSubtitlerController:
             self.tab.after(0, lambda: self.tab.update_status("⬇ Downloading video..."))
             self.tab.after(0, lambda: self.tab.update_progress(0, "Downloading..."))
             
-            # Use model to handle download and processing with correct callback
-            download_progress_wrapper = self._create_download_progress_wrapper()
+             # Use model to handle download and processing with correct callback
+            download_progress_wrapper = create_download_progress_wrapper(
+                lambda p, s, e: model_progress_callback(p, s, e, tab_callback=self.tab_progress_callback)
+            )
             video_path = self.video_subtitler_model.download_and_process_video(url, download_progress_wrapper)
             
             self.tab.after(0, lambda: self.tab.update_progress(100, "Download complete."))
