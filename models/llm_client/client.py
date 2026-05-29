@@ -17,6 +17,7 @@ import requests
 import re
 from typing import Optional, Tuple, Dict, List
 from dataclasses import dataclass
+from urllib.parse import urlparse, urlunparse
 
 from .config import LLMClientConfig
 from models.n8n.chunking import ContentChunker
@@ -147,29 +148,27 @@ hosted OpenAI-compatible endpoint.
             return False, None, error
         
         try:
-             # Debug: Log provider value for debugging
+            # Debug: Log provider value for debugging
             logger.info(f"LLMClient provider value: '{self.config.provider}' (type: {type(self.config.provider)})")
             
             # Ensure provider is a string for comparison
             provider_str = str(self.config.provider).strip().lower() if self.config.provider else ""
             
+            # Parse base URL to handle different formats properly
+            parsed_url = urlparse(self.config.webhook_url.strip())
+            
             # Construct proper endpoint based on provider
             if provider_str == "lmstudio":
                 logger.info("Using LM Studio endpoint logic")
                 # LM Studio uses OpenAI-compatible /v1/chat/completions endpoint
-                base_url = self.config.webhook_url.strip()
-                if not base_url.endswith("/v1"):
-                    base_url = base_url.rstrip("/") + "/v1"
-                endpoint = f"{base_url}/chat/completions"
+                # Build clean base URL from parsed components
+                base_url = urlunparse((parsed_url.scheme, parsed_url.netloc, '', '', '', ''))
+                endpoint = f"{base_url}/v1/chat/completions"
             elif provider_str == "ollama-local":
                 logger.info("Using Ollama Local endpoint logic")
                 # Use Ollama's native API endpoint (/api/chat)
-                base_url = self.config.webhook_url.strip()
-                # Ensure base URL doesn't have incorrect suffixes for Ollama
-                if base_url.endswith("/v1") or base_url.endswith("/v1/"):
-                    # Remove incorrect LM Studio suffix if present
-                    base_url = base_url.replace("/v1", "").strip()
-                endpoint = f"{base_url}/chat"
+                base_url = urlunparse((parsed_url.scheme, parsed_url.netloc, '', '', '', ''))
+                endpoint = f"{base_url}/api/chat"
             else:
                 logger.warning(f"Unknown provider: '{self.config.provider}', using fallback")
                 # Fallback to original behavior for unknown providers

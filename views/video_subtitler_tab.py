@@ -28,6 +28,9 @@ class VideoSubtitlerTab(BaseTab):
         self.output_dir_var = tk.StringVar(value="")
         self.translate_lang_var = tk.StringVar(value="Croatian")
         
+        # Translation LLM info (for display)
+        self.translation_llm_label_var = tk.StringVar(value="Translation LLM: Not configured")
+        
         # Controller will be initialized after UI setup
         self.controller = None
         
@@ -185,6 +188,11 @@ class VideoSubtitlerTab(BaseTab):
             width=12
         )
         lang_combo.grid(row=5, column=1, columnspan=2, sticky=tk.W, pady=5)
+        
+        # Translation LLM info label (read-only)
+        ttk.Label(settings_frame, textvariable=self.translation_llm_label_var, foreground="gray").grid(
+            row=6, column=0, columnspan=4, sticky=tk.W, pady=(5, 0)
+        )
         
         # === Row 1: Progress ===
         progress_frame = ttk.LabelFrame(scrollable_frame, text="Progress", padding=10)
@@ -508,6 +516,18 @@ class VideoSubtitlerTab(BaseTab):
     def get_target_language(self) -> str:
         """Get target language for translation."""
         return self.translate_lang_var.get()
+
+    def update_translation_llm_label(self, provider, model):
+        """Update the translation LLM info label.
+        
+        Args:
+            provider: LLM provider name
+            model: Model name
+        """
+        if provider and model:
+            self.translation_llm_label_var.set(f"Translation LLM: {provider} / {model} (from Translation tab)")
+        else:
+            self.translation_llm_label_var.set("Translation LLM: Not configured")
     
     def display_translated_srt(self, text: str):
         """Display translated SRT text."""

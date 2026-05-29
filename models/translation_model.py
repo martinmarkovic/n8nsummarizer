@@ -78,7 +78,7 @@ class TranslationModel:
             max_chunk_size=self.chunk_size, max_tokens=self.max_tokens
         )
         self.translation_service = TranslationService(
-            webhook_url=TRANSLATION_DEFAULT_URL, max_tokens=self.max_tokens
+            webhook_url=self.webhook_url, max_tokens=self.max_tokens
         )
         self.file_handler = TranslationFileHandler()
 
@@ -111,14 +111,28 @@ class TranslationModel:
             webhook_url: Base URL for the provider
             model_name: Model name to use
         """
+        # Validate that all settings are provided
+        if not provider or not webhook_url or not model_name:
+            error_msg = f"Invalid LLM settings: provider='{provider}', url='{webhook_url}', model='{model_name}'"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        # Update model state atomically
         self.provider = provider
         self.webhook_url = webhook_url
         self.model_name = model_name
         
-        # Update the translation service with new webhook URL
+         # Propagate atomically to TranslationService - all 3 settings together
         self.translation_service.webhook_url = webhook_url
-        
+        self.translation_service.provider = provider
+        self.translation_service.model_name = model_name
+        # Also update the LLMClient through TranslationService to ensure synchronization
+        self.translation_service.update_webhook_url(webhook_url)
+
         logger.info(f"Translation LLM settings updated: provider={provider}, model={model_name}, url={webhook_url}")
+        logger.debug(f"TranslationModel state: provider={self.provider}, model={self.model_name}, url={self.webhook_url}")
+        logger.debug(f"TranslationService state: provider={self.translation_service.provider}, model={self.translation_service.model_name}, url={self.translation_service.webhook_url}")
+        logger.debug(f"TranslationService LLMClient state: provider={self.translation_service.llm_client.config.provider}, model={self.translation_service.llm_client.config.model_name}, url={self.translation_service.llm_client.config.webhook_url}")
 
     def get_current_file_path(self) -> str:
         """
@@ -643,7 +657,7 @@ class TranslationModel:
                      self.translation_service.translate_chunk(
                          chunk=chunk,
                          target_language=target_language,
-                         chunk_index=idx,
+                         chunk_index=i,
                          total_chunks=len(chunks),
                          provider=self.provider,
                          model_name=self.model_name

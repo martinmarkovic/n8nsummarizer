@@ -38,6 +38,11 @@ class TranslationController:
         self.translation_thread = None
         self.translation_queue = queue.Queue()
 
+        # Callbacks for LLM settings changes
+        self._llm_settings_callbacks = []
+        # Callbacks for translation progress updates
+        self._translation_progress_callbacks = []
+
         # Wire up view callbacks
         self.view.on_file_selected = self.handle_file_selected
         self.view.on_translate_clicked = self.handle_translate_clicked
@@ -48,6 +53,70 @@ class TranslationController:
         self._update_llm_client_from_view()
 
         logger.info("TranslationController initialized")
+
+    def get_current_llm_config(self) -> tuple:
+        """Get current LLM configuration from LLM client (where .env values are loaded).
+        
+        Returns:
+            Tuple of (provider, model_name, webhook_url)
+        """
+        provider = self.llm_client.config.provider
+        model_name = self.llm_client.config.model_name
+        webhook_url = self.llm_client.config.webhook_url
+        
+        logger.info(f"get_current_llm_config() returning: provider='{provider}', model='{model_name}', url='{webhook_url}'")
+        
+        return (provider, model_name, webhook_url)
+
+    def register_llm_settings_callback(self, callback):
+        """Register a callback to be notified when LLM settings change.
+        
+        Args:
+            callback: Function that takes (provider, model, url) parameters
+        """
+        self._llm_settings_callbacks.append(callback)
+        logger.info(f"Registered LLM settings callback, total callbacks: {len(self._llm_settings_callbacks)}")
+
+    def register_translation_progress_callback(self, callback):
+        """Register a callback to receive translation progress updates.
+        
+        Args:
+            callback: Function that takes (message, progress_pct) parameters
+        """
+        self._translation_progress_callbacks.append(callback)
+        logger.info(f"Registered translation progress callback, total callbacks: {len(self._translation_progress_callbacks)}")
+
+    def _notify_llm_settings_changed(self):
+        """Notify all registered callbacks that LLM settings have changed."""
+        provider = self.model.provider
+        model = self.model.model_name
+        url = self.llm_client.config.webhook_url
+        
+        for callback in self._llm_settings_callbacks:
+            try:
+                callback(provider, model, url)
+            except Exception as e:
+                logger.error(f"Error calling LLM settings callback: {e}")
+        
+        logger.info(f"Notified {len(self._llm_settings_callbacks)} callbacks about LLM settings change")
+
+    def _notify_translation_progress(self, message: str, progress_pct: float = None):
+        """Notify all registered callbacks about translation progress.
+        
+        Args:
+            message: Progress message to display
+            progress_pct: Optional progress percentage (0-100)
+        """
+        for callback in self._translation_progress_callbacks:
+            try:
+                if progress_pct is not None:
+                    callback(message, progress_pct)
+                else:
+                    callback(message)
+            except Exception as e:
+                logger.error(f"Error calling translation progress callback: {e}")
+        
+        logger.debug(f"Notified {len(self._translation_progress_callbacks)} callbacks about progress: {message}")
 
     def handle_file_selected(self, file_path: str):
         """Handle file selection from view"""
@@ -180,6 +249,10 @@ class TranslationController:
                 f"Translation LLM client configured: provider={provider}, "
                 f"model={model_name}, url={webhook_url}"
             )
+            
+            # Notify registered callbacks about the settings change
+            self._notify_llm_settings_changed()
+            
             return True
         except Exception as e:
             logger.error(f"Failed to update translation LLM client: {str(e)}")

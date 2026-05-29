@@ -116,8 +116,23 @@ def main():
 
         # Initialize Video Subtitler tab controller
         # Wires: VideoSubtitlerTab UI ↔ VideoSubtitlerController ↔ VideoSubtitlerModel
-        video_subtitler_controller = VideoSubtitlerController(window.video_subtitler_tab, settings)
+        video_subtitler_controller = VideoSubtitlerController(window.video_subtitler_tab, settings, translation_controller)
         logger.info("VideoSubtitlerController initialized")
+
+        # NEW: Wire VideoSubtitler to Translation settings
+        def update_video_subtitler_llm_config(provider, model, url):
+            """Update VideoSubtitler with current Translation tab LLM settings."""
+            video_subtitler_controller.set_translation_llm_config(provider, model, url)
+            logger.info(f"Synced Translation LLM settings to VideoSubtitler: {provider}/{model}")
+
+        # Register callback for LLM settings changes
+        translation_controller.register_llm_settings_callback(update_video_subtitler_llm_config)
+        
+        # Initial sync with current Translation settings
+        # Get config from controller/model (already loaded from .env), NOT from UI widgets
+        provider, model, url = translation_controller.get_current_llm_config()
+        video_subtitler_controller.set_translation_llm_config(provider, model, url)
+        logger.info(f"Initial sync: VideoSubtitler using Translation LLM settings: {provider}/{model}")
 
         # Downloader tab controller already initialized in DownloaderTab.__init__
         # Now inject settings manager into it

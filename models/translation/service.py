@@ -17,7 +17,8 @@ class TranslationService:
     """Handles translation API calls with retry and error handling."""
 
     def __init__(
-        self, webhook_url: str = None, max_tokens: int = 70000, timeout: int = 300
+        self, webhook_url: str = None, max_tokens: int = 70000, timeout: int = 300, 
+        progress_callback: callable = None
     ):
         """
         Initialize translation service.
@@ -26,13 +27,34 @@ class TranslationService:
             webhook_url: LM Studio/OpenAI-compatible endpoint
             max_tokens: Maximum tokens for each API call
             timeout: Request timeout in seconds
+            progress_callback: Optional callback for progress updates
         """
         self.webhook_url = webhook_url or TRANSLATION_DEFAULT_URL
         self.max_tokens = max_tokens
         self.timeout = timeout
         self.retry_count = 0
         self.max_retries = 3
-        self.llm_client = LLMClient()  # NEW: Use LLM client for provider-specific communication
+        self.llm_client = LLMClient(webhook_url=webhook_url)  # Pass webhook_url to LLMClient
+        self._progress_callback = progress_callback  # Store progress callback
+        
+        logger.info(f"TranslationService initialized with webhook: {self.webhook_url}")
+
+    def update_webhook_url(self, webhook_url: str):
+        """Update the webhook URL and propagate to LLM client.
+        
+        Args:
+            webhook_url: New webhook URL to use
+        """
+        self.webhook_url = webhook_url
+        if hasattr(self, 'llm_client') and self.llm_client:
+            self.llm_client.config.webhook_url = webhook_url
+            # Also sync provider and model if they're set
+            if hasattr(self, 'provider') and self.provider:
+                self.llm_client.config.provider = self.provider
+            if hasattr(self, 'model_name') and self.model_name:
+                self.llm_client.config.model_name = self.model_name
+            logger.info(f"TranslationService: Updated LLM client config to {self.provider}/{self.model_name}/{webhook_url}")
+        logger.info(f"TranslationService: Updated webhook_url to {webhook_url}")
 
     def translate_chunk(
         self,
@@ -102,7 +124,6 @@ class TranslationService:
             "prompt": prompt_template,
             "temperature": 0.3,
             "max_tokens": current_max_tokens,
-            "stream": False,
         }
 
         # Add chunk metadata if available
@@ -116,6 +137,11 @@ class TranslationService:
             f"Translating chunk {chunk_index}/{total_chunks} ({len(chunk)} chars, max_tokens={current_max_tokens})"
         )
         logger.debug(f"Translation payload: {json.dumps(payload, indent=2)[:500]}...")
+        
+        # Notify progress through controller if available
+        if hasattr(self, '_progress_callback') and self._progress_callback is not None:
+            progress_pct = int((chunk_index / total_chunks) * 100) if total_chunks > 0 else 0
+            self._progress_callback(f"Translating chunk {chunk_index}/{total_chunks}...", progress_pct)
 
         attempt = 1
         last_error = None
@@ -179,17 +205,31 @@ class TranslationService:
         )
 
     def _make_translation_request(
-        self, payload: Dict[str, Any], provider: str = "lmstudio", model_name: str = "local-model", chunk: str = ""
+        self, payload: Dict[str, Any], provider: str, model_name: str, chunk: str = ""
     ) -> Tuple[bool, str, Optional[str], Optional[Dict[str, Any]]]:
         """Make translation request using LLM client for provider-specific communication."""
         try:
+            # Validate that provider and model are provided (not empty/None)
+            if not provider or not model_name:
+                error_msg = f"Invalid LLM config: provider='{provider}', model='{model_name}'"
+                logger.error(error_msg)
+                return False, "", error_msg, None
+            
+            # Temporarily disabled strict check while fixing root cause
+            # if (self.provider != provider or self.model_name != model_name or 
+            #     self.webhook_url != self.llm_client.config.webhook_url):
+            #     error_msg = (f"Config mismatch: Service has ({self.provider}/{self.model_name}/{self.webhook_url}) "
+            #                f"but request uses ({provider}/{model_name}/{self.llm_client.config.webhook_url})")
+            #     logger.error(error_msg)
+            #     return False, "", error_msg, None
+            
             # Debug: Log incoming provider configuration
             logger.info(f"TranslationService._make_translation_request called with: provider='{provider}', model='{model_name}'")
             
             # Configure LLM client with current settings
-            self.llm_client.config.webhook_url = self.webhook_url
             self.llm_client.config.provider = provider
             self.llm_client.config.model_name = model_name
+            # Note: webhook_url is already set in constructor and update_webhook_url()
             
             # Debug: Log if provider/model are default values (indicates propagation issue)
             if provider == "lmstudio" and model_name == "local-model":
