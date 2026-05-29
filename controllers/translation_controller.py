@@ -55,16 +55,18 @@ class TranslationController:
         logger.info("TranslationController initialized")
 
     def get_current_llm_config(self) -> tuple:
-        """Get current LLM configuration from model (not UI widgets).
+        """Get current LLM configuration from LLM client (where .env values are loaded).
         
         Returns:
             Tuple of (provider, model_name, webhook_url)
         """
-        return (
-            self.model.provider,
-            self.model.model_name, 
-            self.llm_client.config.webhook_url
-        )
+        provider = self.llm_client.config.provider
+        model_name = self.llm_client.config.model_name
+        webhook_url = self.llm_client.config.webhook_url
+        
+        logger.info(f"get_current_llm_config() returning: provider='{provider}', model='{model_name}', url='{webhook_url}'")
+        
+        return (provider, model_name, webhook_url)
 
     def register_llm_settings_callback(self, callback):
         """Register a callback to be notified when LLM settings change.
