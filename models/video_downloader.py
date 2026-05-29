@@ -1,15 +1,16 @@
 """
-Video Downloader Router - dispatches to site-specific downloaders (v6.8)
+Video Downloader Router - dispatches to site-specific downloaders (v8.2)
 
 Supports downloading from:
 - YouTube (single videos and playlists, with resume support)
 - Twitter/X (tweet videos)
 - Instagram (reels and posts, where accessible)
+- Facebook (public videos, reels, and fb.watch links)
 
 Keeps a unified interface for the DownloaderController and view.
 
 Created: 2026-02-17
-Version: 6.8.0 - Multi-source router (YouTube, Twitter, Instagram)
+Version: 8.2.0 - Multi-source router (YouTube, Twitter, Instagram, Facebook)
 """
 
 from pathlib import Path
@@ -19,6 +20,7 @@ from urllib.parse import urlparse
 from models.youtube_downloader import YouTubeDownloader
 from models.twitter_downloader import TwitterDownloader
 from models.instagram_downloader import InstagramDownloader
+from models.facebook_downloader import FacebookDownloader
 from utils.logger import logger
 
 
@@ -36,6 +38,7 @@ class VideoDownloader:
         self.youtube = YouTubeDownloader()
         self.twitter = TwitterDownloader()
         self.instagram = InstagramDownloader()
+        self.facebook = FacebookDownloader()
 
         self.download_path: Optional[Path] = None
         self.selected_resolution: str = "Best Available"
@@ -49,7 +52,7 @@ class VideoDownloader:
     def _detect_source(self, url: str) -> str:
         """Detect source platform from URL.
 
-        Returns one of: 'youtube', 'twitter', 'instagram', 'unknown'.
+        Returns one of: 'youtube', 'twitter', 'instagram', 'facebook', 'unknown'.
         """
         try:
             parsed = urlparse(url)
@@ -67,6 +70,9 @@ class VideoDownloader:
         if "instagram.com" in host or "instagr.am" in host:
             return "instagram"
 
+        if any(h in host for h in ["facebook.com", "fb.watch", "fb.com"]) or "facebook.com" in url:
+            return "facebook"
+
         # Basic heuristic for embedded/shortened links could be added later
         return "unknown"
 
@@ -78,6 +84,8 @@ class VideoDownloader:
             return self.twitter, source
         if source == "instagram":
             return self.instagram, source
+        if source == "facebook":
+            return self.facebook, source
         return None, source
 
     def _sync_progress_callback(self) -> None:
@@ -87,6 +95,7 @@ class VideoDownloader:
         self.youtube.set_progress_callback(self.progress_callback)
         self.twitter.set_progress_callback(self.progress_callback)
         self.instagram.set_progress_callback(self.progress_callback)
+        self.facebook.set_progress_callback(self.progress_callback)
 
     # --------------------------- Public API ---------------------------
 
@@ -95,6 +104,7 @@ class VideoDownloader:
         self.youtube.set_download_path(path)
         self.twitter.set_download_path(path)
         self.instagram.set_download_path(path)
+        self.facebook.set_download_path(path)
         logger.info(f"Download path set for all sources: {self.download_path}")
 
     def set_resolution(self, resolution: str) -> None:
@@ -102,6 +112,7 @@ class VideoDownloader:
         self.youtube.set_resolution(resolution)
         self.twitter.set_resolution(resolution)
         self.instagram.set_resolution(resolution)
+        self.facebook.set_resolution(resolution)
         logger.info(f"Resolution preset set for all sources: {resolution}")
 
     def set_po_token(self, token: Optional[str]) -> None:
@@ -128,6 +139,17 @@ class VideoDownloader:
         self.instagram.set_cookie_browser(browser)
         logger.info(f"Instagram cookie browser configured: {browser}")
 
+    # Facebook cookie authentication methods
+    def set_facebook_cookie_file(self, path: str) -> None:
+        """Set cookie file path for Facebook private video downloads."""
+        self.facebook.set_cookie_file(path)
+        logger.info(f"Facebook cookie file configured: {path}")
+
+    def set_facebook_cookie_browser(self, browser: str) -> None:
+        """Set browser name for Facebook cookie extraction."""
+        self.facebook.set_cookie_browser(browser)
+        logger.info(f"Facebook cookie browser configured: {browser}")
+
     def set_progress_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None:
         self.progress_callback = callback
         self._sync_progress_callback()
@@ -145,19 +167,21 @@ class VideoDownloader:
 
         model, source = self._active_model_for_url(url)
         if model is None:
-            return False, "Unsupported URL. Only YouTube, Twitter, and Instagram are supported."
+            return False, "Unsupported URL. Only YouTube, Twitter, Instagram, and Facebook are supported."
 
         if source == "youtube":
             return self.youtube.validate_url(url)
 
-        # For Twitter/Instagram, do light validation here and let yt-dlp
+        # For Twitter/Instagram/Facebook, do light validation here and let yt-dlp
         # raise a more detailed error if something is wrong.
         if source == "twitter":
             return True, "Valid Twitter/X URL"
         if source == "instagram":
             return True, "Valid Instagram URL"
+        if source == "facebook":
+            return True, "Valid Facebook URL"
 
-        return False, "Unsupported URL. Only YouTube, Twitter, and Instagram are supported."
+        return False, "Unsupported URL. Only YouTube, Twitter, Instagram, and Facebook are supported."
 
     def get_video_info(self, url: str) -> Optional[Dict[str, Any]]:
         """Extract video information, if supported.
@@ -178,7 +202,7 @@ class VideoDownloader:
         """Download the video using the appropriate backend."""
         model, source = self._active_model_for_url(url)
         if model is None:
-            return False, "Unsupported URL. Only YouTube, Twitter, and Instagram are supported."
+            return False, "Unsupported URL. Only YouTube, Twitter, Instagram, and Facebook are supported."
 
         logger.info(f"Source detected for download: {source}")
         return model.download_video(url)
@@ -188,3 +212,4 @@ class VideoDownloader:
         self.youtube.cancel_download()
         self.twitter.cancel_download()
         self.instagram.cancel_download()
+        self.facebook.cancel_download()

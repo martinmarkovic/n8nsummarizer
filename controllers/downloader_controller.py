@@ -1,9 +1,9 @@
 """
-Downloader Controller - Orchestrates video downloads (v6.8)
+Downloader Controller - Orchestrates video downloads (v8.2)
 
 Mediates between:
 - DownloaderTab view (UI)
-- VideoDownloader router model (YouTube/Twitter/Instagram)
+- VideoDownloader router model (YouTube/Twitter/Instagram/Facebook)
 - SettingsManager (persistent preferences)
 
 Handles:
@@ -11,10 +11,10 @@ Handles:
 - Progress updates to UI
 - Error handling and user feedback
 - Threading for non-blocking downloads
-- Settings persistence (path, quality, PO token)
+- Settings persistence (path, quality, PO token, cookies)
 
 Created: 2026-02-15
-Version: 6.8.0 - Multi-source video downloads via VideoDownloader
+Version: 8.2.0 - Added Facebook video download support
 """
 
 import threading
@@ -35,6 +35,7 @@ class DownloaderController:
     v6.4: PO Token field support (stored but not used currently)
     v6.5: Playlist-aware logging and audio-only presets handled in model
     v6.8: Multi-source router for YouTube/Twitter/Instagram
+    v8.2: Added Facebook video download support with cookie authentication
     """
     
     def __init__(self, view):
@@ -88,14 +89,29 @@ class DownloaderController:
         # Restore Instagram cookie settings
         saved_cookie_file = self.settings.get("instagram_cookie_file", "")
         if saved_cookie_file:
+            self.view.cookie_file_var.set(saved_cookie_file)
             self.model.set_instagram_cookie_file(saved_cookie_file)
             logger.info(f"Restored Instagram cookie file: {saved_cookie_file}")
-            
+
         saved_cookie_browser = self.settings.get("instagram_cookie_browser", "")
         if saved_cookie_browser:
+            self.view.cookie_browser_var.set(saved_cookie_browser)
             self.model.set_instagram_cookie_browser(saved_cookie_browser)
             logger.info(f"Restored Instagram cookie browser: {saved_cookie_browser}")
-        
+
+        # Restore Facebook cookie settings
+        saved_facebook_cookie_file = self.settings.get("facebook_cookie_file", "")
+        if saved_facebook_cookie_file:
+            self.view.facebook_cookie_file_var.set(saved_facebook_cookie_file)
+            self.model.set_facebook_cookie_file(saved_facebook_cookie_file)
+            logger.info(f"Restored Facebook cookie file: {saved_facebook_cookie_file}")
+
+        saved_facebook_cookie_browser = self.settings.get("facebook_cookie_browser", "")
+        if saved_facebook_cookie_browser:
+            self.view.facebook_cookie_browser_var.set(saved_facebook_cookie_browser)
+            self.model.set_facebook_cookie_browser(saved_facebook_cookie_browser)
+            logger.info(f"Restored Facebook cookie browser: {saved_facebook_cookie_browser}")
+
         logger.info("SettingsManager configured")
         
     def validate_url(self, url: str) -> tuple[bool, str]:
@@ -185,6 +201,42 @@ class DownloaderController:
                 logger.info("Instagram cookie browser cleared")
         else:
             logger.info("Instagram cookie browser set")
+
+    def set_facebook_cookie_file(self, path: str) -> None:
+        """Set Facebook cookie file path and save to settings.
+
+        Args:
+            path: Path to cookie file
+        """
+        self.model.set_facebook_cookie_file(path)
+        
+        # Save to settings if available
+        if self.settings:
+            self.settings.set("facebook_cookie_file", path)
+            if path:
+                logger.info(f"Facebook cookie file saved: {path}")
+            else:
+                logger.info("Facebook cookie file cleared")
+        else:
+            logger.info("Facebook cookie file set")
+
+    def set_facebook_cookie_browser(self, browser: str) -> None:
+        """Set Facebook cookie browser and save to settings.
+
+        Args:
+            browser: Browser name (chrome, firefox, edge, safari, chromium)
+        """
+        self.model.set_facebook_cookie_browser(browser)
+        
+        # Save to settings if available
+        if self.settings:
+            self.settings.set("facebook_cookie_browser", browser)
+            if browser:
+                logger.info(f"Facebook cookie browser saved: {browser}")
+            else:
+                logger.info("Facebook cookie browser cleared")
+        else:
+            logger.info("Facebook cookie browser set")
         
     def get_available_resolutions(self) -> list[str]:
         """Get list of available resolution presets.

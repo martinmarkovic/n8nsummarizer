@@ -195,6 +195,38 @@ class SettingsManager:
     def set_youtube_po_token(self, token: str) -> None:
         """Set YouTube PO token."""
         self.set("YOUTUBE_PO_TOKEN", token)
+
+    def get_instagram_cookie_file(self) -> str:
+        """Get Instagram cookie file path."""
+        return self.get("INSTAGRAM_COOKIE_FILE", "")
+
+    def set_instagram_cookie_file(self, path: str) -> None:
+        """Set Instagram cookie file path."""
+        self.set("INSTAGRAM_COOKIE_FILE", path)
+
+    def get_instagram_cookie_browser(self) -> str:
+        """Get Instagram cookie browser."""
+        return self.get("INSTAGRAM_COOKIE_BROWSER", "")
+
+    def set_instagram_cookie_browser(self, browser: str) -> None:
+        """Set Instagram cookie browser."""
+        self.set("INSTAGRAM_COOKIE_BROWSER", browser)
+
+    def get_facebook_cookie_file(self) -> str:
+        """Get Facebook cookie file path."""
+        return self.get("FACEBOOK_COOKIE_FILE", "")
+
+    def set_facebook_cookie_file(self, path: str) -> None:
+        """Set Facebook cookie file path."""
+        self.set("FACEBOOK_COOKIE_FILE", path)
+
+    def get_facebook_cookie_browser(self) -> str:
+        """Get Facebook cookie browser."""
+        return self.get("FACEBOOK_COOKIE_BROWSER", "")
+
+    def set_facebook_cookie_browser(self, browser: str) -> None:
+        """Set Facebook cookie browser."""
+        self.set("FACEBOOK_COOKIE_BROWSER", browser)
     
     def get_transcriber_output_location(self) -> str:
         """Get transcriber output location preference."""

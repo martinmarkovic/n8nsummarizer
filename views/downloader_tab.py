@@ -1,11 +1,12 @@
 """
-Downloader Tab - YouTube video downloader interface (v6.6)
+Downloader Tab - Video downloader interface (v8.2)
 
-Provides UI for downloading YouTube videos with:
-- URL input field
+Provides UI for downloading videos from multiple platforms:
+- URL input field (supports YouTube, Twitter, Instagram, Facebook)
 - Destination folder selection
 - Resolution/quality chooser (including audio-only presets)
-- PO Token input field
+- PO Token input field (YouTube only)
+- Instagram/Facebook cookie options (for private content)
 - Download button
 - Progress display
 - Status log
@@ -13,7 +14,7 @@ Provides UI for downloading YouTube videos with:
 Integrated with DownloaderController for download operations.
 
 Created: 2026-02-15
-Version: 6.6.0 - Exposed audio-only options in resolution dropdown
+Version: 8.2.0 - Added Facebook video download support
 """
 
 import tkinter as tk
@@ -36,6 +37,12 @@ class DownloaderTab(BaseTab):
         self.resolution_var = tk.StringVar()
         self.po_token_var = tk.StringVar()
         self.progress_var = tk.StringVar(value="Ready")
+        
+        # Instagram/Facebook cookie settings
+        self.instagram_cookie_file_var = tk.StringVar()
+        self.instagram_cookie_browser_var = tk.StringVar()
+        self.facebook_cookie_file_var = tk.StringVar()
+        self.facebook_cookie_browser_var = tk.StringVar()
         
         # Controller will be initialized after UI setup
         self.controller = None
@@ -221,6 +228,50 @@ class DownloaderTab(BaseTab):
         )
         help_label.grid(row=2, column=0, columnspan=3, sticky=tk.W, padx=10, pady=(0, 5))
         
+        # Facebook Cookie Settings
+        ttk.Label(self.instagram_frame, text="Facebook Cookie File:").grid(
+            row=3, column=0, sticky=tk.W, padx=(10, 5), pady=5
+        )
+        
+        facebook_cookie_file_entry = ttk.Entry(
+            self.instagram_frame,
+            textvariable=self.facebook_cookie_file_var
+        )
+        facebook_cookie_file_entry.grid(row=3, column=1, sticky=(tk.W, tk.E), padx=(0, 5), pady=5)
+        facebook_cookie_file_entry.bind('<FocusOut>', self._on_facebook_cookie_file_change)
+        
+        facebook_cookie_browse_btn = ttk.Button(
+            self.instagram_frame,
+            text="Browse...",
+            width=10,
+            command=self._browse_facebook_cookie_file
+        )
+        facebook_cookie_browse_btn.grid(row=3, column=2, padx=(0, 10), pady=5)
+        
+        # Facebook Cookie Browser
+        ttk.Label(self.instagram_frame, text="Facebook Cookie Browser:").grid(
+            row=4, column=0, sticky=tk.W, padx=(10, 5), pady=5
+        )
+        
+        facebook_cookie_browser_combo = ttk.Combobox(
+            self.instagram_frame,
+            textvariable=self.facebook_cookie_browser_var,
+            values=["", "chrome", "firefox", "edge", "safari", "chromium"],
+            state="readonly",
+            width=15
+        )
+        facebook_cookie_browser_combo.grid(row=4, column=1, sticky=tk.W, padx=(0, 5), pady=5)
+        facebook_cookie_browser_combo.bind('<<ComboboxSelected>>', self._on_facebook_cookie_browser_change)
+        
+        # Facebook Help text
+        facebook_help_label = ttk.Label(
+            self.instagram_frame,
+            text="Required for private Facebook videos",
+            foreground="gray",
+            font=("TkDefaultFont", 8)
+        )
+        facebook_help_label.grid(row=5, column=0, columnspan=3, sticky=tk.W, padx=10, pady=(0, 5))
+        
         # === Row 1: Video Info Display ===
         info_frame = ttk.LabelFrame(self, text="Video Information", padding=10)
         info_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), padx=10, pady=(0, 10))
@@ -313,16 +364,26 @@ class DownloaderTab(BaseTab):
             
     # Instagram cookie methods
     def _browse_cookie_file(self):
-        """Open file dialog for selecting cookie file."""
+        """Browse for cookie file."""
         file_path = filedialog.askopenfilename(
-            title="Select Instagram Cookie File",
-            filetypes=[("Netscape Cookie Files", "*.txt"), ("All Files", "*.*")]
+            title="Select cookie file",
+            filetypes=[("Cookie Files", "*.txt"), ("All Files", "*.*")]
         )
         if file_path:
             self.cookie_file_var.set(file_path)
-            if self.controller:
-                self.controller.set_instagram_cookie_file(file_path)
-                self.log_message(f"Instagram cookie file set: {file_path}")
+            self.controller.set_instagram_cookie_file(file_path)
+            self.log_message(f"Instagram cookie file set: {file_path}")
+
+    def _browse_facebook_cookie_file(self):
+        """Browse for Facebook cookie file."""
+        file_path = filedialog.askopenfilename(
+            title="Select Facebook cookie file",
+            filetypes=[("Cookie Files", "*.txt"), ("All Files", "*.*")]
+        )
+        if file_path:
+            self.facebook_cookie_file_var.set(file_path)
+            self.controller.set_facebook_cookie_file(file_path)
+            self.log_message(f"Facebook cookie file set: {file_path}")
     
     def _on_cookie_file_change(self, event=None):
         """Handle cookie file input change."""
@@ -343,13 +404,34 @@ class DownloaderTab(BaseTab):
                 self.log_message(f"Instagram cookie browser set: {browser}")
             else:
                 self.log_message("Instagram cookie browser cleared")
+
+    def _on_facebook_cookie_file_change(self, event=None):
+        """Handle Facebook cookie file input change."""
+        path = self.facebook_cookie_file_var.get().strip()
+        if self.controller:
+            self.controller.set_facebook_cookie_file(path)
+            if path:
+                self.log_message(f"Facebook cookie file set: {path}")
+            else:
+                self.log_message("Facebook cookie file cleared")
+
+    def _on_facebook_cookie_browser_change(self, event=None):
+        """Handle Facebook cookie browser selection change."""
+        browser = self.facebook_cookie_browser_var.get()
+        if self.controller:
+            self.controller.set_facebook_cookie_browser(browser)
+            if browser:
+                self.log_message(f"Facebook cookie browser set: {browser}")
+            else:
+                self.log_message("Facebook cookie browser cleared")
     
     def _on_url_change(self, event=None):
-        """Handle URL change - show Instagram settings if Instagram URL detected."""
+        """Handle URL change - show Instagram settings if Instagram or Facebook URL detected."""
         url = self.url_var.get().strip()
         is_instagram = "instagram.com" in url.lower() or "instagr.am" in url.lower()
+        is_facebook = "facebook.com" in url.lower() or "fb.watch" in url.lower() or "fb.com" in url.lower()
         
-        if is_instagram:
+        if is_instagram or is_facebook:
             self.instagram_frame.grid()
         else:
             self.instagram_frame.grid_remove()
