@@ -32,7 +32,20 @@ class TranslationService:
         self.timeout = timeout
         self.retry_count = 0
         self.max_retries = 3
-        self.llm_client = LLMClient()  # NEW: Use LLM client for provider-specific communication
+        self.llm_client = LLMClient(webhook_url=webhook_url)  # Pass webhook_url to LLMClient
+        
+        logger.info(f"TranslationService initialized with webhook: {self.webhook_url}")
+
+    def update_webhook_url(self, webhook_url: str):
+        """Update the webhook URL and propagate to LLM client.
+        
+        Args:
+            webhook_url: New webhook URL to use
+        """
+        self.webhook_url = webhook_url
+        if hasattr(self, 'llm_client') and self.llm_client:
+            self.llm_client.config.webhook_url = webhook_url
+            logger.info(f"TranslationService: Updated webhook_url to {webhook_url}")
 
     def translate_chunk(
         self,
@@ -187,9 +200,9 @@ class TranslationService:
             logger.info(f"TranslationService._make_translation_request called with: provider='{provider}', model='{model_name}'")
             
             # Configure LLM client with current settings
-            self.llm_client.config.webhook_url = self.webhook_url
             self.llm_client.config.provider = provider
             self.llm_client.config.model_name = model_name
+            # Note: webhook_url is already set in constructor and update_webhook_url()
             
             # Debug: Log if provider/model are default values (indicates propagation issue)
             if provider == "lmstudio" and model_name == "local-model":

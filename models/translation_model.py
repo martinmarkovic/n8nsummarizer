@@ -78,7 +78,7 @@ class TranslationModel:
             max_chunk_size=self.chunk_size, max_tokens=self.max_tokens
         )
         self.translation_service = TranslationService(
-            webhook_url=TRANSLATION_DEFAULT_URL, max_tokens=self.max_tokens
+            webhook_url=self.webhook_url, max_tokens=self.max_tokens
         )
         self.file_handler = TranslationFileHandler()
 
@@ -116,7 +116,7 @@ class TranslationModel:
         self.model_name = model_name
         
         # Update the translation service with new webhook URL
-        self.translation_service.webhook_url = webhook_url
+        self.translation_service.update_webhook_url(webhook_url)
         
         logger.info(f"Translation LLM settings updated: provider={provider}, model={model_name}, url={webhook_url}")
 
