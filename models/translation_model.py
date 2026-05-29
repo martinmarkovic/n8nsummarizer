@@ -111,14 +111,25 @@ class TranslationModel:
             webhook_url: Base URL for the provider
             model_name: Model name to use
         """
+        # Validate that all settings are provided
+        if not provider or not webhook_url or not model_name:
+            error_msg = f"Invalid LLM settings: provider='{provider}', url='{webhook_url}', model='{model_name}'"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
         self.provider = provider
         self.webhook_url = webhook_url
         self.model_name = model_name
         
-        # Update the translation service with new webhook URL
-        self.translation_service.update_webhook_url(webhook_url)
+        # Update the translation service with all LLM settings atomically
+        self.translation_service.webhook_url = webhook_url
+        self.translation_service.provider = provider
+        self.translation_service.model_name = model_name
+        # Note: webhook_url is set directly above, no need for separate update method call
         
         logger.info(f"Translation LLM settings updated: provider={provider}, model={model_name}, url={webhook_url}")
+        logger.debug(f"TranslationModel state after update: provider={self.provider}, model={self.model_name}, url={self.webhook_url}")
+        logger.debug(f"TranslationService state after update: provider={self.translation_service.provider}, model={self.translation_service.model_name}, url={self.translation_service.webhook_url}")
 
     def get_current_file_path(self) -> str:
         """

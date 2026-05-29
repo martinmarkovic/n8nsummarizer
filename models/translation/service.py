@@ -192,10 +192,16 @@ class TranslationService:
         )
 
     def _make_translation_request(
-        self, payload: Dict[str, Any], provider: str = "lmstudio", model_name: str = "local-model", chunk: str = ""
+        self, payload: Dict[str, Any], provider: str, model_name: str, chunk: str = ""
     ) -> Tuple[bool, str, Optional[str], Optional[Dict[str, Any]]]:
         """Make translation request using LLM client for provider-specific communication."""
         try:
+            # Validate that provider and model are provided (not empty/None)
+            if not provider or not model_name:
+                error_msg = f"Invalid LLM config: provider='{provider}', model='{model_name}'"
+                logger.error(error_msg)
+                return False, "", error_msg, None
+            
             # Debug: Log incoming provider configuration
             logger.info(f"TranslationService._make_translation_request called with: provider='{provider}', model='{model_name}'")
             
