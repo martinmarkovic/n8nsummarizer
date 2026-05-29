@@ -654,7 +654,7 @@ class TranslationModel:
                      self.translation_service.translate_chunk(
                          chunk=chunk,
                          target_language=target_language,
-                         chunk_index=idx,
+                         chunk_index=i,
                          total_chunks=len(chunks),
                          provider=self.provider,
                          model_name=self.model_name
