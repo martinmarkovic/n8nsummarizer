@@ -19,7 +19,7 @@ class VideoSubtitlerModel:
     def __init__(self):
         TEMP_DIR.mkdir(exist_ok=True)
 
-    def download_video(self, url: str, progress_cb=None) -> Path:
+    def download_video(self, url: str, progress_cb=None, format_string: str = "bv*+ba/b") -> Path:
         """Download video to VIDEO_PATH using yt-dlp. Overwrites existing."""
         def hook(d):
             if progress_cb and d.get("status") == "downloading":
@@ -38,7 +38,7 @@ class VideoSubtitlerModel:
 
         ydl_opts = {
             "outtmpl": str(TEMP_DIR / "video.%(ext)s"),
-            "format": "bv*+ba/b",  # Best video + best audio / best fallback
+            "format": format_string,
             "merge_output_format": "mp4",
             "postprocessors": [{
                 'key': 'FFmpegVideoConvertor',
@@ -76,14 +76,14 @@ class VideoSubtitlerModel:
             return candidates[0]
         raise FileNotFoundError("yt-dlp did not produce a video file in temp_subtitler/")
 
-    def download_and_process_video(self, url: str, progress_cb=None) -> Path:
+    def download_and_process_video(self, url: str, progress_cb=None, format_string: str = "bv*+ba/b") -> Path:
         """Complete video download and processing pipeline for URL input."""
         try:
             # Clean temp folder before starting
             self.clean_temp_folder()
             
             # Download the video
-            video_path = self.download_video(url, progress_cb)
+            video_path = self.download_video(url, progress_cb, format_string=format_string)
             
             return video_path
             

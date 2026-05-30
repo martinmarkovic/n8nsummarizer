@@ -81,9 +81,37 @@ class VideoSubtitlerController:
         if self.translation_controller:
             provider, model, url = self.translation_controller.get_current_llm_config()
             self.set_translation_llm_config(provider, model, url)
-            logger.info(f"Refreshed translation config from TranslationController: {provider}/{model} @ {url}")
+            logger.info(f"Refreshed translation config from TranslationController: {provider}/{model}")
         else:
             logger.warning("No TranslationController attached; using cached/fallback translation config")
+
+    def _get_download_format_string(self) -> str:
+        """Read DOWNLOADER_QUALITY from settings and resolve to yt-dlp format string.
+        
+        Falls back to 'bv*+ba/b' (Best Available) if setting is missing or unknown.
+        Rejects audio-only presets since the subtitler requires a video stream.
+        """
+        from models.youtube_downloader import YouTubeDownloader
+        AUDIO_ONLY = {"Audio Only (Best)", "Audio Only (Worst)"}
+        if self.settings:
+            quality = self.settings.get("DOWNLOADER_QUALITY", "Best Available")
+            if quality in AUDIO_ONLY:
+                logger.warning(
+                    f"VideoSubtitler: quality '{quality}' is audio-only, "
+                    "falling back to Best Available"
+                )
+            else:
+                fmt = YouTubeDownloader.RESOLUTION_FORMATS.get(quality)
+                if fmt:
+                    logger.info(
+                        f"VideoSubtitler: using download quality '{quality}' → '{fmt}'"
+                    )
+                    return fmt
+                logger.warning(
+                    f"VideoSubtitler: unknown quality '{quality}', "
+                    "falling back to Best Available"
+                )
+        return "bv*+ba/b"
 
     def on_start(self):
         if self._thread and self._thread.is_alive():
@@ -137,7 +165,8 @@ class VideoSubtitlerController:
             download_progress_wrapper = create_download_progress_wrapper(
                 lambda p, s, e: model_progress_callback(p, s, e, tab_callback=self.tab_progress_callback)
             )
-            video_path = self.video_subtitler_model.download_and_process_video(url, download_progress_wrapper)
+            fmt = self._get_download_format_string()
+            video_path = self.video_subtitler_model.download_and_process_video(url, download_progress_wrapper, format_string=fmt)
             
             self.tab.after(0, lambda: self.tab.update_progress(100, "Download complete."))
 
@@ -230,11 +259,12 @@ class VideoSubtitlerController:
             self.tab.after(0, lambda: self.tab.update_status("⬇ Downloading video..."))
             self.tab.after(0, lambda: self.tab.update_progress(0, "Downloading..."))
             
-             # Use model to handle download and processing with correct callback
+            	 # Use model to handle download and processing with correct callback
             download_progress_wrapper = create_download_progress_wrapper(
                 lambda p, s, e: model_progress_callback(p, s, e, tab_callback=self.tab_progress_callback)
             )
-            video_path = self.video_subtitler_model.download_and_process_video(url, download_progress_wrapper)
+            fmt = self._get_download_format_string()
+            video_path = self.video_subtitler_model.download_and_process_video(url, download_progress_wrapper, format_string=fmt)
             
             self.tab.after(0, lambda: self.tab.update_progress(100, "Download complete."))
             
