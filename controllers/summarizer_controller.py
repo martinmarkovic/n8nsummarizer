@@ -136,36 +136,79 @@ class SummarizerController:
     def _start_file_summarize(self):
         """Start file summarization workflow."""
         file_path = self.view.get_file_path()
-        if not file_path:
+        content = self.view.get_content()
+        
+        # Check if content exists in preview box (allow pasting text directly)
+        if content and content.strip():
+            # Content available - proceed with summarization
+            if not self._update_llm_client():
+                return
+            
+            prompt = self.view.get_prompt()
+            
+            # Update UI for processing
+            if file_path:
+                self.view.set_status("Sending to LLM webhook...")
+                self.view.display_response(
+                    f"Sending to {self.llm_client.config.webhook_url}...\n"
+                    f"Waiting for response..."
+                )
+            else:
+                self.view.set_status("Sending pasted content to LLM webhook...")
+                self.view.display_response(
+                    "Using content from preview box...\n"
+                    f"Sending to {self.llm_client.config.webhook_url}...\n"
+                    f"Waiting for response..."
+                )
+            
+            self.view.show_loading(True)
+            
+            # Start background thread
+            thread = threading.Thread(
+                target=self._summarize_pasted_content_thread,
+                args=(content, prompt, file_path),
+                daemon=True
+            )
+            thread.start()
+        elif not file_path:
             self.view.show_error("No file loaded. Please select a file first.")
             return
-        
-        content = self.view.get_content()
-        if not content or not content.strip():
+        elif not content or not content.strip():
             self.view.show_error("File content is empty.")
             return
-        
-        if not self._update_llm_client():
-            return
-        
-        prompt = self.view.get_prompt()
-        
-        # Update UI for processing
-        self.view.set_status("Sending to LLM webhook...")
-        self.view.display_response(
-            f"Sending to {self.llm_client.config.webhook_url}...\n"
-            f"Waiting for response..."
-        )
-        self.view.show_loading(True)
-        
-        # Start background thread
-        thread = threading.Thread(
-            target=self._summarize_file_thread,
-            args=(file_path, content, prompt),
-            daemon=True
-        )
-        thread.start()
     
+    def _summarize_pasted_content_thread(self, content: str, prompt: str, file_path: Optional[str] = None):
+        """Background thread for pasted content summarization."""
+        try:
+            # Determine file name for logging
+            if file_path:
+                file_info = self.file_model.get_file_info(file_path)
+                file_name = file_info["name"]
+                file_size_bytes = os.path.getsize(file_path)
+            else:
+                file_name = "pasted_content.txt"
+                file_size_bytes = len(content.encode("utf-8"))
+            
+            logger.info(f"Sending content to LLM: {file_name} ({file_size_bytes} bytes)")
+            
+            # Send to LLM client
+            success, summary, error = self.llm_client.send_content(
+                file_name=file_name,
+                content=content,
+                prompt=prompt,
+                file_size_bytes=file_size_bytes
+            )
+            
+            # Handle response on main thread
+            if success:
+                self.view.root.after(0, self._on_summarize_success, summary, file_name)
+            else:
+                self.view.root.after(0, self._on_error, error or "Unknown error from LLM")
+                
+        except Exception as e:
+            logger.error(f"Content summarization error: {e}", exc_info=True)
+            self.view.root.after(0, self._on_error, str(e))
+
     def _summarize_file_thread(self, file_path: str, content: str, prompt: str):
         """Background thread for file summarization."""
         try:
