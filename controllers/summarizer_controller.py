@@ -385,12 +385,12 @@ class SummarizerController:
         
         # Handle empty responses gracefully
         if not summary or not summary.strip():
-            self.view.display_response("LLM returned an empty response. This could be due to:
-- The model not generating output for this prompt
-- The content being too short or unclear
-- Model configuration issues
-
-Try adjusting your prompt or checking your LLM server.")
+            error_message = "LLM returned an empty response. This could be due to:\n" \
+                          "- The model not generating output for this prompt\n" \
+                          "- The content being too short or unclear\n" \
+                          "- Model configuration issues\n\n" \
+                          "Try adjusting your prompt or checking your LLM server."
+            self.view.display_response(error_message)
             self.view.show_error("LLM returned empty response")
         else:
             self.view.display_response(summary)
