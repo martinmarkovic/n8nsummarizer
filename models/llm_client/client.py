@@ -414,13 +414,40 @@ hosted OpenAI-compatible endpoint.
         Returns:
             True if save succeeded, False if failed
         """
-        success = self.config.save_to_env(webhook_url, model_name, provider)
+        # Clean up model name before saving to prevent corrupted .env entries
+        clean_model_name = self._clean_model_name(model_name)
+        
+        success = self.config.save_to_env(webhook_url, clean_model_name, provider)
         
         if success:
             # Update internal config to match saved values
             self.config.webhook_url = webhook_url
-            self.config.model_name = model_name
+            self.config.model_name = clean_model_name
             self.config.provider = provider
             logger.info("Updated LLMClient config with saved settings")
         
         return success
+    
+    def _clean_model_name(self, model_name: str) -> str:
+        """Clean up model name by removing size descriptions in parentheses.
+        
+        Args:
+            model_name: Potentially corrupted model name
+            
+        Returns:
+            Clean model name with size descriptions removed
+        """
+        if not model_name or not isinstance(model_name, str):
+            return model_name
+        
+        # Check if the model name contains size description in parentheses
+        # Pattern: model-name (size)
+        import re
+        match = re.match(r'^(.+?)\s+\([^)]+\)$', model_name.strip())
+        if match:
+            # Extract just the model name part
+            clean_name = match.group(1)
+            logger.info(f"Cleaned model name before saving: '{model_name}' -> '{clean_name}'")
+            return clean_name
+        
+        return model_name.strip()

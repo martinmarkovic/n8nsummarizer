@@ -22,6 +22,7 @@ from config import LLM_WEBHOOK_URL, LLM_MODEL, LLM_PROVIDER, PROVIDER_CONFIG
 from models.llm_client.discovery import discover_models, ModelOption
 from views.base_tab import BaseTab
 from views.resizable_panes import ResizablePanes
+from utils.logger import logger
 
 
 class TranslationTab(BaseTab):
@@ -42,6 +43,13 @@ class TranslationTab(BaseTab):
         self.save_settings_var = tk.BooleanVar(value=True)
         self.models_status = tk.StringVar(value="")
         self.available_models: List[ModelOption] = []
+        
+        # Clean up any existing corrupted model name from .env
+        self._cleanup_model_name()
+        
+        # Model ID to label mapping for display purposes
+        self._model_id_mapping = {}  # label -> id
+        self._model_display_mapping = {}  # id -> label
         self.status_indicator = None
 
         # Callback properties - will be wired by controller
@@ -358,9 +366,17 @@ class TranslationTab(BaseTab):
 
         # Update model dropdown
         if models:
-            model_names = [model['label'] for model in models]
-            self.model_combo.config(values=model_names)
-            # Select first model if none selected
+            # Store mapping of display labels to model IDs
+            self._model_id_mapping = {model['label']: model['id'] for model in models}
+            # Reverse mapping for display
+            self._model_display_mapping = {model['id']: model['label'] for model in models}
+            
+            # Use labels for display in dropdown
+            model_labels = [model['label'] for model in models]
+            self.model_combo.config(values=model_labels)
+            # Bind event handler for when user selects from dropdown
+            self.model_combo.bind("<<ComboboxSelected>>", self._on_model_combobox_selected)
+            # Select first model if none selected (use ID, not label)
             if not self.model_var.get():
                 self.model_var.set(models[0]['id'])
         else:
@@ -399,6 +415,61 @@ class TranslationTab(BaseTab):
         """Get current webhook URL."""
         return self.webhook_var.get().strip()
 
+    def _clean_env_file(self, old_value: str, new_value: str):
+        """Clean up corrupted model name in .env file."""
+        try:
+            from pathlib import Path
+            env_path = Path(__file__).parent.parent / '.env'
+            
+            if env_path.exists():
+                content = env_path.read_text(encoding='utf-8')
+                
+                # Replace the corrupted model name in the .env file
+                updated_content = content.replace(
+                    f'LLM_MODEL={old_value}',
+                    f'LLM_MODEL={new_value}'
+                )
+                
+                if updated_content != content:
+                    env_path.write_text(updated_content, encoding='utf-8')
+                    logger.info(f"Cleaned .env file: LLM_MODEL updated from '{old_value}' to '{new_value}'")
+        except Exception as e:
+            logger.error(f"Failed to clean .env file: {e}")
+    
+    def _cleanup_model_name(self):
+        """Clean up corrupted model names that may exist in .env file."""
+        current_value = self.model_var.get().strip()
+        if not current_value:
+            return
+        
+        # Check if the current value contains size description in parentheses
+        # Pattern: model-name (size)
+        import re
+        match = re.match(r'^(.+?)\s+\([^)]+\)$', current_value)
+        if match:
+            # Extract just the model name part
+            clean_model_name = match.group(1)
+            logger.info(f"Cleaned up corrupted model name: '{current_value}' -> '{clean_model_name}'")
+            self.model_var.set(clean_model_name)
+            
+            # Also clean the .env file to prevent future corruption
+            self._clean_env_file(current_value, clean_model_name)
+    
+    def _on_model_combobox_selected(self, event=None):
+        """Handle model selection from dropdown - convert label to ID if needed."""
+        selected_label = self.model_combo.get().strip()
+        if not selected_label:
+            return
+        
+        # If the selected value is a label (contains size description), convert to ID
+        if selected_label in self._model_id_mapping:
+            model_id = self._model_id_mapping[selected_label]
+            logger.info(f"Converted model label to ID: '{selected_label}' -> '{model_id}'")
+            self.model_var.set(model_id)
+        else:
+            # If it's already an ID or unknown, use as-is
+            self.model_var.set(selected_label)
+    
     def get_model_name(self) -> str:
         """Get current model name."""
         return self.model_var.get().strip()
