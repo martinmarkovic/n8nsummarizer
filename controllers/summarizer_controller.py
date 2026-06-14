@@ -382,9 +382,22 @@ class SummarizerController:
     def _on_summarize_success(self, summary: str, display_name: str):
         """Handle successful summarization."""
         self.current_summary = summary
-        self.view.display_response(summary)
+        
+        # Handle empty responses gracefully
+        if not summary or not summary.strip():
+            self.view.display_response("LLM returned an empty response. This could be due to:
+- The model not generating output for this prompt
+- The content being too short or unclear
+- Model configuration issues
+
+Try adjusting your prompt or checking your LLM server.")
+            self.view.show_error("LLM returned empty response")
+        else:
+            self.view.display_response(summary)
+            self.view.show_success(f"Summary complete for '{display_name}'")
+            
         self.view.show_loading(False)
-        self.view.set_export_buttons_enabled(True)
+        self.view.set_export_buttons_enabled(bool(summary and summary.strip()))
         self.view.set_status("Ready")
         
         # Automatically save last used settings to .env for better UX
@@ -394,14 +407,15 @@ class SummarizerController:
         provider = self.view.get_provider()
         self.llm_client.save_settings_to_env(webhook_url, model_name, provider)
         
-        # Handle auto-export preferences
-        export_prefs = self.view.get_export_preferences()
-        if export_prefs["auto_export_txt"]:
-            self.handle_export_txt(manual_call=False)
-        if export_prefs["auto_export_docx"]:
-            self.handle_export_docx(manual_call=False)
-        
-        self.view.show_success(f"Summary complete for '{display_name}'")
+        # Handle auto-export preferences (only if we have actual content)
+        if summary and summary.strip():
+            export_prefs = self.view.get_export_preferences()
+            if export_prefs["auto_export_txt"]:
+                self.handle_export_txt(manual_call=False)
+            if export_prefs["auto_export_docx"]:
+                self.handle_export_docx(manual_call=False)
+            
+            self.view.show_success(f"Summary complete for '{display_name}'")
     
     def _on_error(self, error_msg: str):
         """Handle errors."""
