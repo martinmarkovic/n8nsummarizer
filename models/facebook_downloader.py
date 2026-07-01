@@ -50,6 +50,21 @@ class FacebookDownloader(BaseDownloader):
         """Get current cookie browser."""
         return self.cookie_browser
 
+    def _apply_cookies(self, ydl: "yt_dlp.YoutubeDL") -> None:
+        """Load cookie file into the YoutubeDL cookie jar.
+
+        yt-dlp 2026.6.9 has a regression where passing ``cookies`` in the opts
+        dict does not populate the cookie jar, so cookie-based authentication
+        silently fails. Manually loading the file restores the expected
+        behaviour. Browser-cookie extraction is unaffected.
+        """
+        if self.cookie_file:
+            try:
+                ydl.cookiejar.load(self.cookie_file)
+                logger.info(f"[Facebook] Loaded cookie file: {self.cookie_file}")
+            except Exception as exc:
+                logger.error(f"[Facebook] Failed to load cookie file {self.cookie_file}: {exc}")
+
     # --------------------------- Public API ---------------------------
 
     def get_video_info(self, url: str) -> Optional[Dict[str, Any]]:
@@ -60,7 +75,12 @@ class FacebookDownloader(BaseDownloader):
                 "no_warnings": True,
                 "extract_flat": False,
             }
+            if self.cookie_file:
+                ydl_opts["cookies"] = self.cookie_file
+            elif self.cookie_browser:
+                ydl_opts["cookies_from_browser"] = self.cookie_browser
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                self._apply_cookies(ydl)
                 info = ydl.extract_info(url, download=False)
                 return {
                     "title": info.get("title", "Unknown"),
@@ -112,6 +132,7 @@ class FacebookDownloader(BaseDownloader):
         self.is_downloading = True
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                self._apply_cookies(ydl)
                 logger.info(f"[Facebook] Starting download: {url}")
                 logger.info(f"[Facebook] Resolution preset: {self.selected_resolution}")
                 logger.info(f"[Facebook] Format string: {format_string}")

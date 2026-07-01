@@ -307,19 +307,6 @@ Views: {views_str}
         if po_token:
             self.model.set_po_token(po_token)
             
-        # Check if this is an Instagram story and log cookie status
-        try:
-            if self.model.instagram.is_instagram_story(url):
-                self.view.log_message("Story URL detected — using cookie-based authentication")
-                cookie_source = self.model.instagram.get_cookie_source()
-                self.view.log_message(f"Cookie authentication: {cookie_source}")
-                
-                # Log warning if no cookie configured for story
-                if not (self.model.instagram.cookie_file or self.model.instagram.cookie_browser):
-                    self.view.log_message("⚠ Warning: No cookie authentication configured - download may fail")
-        except Exception as exc:
-            logger.error(f"Error checking Instagram story status: {exc}")
-            
         # Check if already downloading
         if self.download_thread and self.download_thread.is_alive():
             self.view.show_error("Download already in progress")
@@ -331,6 +318,24 @@ Views: {views_str}
         self.view.log_message(f"Starting download: {url}")
         self.view.log_message(f"Resolution preset: {self.model.selected_resolution}")
         self.view.log_message(f"Destination: {download_path}")
+        
+        # Log Instagram cookie status AFTER clear_log so the user sees it
+        try:
+            from utils.url_utils import is_instagram_url
+            if is_instagram_url(url):
+                if self.model.instagram.is_instagram_story(url):
+                    self.view.log_message("Story URL detected — using cookie-based authentication")
+                cookie_source = self.model.instagram.get_cookie_source()
+                self.view.log_message(f"Cookie authentication: {cookie_source}")
+                logger.info(f"Instagram cookie source: {cookie_source}")
+                
+                # Log warning if no cookie configured (Instagram now often requires login)
+                if not (self.model.instagram.cookie_file or self.model.instagram.cookie_browser):
+                    self.view.log_message("⚠ Warning: No cookie authentication configured - Instagram download may fail")
+                    logger.warning("No Instagram cookie authentication configured - download may fail")
+        except Exception as exc:
+            logger.error(f"Error checking Instagram status: {exc}")
+        
         self.view.update_status("Download in progress...")
         
         # Start download in background

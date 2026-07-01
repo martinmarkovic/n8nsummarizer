@@ -67,6 +67,21 @@ class InstagramDownloader(BaseDownloader):
             return f"Browser cookies: {self.cookie_browser}"
         else:
             return "No cookie authentication configured"
+
+    def _apply_cookies(self, ydl: "yt_dlp.YoutubeDL") -> None:
+        """Load cookie file into the YoutubeDL cookie jar.
+
+        yt-dlp 2026.6.9 has a regression where passing ``cookies`` in the opts
+        dict does not populate the cookie jar, so cookie-based authentication
+        silently fails. Manually loading the file restores the expected
+        behaviour. Browser-cookie extraction is unaffected.
+        """
+        if self.cookie_file:
+            try:
+                ydl.cookiejar.load(self.cookie_file)
+                logger.info(f"[Instagram] Loaded cookie file: {self.cookie_file}")
+            except Exception as exc:
+                logger.error(f"[Instagram] Failed to load cookie file {self.cookie_file}: {exc}")
     
     # Note: set_download_path(), set_resolution(), set_progress_callback(), and _progress_hook()
     # are inherited from BaseDownloader and should not be overridden unless platform-specific
@@ -131,6 +146,7 @@ class InstagramDownloader(BaseDownloader):
         self.is_downloading = True
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                self._apply_cookies(ydl)
                 logger.info(f"[Instagram] Starting story download: {url}")
                 logger.info(f"[Instagram] Resolution preset: {self.selected_resolution}")
                 logger.info(f"[Instagram] Format string: {format_string}")
@@ -156,7 +172,12 @@ class InstagramDownloader(BaseDownloader):
                 "no_warnings": True,
                 "extract_flat": False,
             }
+            if self.cookie_file:
+                ydl_opts["cookies"] = self.cookie_file
+            elif self.cookie_browser:
+                ydl_opts["cookies_from_browser"] = self.cookie_browser
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                self._apply_cookies(ydl)
                 info = ydl.extract_info(url, download=False)
                 return {
                     "title": info.get("title", "Unknown"),
@@ -194,6 +215,12 @@ class InstagramDownloader(BaseDownloader):
             "no_warnings": False,
         }
 
+        # Add cookie authentication (required for login-gated reels/posts as of mid-2026)
+        if self.cookie_file:
+            ydl_opts["cookies"] = self.cookie_file
+        elif self.cookie_browser:
+            ydl_opts["cookies_from_browser"] = self.cookie_browser
+
         # If audio-only preset is selected, extract MP3
         if self.selected_resolution.startswith("Audio Only"):
             ydl_opts["postprocessors"] = [
@@ -207,10 +234,12 @@ class InstagramDownloader(BaseDownloader):
         self.is_downloading = True
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                self._apply_cookies(ydl)
                 logger.info(f"[Instagram] Starting download: {url}")
                 logger.info(f"[Instagram] Resolution preset: {self.selected_resolution}")
                 logger.info(f"[Instagram] Format string: {format_string}")
                 logger.info(f"[Instagram] Destination: {self.download_path}")
+                logger.info(f"[Instagram] Cookie source: {self.get_cookie_source()}")
 
                 ydl.download([url])
 
