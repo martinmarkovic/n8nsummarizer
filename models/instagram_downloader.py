@@ -117,7 +117,7 @@ class InstagramDownloader(BaseDownloader):
 
         ydl_opts: Dict[str, Any] = {
             "format": format_string,
-            "outtmpl": str(self.download_path / "%(title)s.%(ext)s"),
+            "outtmpl": str(self.download_path / "%(title)s [%(id)s].%(ext)s"),
             "progress_hooks": [self._progress_hook],
             "quiet": False,
             "no_warnings": False,
@@ -209,7 +209,7 @@ class InstagramDownloader(BaseDownloader):
 
         ydl_opts: Dict[str, Any] = {
             "format": format_string,
-            "outtmpl": str(self.download_path / "%(title)s.%(ext)s"),
+            "outtmpl": str(self.download_path / "%(title)s [%(id)s].%(ext)s"),
             "progress_hooks": [self._progress_hook],
             "quiet": False,
             "no_warnings": False,
