@@ -396,8 +396,21 @@ class VideoSubtitlerController:
             srt_file = TEMP_DIR / ("video_translated.srt" if source == "translated" else "video.srt")
             
             if not srt_file.exists():
-                self.tab.after(0, lambda: self.tab.show_error(f"Subtitle file not found: {srt_file}"))
-                return
+                # Fall back to writing content from the text widget if the user pasted it manually
+                if source == "translated":
+                    pasted = self.tab.get_translated_srt()
+                else:
+                    pasted = self.tab.get_content().strip()
+                
+                if pasted:
+                    try:
+                        srt_file.write_text(pasted, encoding="utf-8")
+                    except Exception as write_err:
+                        self.tab.after(0, lambda e=write_err: self.tab.show_error(f"Could not write subtitle file: {e}"))
+                        return
+                else:
+                    self.tab.after(0, lambda: self.tab.show_error(f"Subtitle file not found: {srt_file}"))
+                    return
             
             # Find input video file (only video extensions, exclude SRT files)
             VIDEO_EXTENSIONS = {".mp4", ".webm", ".mkv", ".avi", ".mov"}

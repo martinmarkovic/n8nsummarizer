@@ -41,7 +41,7 @@ def model_progress_callback(percent: float, speed: float = 0, eta: int = 0, mess
     
     Args:
         percent: Progress percentage (0-100)
-        speed: Speed in bytes per second
+        speed: Speed in bytes per second (or a message string when called as progress_cb(percent, msg))
         eta: Estimated time remaining in seconds
         message: Optional custom message
         tab_callback: Optional callback to update UI (percent, message)
@@ -49,6 +49,12 @@ def model_progress_callback(percent: float, speed: float = 0, eta: int = 0, mess
     Returns:
         None, but calls tab_callback if provided
     """
+    # Handle the case where speed is passed as a plain message string
+    # e.g. progress_cb(100, "File processing complete.")
+    if isinstance(speed, str):
+        message = speed
+        speed = 0
+
     if message:
         msg = f"{message}: {percent:.1f}%"
     else:

@@ -234,6 +234,9 @@ class VideoSubtitlerTab(BaseTab):
         srt_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.srt_text.configure(yscrollcommand=srt_scroll.set)
         
+        # Enable burn button when SRT content is present
+        self.srt_text.bind("<<Modified>>", self._on_srt_text_modified)
+        
         # Button frame
         button_frame = ttk.Frame(srt_frame)
         button_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(5, 0))
@@ -278,6 +281,9 @@ class VideoSubtitlerTab(BaseTab):
         translated_scroll = ttk.Scrollbar(translation_frame, command=self.translated_srt_text.yview)
         translated_scroll.grid(row=1, column=3, sticky=(tk.N, tk.S))
         self.translated_srt_text.configure(yscrollcommand=translated_scroll.set)
+        
+        # Enable burn button when translated SRT content is present
+        self.translated_srt_text.bind("<<Modified>>", self._on_translated_srt_text_modified)
         
         # Save translated SRT button
         ttk.Button(
@@ -466,6 +472,25 @@ class VideoSubtitlerTab(BaseTab):
         """Display SRT text in the text widget."""
         self.srt_text.delete("1.0", tk.END)
         self.srt_text.insert(tk.END, text)
+
+    def _on_srt_text_modified(self, event=None):
+        """Enable burn button (original source) when SRT content is present."""
+        # Reset the modified flag so the event fires again next time
+        self.srt_text.edit_modified(False)
+        has_content = bool(self.srt_text.get("1.0", tk.END).strip())
+        if has_content:
+            self.burn_btn.config(state=tk.NORMAL)
+            # Switch the source radio to "original" when user edits this field
+            if self.subtitle_source_var.get() != "translated" or not self.translated_srt_text.get("1.0", tk.END).strip():
+                self.subtitle_source_var.set("original")
+
+    def _on_translated_srt_text_modified(self, event=None):
+        """Enable burn button (translated source) when translated SRT content is present."""
+        self.translated_srt_text.edit_modified(False)
+        has_content = bool(self.translated_srt_text.get("1.0", tk.END).strip())
+        if has_content:
+            self.burn_btn.config(state=tk.NORMAL)
+            self.subtitle_source_var.set("translated")
     
     def set_busy(self, is_busy: bool):
         """Enable or disable start button."""
