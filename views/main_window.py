@@ -37,6 +37,8 @@ from tkinter import ttk
 from pathlib import Path
 from dotenv import load_dotenv
 import os
+import subprocess
+import threading
 
 from config import (
     APP_TITLE,
@@ -314,7 +316,13 @@ class MainWindow:
             text="🌙 Dark Mode" if self.current_theme == "light" else "☀️ Light Mode",
             command=self._toggle_theme,
         )
-        self.theme_btn.pack(side=tk.LEFT)
+        self.theme_btn.pack(side=tk.LEFT, padx=(0, 8))
+
+        # Cogwheel — dependencies manager
+        self.deps_btn = ttk.Button(
+            controls_frame, text="⚙", width=3, command=self._open_deps_manager
+        )
+        self.deps_btn.pack(side=tk.LEFT)
 
     def _setup_tabs(self, parent):
         """
@@ -533,6 +541,133 @@ class MainWindow:
         if self.on_theme_toggle:
             self.on_theme_toggle(self.current_theme)
 
+    def _open_deps_manager(self):
+        """
+        Open the Dependencies Manager popup window.
+
+        Shows a list of key dependencies with their current installed version
+        and individual Update buttons. Output from each command streams into
+        a shared log area at the bottom of the window.
+        """
+        # Prevent opening multiple instances
+        if hasattr(self, "_deps_window") and self._deps_window and self._deps_window.winfo_exists():
+            self._deps_window.lift()
+            return
+
+        DEPS = [
+            # (display_name, pip_package,         check_cmd,                      update_cmd)
+            ("yt-dlp",         "yt-dlp",           ["yt-dlp",    "--version"],     ["pip", "install", "--upgrade", "yt-dlp"]),
+            ("openai-whisper", "openai-whisper",   ["pip",       "show", "openai-whisper"], ["pip", "install", "--upgrade", "openai-whisper"]),
+            ("requests",       "requests",         ["pip",       "show", "requests"],       ["pip", "install", "--upgrade", "requests"]),
+            ("python-docx",    "python-docx",      ["pip",       "show", "python-docx"],    ["pip", "install", "--upgrade", "python-docx"]),
+            ("python-dotenv",  "python-dotenv",    ["pip",       "show", "python-dotenv"],  ["pip", "install", "--upgrade", "python-dotenv"]),
+            ("openai",         "openai",           ["pip",       "show", "openai"],         ["pip", "install", "--upgrade", "openai"]),
+            ("ffmpeg",         None,               ["ffmpeg",    "-version"],               None),  # system dep, no pip update
+        ]
+
+        win = tk.Toplevel(self.root)
+        win.title("⚙ Dependencies Manager")
+        win.geometry("640x520")
+        win.resizable(True, True)
+        win.grab_set()
+        self._deps_window = win
+
+        outer = ttk.Frame(win, padding=12)
+        outer.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(outer, text="Dependencies Manager", font=("Segoe UI", 12, "bold")).pack(anchor=tk.W, pady=(0, 8))
+
+        # --- Dependency rows ---
+        rows_frame = ttk.LabelFrame(outer, text="Packages", padding=8)
+        rows_frame.pack(fill=tk.X, pady=(0, 8))
+
+        # Store per-row status vars so we can update them
+        status_vars = {}
+
+        def _append_log(text):
+            log_text.configure(state=tk.NORMAL)
+            log_text.insert(tk.END, text)
+            log_text.see(tk.END)
+            log_text.configure(state=tk.DISABLED)
+
+        def _run_cmd(cmd, label_var, btn):
+            """Run a command in a background thread and stream output to the log."""
+            def _worker():
+                win.after(0, lambda: label_var.set("⏳ running…"))
+                win.after(0, lambda: btn.configure(state=tk.DISABLED))
+                win.after(0, lambda: _append_log(f"\n▶ {' '.join(cmd)}\n"))
+                try:
+                    proc = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                    )
+                    for line in proc.stdout:
+                        win.after(0, lambda l=line: _append_log(l))
+                    proc.wait()
+                    if proc.returncode == 0:
+                        win.after(0, lambda: label_var.set("✅ done"))
+                    else:
+                        win.after(0, lambda: label_var.set(f"❌ exit {proc.returncode}"))
+                except FileNotFoundError:
+                    win.after(0, lambda: label_var.set("❌ not found"))
+                    win.after(0, lambda: _append_log(f"  command not found: {cmd[0]}\n"))
+                except Exception as exc:
+                    win.after(0, lambda e=exc: label_var.set(f"❌ error"))
+                    win.after(0, lambda e=exc: _append_log(f"  error: {e}\n"))
+                finally:
+                    win.after(0, lambda: btn.configure(state=tk.NORMAL))
+            threading.Thread(target=_worker, daemon=True).start()
+
+        for i, (name, _pkg, check_cmd, update_cmd) in enumerate(DEPS):
+            row = ttk.Frame(rows_frame)
+            row.pack(fill=tk.X, pady=2)
+
+            ttk.Label(row, text=name, width=18, anchor=tk.W).pack(side=tk.LEFT)
+
+            status_var = tk.StringVar(value="—")
+            status_vars[name] = status_var
+            ttk.Label(row, textvariable=status_var, width=16, anchor=tk.W).pack(side=tk.LEFT, padx=(4, 8))
+
+            # Check version button
+            check_btn = ttk.Button(row, text="Check", width=7)
+            check_btn.pack(side=tk.LEFT, padx=(0, 4))
+            check_btn.configure(command=lambda c=check_cmd, sv=status_var, b=check_btn: _run_cmd(c, sv, b))
+
+            # Update button — disabled for system deps (ffmpeg)
+            if update_cmd:
+                upd_btn = ttk.Button(row, text="Update", width=7)
+                upd_btn.pack(side=tk.LEFT)
+                upd_btn.configure(command=lambda c=update_cmd, sv=status_var, b=upd_btn: _run_cmd(c, sv, b))
+            else:
+                ttk.Label(row, text="(system)", foreground="gray").pack(side=tk.LEFT)
+
+        # --- Update all button ---
+        def _update_all():
+            for name, _pkg, _check, update_cmd in DEPS:
+                if update_cmd:
+                    sv = status_vars[name]
+                    _run_cmd(update_cmd, sv, update_all_btn)
+        update_all_btn = ttk.Button(outer, text="⬆ Update All pip packages", command=_update_all)
+        update_all_btn.pack(anchor=tk.W, pady=(0, 8))
+
+        # --- Log area ---
+        log_frame = ttk.LabelFrame(outer, text="Output", padding=4)
+        log_frame.pack(fill=tk.BOTH, expand=True)
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
+
+        log_text = tk.Text(log_frame, height=10, wrap=tk.WORD, state=tk.DISABLED,
+                           font=("Consolas", 9))
+        log_text.grid(row=0, column=0, sticky="nsew")
+        log_scroll = ttk.Scrollbar(log_frame, command=log_text.yview)
+        log_scroll.grid(row=0, column=1, sticky="ns")
+        log_text.configure(yscrollcommand=log_scroll.set)
+
+        ttk.Button(outer, text="Close", command=win.destroy).pack(anchor=tk.E, pady=(6, 0))
+
     def _save_theme_to_env(self, theme):
         """
         Save theme preference to .env file.
@@ -600,64 +735,57 @@ class MainWindow:
         # Update display label
         self.font_size_var.set(f"{self.current_font_size}px")
 
+        fs = self.current_font_size
+
+        # --- Update ttk.Style so all labels, buttons, entries, checkboxes etc scale ---
+        style = ttk.Style()
+        style.configure("TLabel",        font=("Segoe UI", fs))
+        style.configure("TButton",       font=("Segoe UI", fs))
+        style.configure("TCheckbutton",  font=("Segoe UI", fs))
+        style.configure("TRadiobutton",  font=("Segoe UI", fs))
+        style.configure("TEntry",        font=("Segoe UI", fs))
+        style.configure("TCombobox",     font=("Segoe UI", fs))
+        style.configure("TLabelFrame.Label", font=("Segoe UI", fs))
+        style.configure("TNotebook.Tab", font=("Segoe UI", fs))
+
+        # Title label stays bold and slightly larger than the chosen size
+        if hasattr(self, "title_label"):
+            self.title_label.configure(font=("Segoe UI", max(fs + 2, 12), "bold"))
+
         # Apply to Summarizer tab
         if hasattr(self, "summarizer_tab"):
-            self.summarizer_tab.content_text.configure(
-                font=("Segoe UI", self.current_font_size)
-            )
-            self.summarizer_tab.response_text.configure(
-                font=("Segoe UI", self.current_font_size)
-            )
-            self.summarizer_tab.info_text.configure(
-                font=("Segoe UI", self.current_font_size - 1)
-            )
+            self.summarizer_tab.content_text.configure(font=("Segoe UI", fs))
+            self.summarizer_tab.response_text.configure(font=("Segoe UI", fs))
+            self.summarizer_tab.info_text.configure(font=("Segoe UI", max(fs - 1, 8)))
 
         # Apply to Transcriber tab
         if hasattr(self, "transcriber_tab"):
-            self.transcriber_tab.transcript_text.configure(
-                font=("Segoe UI", self.current_font_size)
-            )
+            self.transcriber_tab.transcript_text.configure(font=("Segoe UI", fs))
 
         # Apply to Bulk Summarizer tab
         if hasattr(self, "bulk_summarizer_tab"):
-            self.bulk_summarizer_tab.status_log.configure(
-                font=("Segoe UI", self.current_font_size)
-            )
+            self.bulk_summarizer_tab.status_log.configure(font=("Segoe UI", fs))
 
         # Apply to Bulk Transcriber tab
         if hasattr(self, "bulk_transcriber_tab"):
-            self.bulk_transcriber_tab.status_log.configure(
-                font=("Segoe UI", self.current_font_size)
-            )
+            self.bulk_transcriber_tab.status_log.configure(font=("Segoe UI", fs))
 
         # Apply to Translation tab
         if hasattr(self, "translation_tab"):
-            self.translation_tab.source_text.configure(
-                font=("Segoe UI", self.current_font_size)
-            )
-            self.translation_tab.target_text.configure(
-                font=("Segoe UI", self.current_font_size)
-            )
+            self.translation_tab.source_text.configure(font=("Segoe UI", fs))
+            self.translation_tab.target_text.configure(font=("Segoe UI", fs))
 
         # Apply to Downloader tab
         if hasattr(self, "downloader_tab"):
-            self.downloader_tab.status_log.configure(
-                font=("Segoe UI", self.current_font_size)
-            )
+            self.downloader_tab.status_log.configure(font=("Segoe UI", fs))
 
         # Apply to Video Subtitler tab
         if hasattr(self, "video_subtitler_tab"):
-            self.video_subtitler_tab.srt_text.configure(
-                font=("Segoe UI", self.current_font_size)
-            )
+            self.video_subtitler_tab.srt_text.configure(font=("Segoe UI", fs))
             if hasattr(self.video_subtitler_tab, "translated_srt_text"):
-                self.video_subtitler_tab.translated_srt_text.configure(
-                    font=("Segoe UI", self.current_font_size)
-                )
+                self.video_subtitler_tab.translated_srt_text.configure(font=("Segoe UI", fs))
 
-        logger.debug(
-            f"Applied font size {self.current_font_size}px to all text widgets"
-        )
+        logger.debug(f"Applied font size {fs}px to all widgets")
 
     # Status bar methods
 
