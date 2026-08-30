@@ -317,8 +317,16 @@ class TranscriberTab(BaseTab):
         scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.transcript_text.configure(yscrollcommand=scrollbar.set)
 
-        from views.fullscreen import attach_fullscreen_button
-        attach_fullscreen_button(text_frame, self.transcript_text, title="Transcript", editable=True)
+        # Right-click context menu (TTS + fullscreen)
+        self._register_context_menu(
+            self.transcript_text,
+            [
+                {"tts_read": lambda: self._selection_or_all(self.transcript_text)},
+                {"tts_stop": True},
+                {"separator": True},
+                {"fullscreen": True, "title": "Transcript", "editable": True},
+            ],
+        )
     
     def _setup_action_bar(self):
         """Setup action buttons"""

@@ -237,8 +237,16 @@ class VideoSubtitlerTab(BaseTab):
         # Enable burn button when SRT content is present
         self.srt_text.bind("<<Modified>>", self._on_srt_text_modified)
 
-        from views.fullscreen import attach_fullscreen_button
-        attach_fullscreen_button(srt_frame, self.srt_text, title="Transcription SRT", editable=True)
+        # Right-click context menu (TTS + fullscreen)
+        self._register_context_menu(
+            self.srt_text,
+            [
+                {"tts_read": lambda: self._selection_or_all(self.srt_text)},
+                {"tts_stop": True},
+                {"separator": True},
+                {"fullscreen": True, "title": "Transcription SRT", "editable": True},
+            ],
+        )
         
         # Button frame
         button_frame = ttk.Frame(srt_frame)
@@ -288,8 +296,16 @@ class VideoSubtitlerTab(BaseTab):
         # Enable burn button when translated SRT content is present
         self.translated_srt_text.bind("<<Modified>>", self._on_translated_srt_text_modified)
 
-        from views.fullscreen import attach_fullscreen_button
-        attach_fullscreen_button(translation_frame, self.translated_srt_text, title="Translated SRT", editable=True)
+        # Right-click context menu (TTS + fullscreen)
+        self._register_context_menu(
+            self.translated_srt_text,
+            [
+                {"tts_read": lambda: self._selection_or_all(self.translated_srt_text)},
+                {"tts_stop": True},
+                {"separator": True},
+                {"fullscreen": True, "title": "Translated SRT", "editable": True},
+            ],
+        )
         
         # Save translated SRT button
         ttk.Button(

@@ -73,6 +73,26 @@ class AppContextMenu:
             "command": tts_engine_pyttsx3.stop
         })
 
+    def add_fullscreen_command(self, title="Fullscreen", editable=False, label="⛶ Fullscreen"):
+        """
+        Add a 'Fullscreen' command that opens this widget's content in a
+        maximized, selectable window.
+
+        Args:
+            title: Title for the fullscreen window
+            editable: If True, edits sync back to this widget on close
+            label: Menu item label
+        """
+        def open_full():
+            from views.fullscreen import open_fullscreen
+            open_fullscreen(self.widget, title=title, editable=editable)
+
+        self._items.append({
+            "type": "command",
+            "label": label,
+            "command": open_full
+        })
+
     def bind(self):
         """Build the menu and bind it to the widget's right-click event."""
         self._build_menu()

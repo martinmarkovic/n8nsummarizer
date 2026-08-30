@@ -85,6 +85,15 @@ def open_fullscreen(source_widget, title="Fullscreen", editable=False, font=None
     content = source_widget.get("1.0", tk.END)
     text.insert("1.0", content)
 
+    # Inherit the source widget's colors so the fullscreen view matches the theme
+    try:
+        bg = source_widget.cget("bg")
+        fg = source_widget.cget("fg")
+        text.configure(bg=bg, fg=fg, insertbackground=fg)
+        container.configure(style="TFrame")
+    except tk.TclError:
+        pass
+
     if not editable:
         _make_readonly_selectable(text)
 

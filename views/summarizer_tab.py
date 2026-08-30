@@ -670,14 +670,9 @@ class SummarizerTab(BaseTab):
         content_menu = AppContextMenu(self.content_text)
         content_menu.add_tts_read_command(lambda: self._selection_or_all(self.content_text))
         content_menu.add_tts_stop_command()
+        content_menu.add_separator()
+        content_menu.add_fullscreen_command(title="Content Preview & Edit", editable=True)
         content_menu.bind()
-
-        # Fullscreen expand button (editable content syncs back on close)
-        from views.fullscreen import attach_fullscreen_button
-        attach_fullscreen_button(
-            content_preview_frame, self.content_text,
-            title="Content Preview & Edit", editable=True
-        )
         
         # Response display (right)
         response_frame = ttk.LabelFrame(
@@ -697,25 +692,17 @@ class SummarizerTab(BaseTab):
         # Read-only, but still selectable so TTS can read from a selection
         self._make_readonly_selectable(self.response_text)
         
-        # Add context menu to response text
-        self._register_context_menu(self.response_text, [
-            {"label": "Copy All", "command": self._copy_all_response},
-            {"label": "Clear", "command": self._clear_response}
-        ])
-        
-        # Add TTS commands to response text context menu (reads selection if any)
+        # Single consolidated context menu for the response: copy/clear + TTS + fullscreen
         from views.context_menu import AppContextMenu
         menu = AppContextMenu(self.response_text)
+        menu.add_command("Copy All", self._copy_all_response)
+        menu.add_command("Clear", self._clear_response)
+        menu.add_separator()
         menu.add_tts_read_command(lambda: self._selection_or_all(self.response_text))
         menu.add_tts_stop_command()
+        menu.add_separator()
+        menu.add_fullscreen_command(title="Response", editable=False)
         menu.bind()
-
-        # Fullscreen expand button (read-only view for reading the summary)
-        from views.fullscreen import attach_fullscreen_button
-        attach_fullscreen_button(
-            response_frame, self.response_text,
-            title="Response", editable=False
-        )
         
         # Initial response content
         self._set_readonly_text(self.response_text,

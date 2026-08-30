@@ -453,6 +453,29 @@ class MainWindow:
         )
         style.map("TNotebook.Tab", background=[("selected", colors["bg_primary"])])
 
+        # Combobox (readonly dropdowns) — otherwise they stay light in dark mode
+        style.configure(
+            "TCombobox",
+            fieldbackground=colors["bg_secondary"],
+            background=colors["button_bg"],
+            foreground=colors["text_primary"],
+            arrowcolor=colors["text_primary"],
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", colors["bg_secondary"])],
+            foreground=[("readonly", colors["text_primary"])],
+        )
+        # Dropdown list colors (the popdown listbox is a separate Tk option)
+        self.root.option_add("*TCombobox*Listbox.background", colors["bg_secondary"])
+        self.root.option_add("*TCombobox*Listbox.foreground", colors["text_primary"])
+        self.root.option_add("*TCombobox*Listbox.selectBackground", colors["button_hover"])
+        self.root.option_add("*TCombobox*Listbox.selectForeground", colors["text_primary"])
+
+        # Spinbox / Scale share the frame background
+        style.configure("TSpinbox", fieldbackground=colors["bg_secondary"], foreground=colors["text_primary"])
+        style.configure("Horizontal.TScale", background=colors["bg_primary"])
+
         # Apply to root
         self.root.configure(bg=colors["bg_primary"])
 
@@ -516,11 +539,33 @@ class MainWindow:
                 # FFmpeg status label uses the same colors as other status labels
                 pass  # The label automatically inherits from theme configuration
 
+        # Catch-all: recolor every tk.Text / ScrolledText widget across all tabs.
+        # This covers any widget not explicitly listed above (e.g. the prompt editor).
+        if hasattr(self, "notebook"):
+            self._recolor_text_widgets(self.notebook, text_bg, text_fg)
+
         # Title label
         if hasattr(self, "title_label"):
             self.title_label.configure(foreground=colors["text_primary"])
 
         logger.info(f"Applied {self.current_theme} theme")
+
+    def _recolor_text_widgets(self, parent, bg, fg):
+        """
+        Recursively recolor every tk.Text / ScrolledText widget under `parent`.
+
+        ttk widgets are styled via ttk.Style, but classic tk.Text widgets need
+        their bg/fg set explicitly or they stay light ("cream") in dark mode.
+        """
+        for child in parent.winfo_children():
+            try:
+                if isinstance(child, tk.Text):  # ScrolledText subclasses tk.Text
+                    child.configure(bg=bg, fg=fg, insertbackground=fg)
+            except tk.TclError:
+                pass
+            # Recurse into containers
+            if child.winfo_children():
+                self._recolor_text_widgets(child, bg, fg)
 
     def _toggle_theme(self):
         """

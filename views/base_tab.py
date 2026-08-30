@@ -180,6 +180,15 @@ class BaseTab(ttk.Frame, ABC):
         for item in items:
             if "separator" in item:
                 menu.add_separator()
+            elif item.get("tts_read"):
+                menu.add_tts_read_command(item["tts_read"])
+            elif item.get("tts_stop"):
+                menu.add_tts_stop_command()
+            elif item.get("fullscreen"):
+                menu.add_fullscreen_command(
+                    title=item.get("title", "Fullscreen"),
+                    editable=item.get("editable", False),
+                )
             else:
                 menu.add_command(item["label"], item["command"])
 
@@ -187,6 +196,20 @@ class BaseTab(ttk.Frame, ABC):
         menu.bind()
 
         return menu
+
+    def _selection_or_all(self, widget) -> str:
+        """
+        Return the current text selection in `widget`, or its full text if
+        nothing is selected. Used by TTS "Read in Voice".
+        """
+        try:
+            if widget.tag_ranges("sel"):
+                selected = widget.get("sel.first", "sel.last")
+                if selected and selected.strip():
+                    return selected
+        except tk.TclError:
+            pass
+        return widget.get("1.0", tk.END)
 
     def get_forwarded_text(self) -> str:
         """

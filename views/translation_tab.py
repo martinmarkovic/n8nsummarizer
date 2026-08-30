@@ -129,8 +129,16 @@ class TranslationTab(BaseTab):
         source_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.source_text.configure(yscrollcommand=source_scroll.set)
 
-        from views.fullscreen import attach_fullscreen_button
-        attach_fullscreen_button(source_frame, self.source_text, title="Source", editable=True)
+        # Right-click context menu for the source text (TTS + fullscreen)
+        self._register_context_menu(
+            self.source_text,
+            [
+                {"tts_read": lambda: self._selection_or_all(self.source_text)},
+                {"tts_stop": True},
+                {"separator": True},
+                {"fullscreen": True, "title": "Source", "editable": True},
+            ],
+        )
 
         # Setup right pane (Translation text)
         target_frame = ttk.LabelFrame(self.panes.right_pane, text="Translation")
@@ -144,9 +152,6 @@ class TranslationTab(BaseTab):
         target_scroll = ttk.Scrollbar(target_frame, command=self.target_text.yview)
         target_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.target_text.configure(yscrollcommand=target_scroll.set)
-
-        from views.fullscreen import attach_fullscreen_button
-        attach_fullscreen_button(target_frame, self.target_text, title="Translation", editable=True)
 
         # Trigger automatic model discovery after UI is set up
         self.after(100, self._discover_models)
@@ -162,6 +167,11 @@ class TranslationTab(BaseTab):
                     "label": "Forward to Summarization",
                     "command": self._forward_to_summarization,
                 },
+                {"separator": True},
+                {"tts_read": lambda: self._selection_or_all(self.target_text)},
+                {"tts_stop": True},
+                {"separator": True},
+                {"fullscreen": True, "title": "Translation", "editable": True},
             ],
         )
 

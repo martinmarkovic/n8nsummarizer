@@ -1,21 +1,21 @@
 # Workflow State
 
 ## Current Task
-Commit and push current feature work on new branch `v13.5.4` (branched from `v13.5.3`, which was branched from `v13.5.2`).
+Second commit on `v13.5.4` (follow-up to `4ea026e`): move fullscreen/TTS into the
+right-click context menu across tabs and improve dark-theme recoloring.
 
 ## Changes Included (staged for commit on v13.5.4)
-- `views/fullscreen.py` (new): reusable fullscreen (zoomed) Text viewer with a
-  small ⛶ overlay button; optional editable mode writes back to source on close;
-  carries TTS read/stop context menu (reads selection if present).
-- `views/summarizer_tab.py`: add visible 🗑 delete button for custom presets
-  (enabled only when a custom preset is selected); response text is read-only but
-  selectable (`_make_readonly_selectable`, `_set_readonly_text`) so TTS can read
-  a selection; fullscreen expand on content + response.
+- `views/base_tab.py`: `_register_context_menu` now supports `tts_read`, `tts_stop`,
+  `separator`, and `fullscreen` item descriptors; add shared `_selection_or_all`.
+- `views/context_menu.py`: add `add_fullscreen_command(...)` helper.
+- `views/summarizer_tab.py`: replace ⛶ overlay buttons with consolidated right-click
+  context menus (Copy/Clear + TTS + Fullscreen) for content and response.
 - `views/transcriber_tab.py`, `views/translation_tab.py`, `views/video_subtitler_tab.py`:
-  attach fullscreen expand buttons to transcript/source/target/SRT text areas.
-- `utils/tts_engine_pyttsx3.py`: store active engine in module-level ref and call
-  `engine.stop()` from `stop()` for immediate interruption; fix `get_available_voices`
-  to use a fresh engine instead of reading the stale module `_engine`.
+  swap overlay ⛶ buttons for right-click TTS + Fullscreen menu items.
+- `views/main_window.py`: dark/light theme now recolors `TCombobox`, `TSpinbox`,
+  `Horizontal.TScale`, combobox dropdown list, and every tk.Text/ScrolledText widget
+  recursively (`_recolor_text_widgets`).
+- `views/fullscreen.py`: inherit the source widget's bg/fg colors.
 
 ## Source of Truth Notes
 - `main` is the long-lived branch; feature branches are version-tagged branches
@@ -27,5 +27,5 @@ Commit and push current feature work on new branch `v13.5.4` (branched from `v13
 - None.
 
 ## Next Steps
-- Commit staged feature changes.
-- Push to new upstream `origin/v13.5.4`.
+- Commit staged follow-up changes.
+- Push to existing upstream `origin/v13.5.4`.
