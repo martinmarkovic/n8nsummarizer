@@ -34,7 +34,10 @@ class TranslationService:
         self.timeout = timeout
         self.retry_count = 0
         self.max_retries = 3
-        self.llm_client = LLMClient(webhook_url=webhook_url)  # Pass webhook_url to LLMClient
+        # Pass the translation timeout through to the LLM client. Without this the
+        # client falls back to the global LLM_TIMEOUT (120s), which is too short for
+        # long local-model SRT batches and causes mid-generation disconnects.
+        self.llm_client = LLMClient(webhook_url=webhook_url, timeout=timeout)
         self._progress_callback = progress_callback  # Store progress callback
         
         logger.info(f"TranslationService initialized with webhook: {self.webhook_url}")

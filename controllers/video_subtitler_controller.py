@@ -39,6 +39,7 @@ class VideoSubtitlerController:
         self.srt_path = None
         self.translated_srt_path = None
         self.output_video_path = None
+        self.input_video_path = None  # Exact video just processed/downloaded (source of truth for burn)
         self._output_dir = None
         self._original_video_title = None
         
@@ -276,6 +277,10 @@ class VideoSubtitlerController:
     def _run_transcription(self, video_path):
         """Run transcription on prepared video file."""
         try:
+            # Remember the exact video we're working on so the burn step uses THIS
+            # file, not whatever happens to match "video.*" in the temp folder.
+            self.input_video_path = Path(video_path)
+
             self.tab.after(0, lambda: self.tab.update_status("🎙 Transcribing..."))
 
             # Ensure output directory exists and is clean
@@ -412,15 +417,24 @@ class VideoSubtitlerController:
                 self.tab.after(0, lambda e=write_err: self.tab.show_error(f"Could not write subtitle file: {e}"))
                 return
             
-            # Find input video file (only video extensions, exclude SRT files)
+            # Resolve the input video. Prefer the exact file we just processed/downloaded
+            # so we never burn onto a stale leftover from a previous session.
             VIDEO_EXTENSIONS = {".mp4", ".webm", ".mkv", ".avi", ".mov"}
-            input_video = next(
-                (f for f in TEMP_DIR.iterdir()
-                 if f.is_file() and f.stem == "video" and f.suffix.lower() in VIDEO_EXTENSIONS),
-                None
-            )
+            input_video = None
+            if self.input_video_path and Path(self.input_video_path).is_file():
+                input_video = Path(self.input_video_path)
+            else:
+                # Fallback: scan temp folder for a video.* file (deterministic order)
+                candidates = sorted(
+                    f for f in TEMP_DIR.iterdir()
+                    if f.is_file() and f.stem == "video" and f.suffix.lower() in VIDEO_EXTENSIONS
+                )
+                input_video = candidates[0] if candidates else None
+
             if not input_video:
-                self.tab.after(0, lambda: self.tab.show_error("No video file found in temp folder"))
+                self.tab.after(0, lambda: self.tab.show_error(
+                    "No video file found. Please process or download a video before burning."
+                ))
                 return
             
             # Set output path

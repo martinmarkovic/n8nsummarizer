@@ -51,6 +51,7 @@ from config import (
 from utils.logger import logger
 from utils.settings_manager import SettingsManager
 from utils.prompt_manager import PromptManager
+from utils.version import get_titled_version
 from views.summarizer_tab import SummarizerTab  # NEW v9.3
 from views.transcriber_tab import TranscriberTab
 from views.bulk_summarizer_tab import BulkSummarizerTab
@@ -101,7 +102,9 @@ class MainWindow:
             settings_manager: SettingsManager instance for persistent preferences
         """
         self.root = root
-        self.root.title(f"{APP_TITLE}")
+        # App title with version derived from the current git branch, e.g. "Media SwissKnife (v13.5.2)"
+        self.app_title_display = get_titled_version(APP_TITLE)
+        self.root.title(self.app_title_display)
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
 
@@ -281,7 +284,7 @@ class MainWindow:
         header_frame.columnconfigure(0, weight=1)
 
         self.title_label = ttk.Label(
-            header_frame, text=f"{APP_TITLE}", font=("Segoe UI", 14, "bold")
+            header_frame, text=self.app_title_display, font=("Segoe UI", 14, "bold")
         )
         self.title_label.grid(row=0, column=0, sticky=tk.W)
 
@@ -549,25 +552,30 @@ class MainWindow:
         and individual Update buttons. Output from each command streams into
         a shared log area at the bottom of the window.
         """
+        import importlib.metadata as _md
+        import re as _re
+
         # Prevent opening multiple instances
         if hasattr(self, "_deps_window") and self._deps_window and self._deps_window.winfo_exists():
             self._deps_window.lift()
             return
 
+        # (display_name, pip_package)  — pip_package None means a system dependency
         DEPS = [
-            # (display_name, pip_package,         check_cmd,                      update_cmd)
-            ("yt-dlp",         "yt-dlp",           ["yt-dlp",    "--version"],     ["pip", "install", "--upgrade", "yt-dlp"]),
-            ("openai-whisper", "openai-whisper",   ["pip",       "show", "openai-whisper"], ["pip", "install", "--upgrade", "openai-whisper"]),
-            ("requests",       "requests",         ["pip",       "show", "requests"],       ["pip", "install", "--upgrade", "requests"]),
-            ("python-docx",    "python-docx",      ["pip",       "show", "python-docx"],    ["pip", "install", "--upgrade", "python-docx"]),
-            ("python-dotenv",  "python-dotenv",    ["pip",       "show", "python-dotenv"],  ["pip", "install", "--upgrade", "python-dotenv"]),
-            ("openai",         "openai",           ["pip",       "show", "openai"],         ["pip", "install", "--upgrade", "openai"]),
-            ("ffmpeg",         None,               ["ffmpeg",    "-version"],               None),  # system dep, no pip update
+            ("yt-dlp",         "yt-dlp"),
+            ("openai-whisper", "openai-whisper"),
+            ("requests",       "requests"),
+            ("python-docx",    "python-docx"),
+            ("python-dotenv",  "python-dotenv"),
+            ("openai",         "openai"),
+            ("ffmpeg",         None),  # system dep, no pip management
         ]
+
+        _NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
         win = tk.Toplevel(self.root)
         win.title("⚙ Dependencies Manager")
-        win.geometry("640x520")
+        win.geometry("680x560")
         win.resizable(True, True)
         win.grab_set()
         self._deps_window = win
@@ -578,11 +586,11 @@ class MainWindow:
         ttk.Label(outer, text="Dependencies Manager", font=("Segoe UI", 12, "bold")).pack(anchor=tk.W, pady=(0, 8))
 
         # --- Dependency rows ---
-        rows_frame = ttk.LabelFrame(outer, text="Packages", padding=8)
+        rows_frame = ttk.LabelFrame(outer, text="Installed versions", padding=8)
         rows_frame.pack(fill=tk.X, pady=(0, 8))
 
-        # Store per-row status vars so we can update them
-        status_vars = {}
+        # Store per-row version display vars so we can update them
+        version_vars = {}
 
         def _append_log(text):
             log_text.configure(state=tk.NORMAL)
@@ -590,66 +598,147 @@ class MainWindow:
             log_text.see(tk.END)
             log_text.configure(state=tk.DISABLED)
 
-        def _run_cmd(cmd, label_var, btn):
-            """Run a command in a background thread and stream output to the log."""
+        # --- version helpers (run off the UI thread) ---
+        def _installed_version(pkg):
+            """Return the currently installed version string, or a status word."""
+            if pkg is None:  # ffmpeg / system dependency
+                try:
+                    out = subprocess.run(
+                        ["ffmpeg", "-version"], capture_output=True, text=True,
+                        timeout=10, creationflags=_NO_WINDOW,
+                    )
+                    if out.returncode == 0:
+                        m = _re.search(r"ffmpeg version (\S+)", out.stdout)
+                        return m.group(1) if m else "installed"
+                    return "not found"
+                except FileNotFoundError:
+                    return "not found"
+                except Exception:
+                    return "unknown"
+            try:
+                return _md.version(pkg)
+            except Exception:
+                return "not installed"
+
+        def _available_versions(pkg):
+            """Return list of available versions from PyPI (newest first), or []."""
+            try:
+                out = subprocess.run(
+                    ["pip", "index", "versions", pkg], capture_output=True, text=True,
+                    timeout=60, creationflags=_NO_WINDOW,
+                )
+                text = (out.stdout or "") + (out.stderr or "")
+                m = _re.search(r"Available versions:\s*(.+)", text)
+                if not m:
+                    return []
+                return [v.strip() for v in m.group(1).split(",") if v.strip()]
+            except Exception:
+                return []
+
+        def _previous_version(pkg, current):
+            """Find the highest available version strictly below `current`."""
+            versions = _available_versions(pkg)
+            if not versions:
+                return None
+            try:
+                from packaging.version import parse as _vparse
+                cur = _vparse(current)
+                lowers = [v for v in versions if _vparse(v) < cur]
+                return max(lowers, key=_vparse) if lowers else None
+            except Exception:
+                # Fallback: pip lists newest-first, so the entry after current is previous
+                if current in versions:
+                    idx = versions.index(current)
+                    return versions[idx + 1] if idx + 1 < len(versions) else None
+                return versions[1] if len(versions) > 1 else None
+
+        def _refresh_version(pkg, name):
+            """Refresh the displayed installed version for a single row."""
             def _worker():
-                win.after(0, lambda: label_var.set("⏳ running…"))
-                win.after(0, lambda: btn.configure(state=tk.DISABLED))
+                ver = _installed_version(pkg)
+                win.after(0, lambda: version_vars[name].set(ver))
+            threading.Thread(target=_worker, daemon=True).start()
+
+        def _run_cmd(cmd, name, pkg, btns, refresh=True):
+            """Run a command in a background thread, stream output, then refresh version."""
+            def _worker():
+                for b in btns:
+                    win.after(0, lambda b=b: b.configure(state=tk.DISABLED))
                 win.after(0, lambda: _append_log(f"\n▶ {' '.join(cmd)}\n"))
                 try:
                     proc = subprocess.Popen(
-                        cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        text=True, creationflags=_NO_WINDOW,
                     )
                     for line in proc.stdout:
                         win.after(0, lambda l=line: _append_log(l))
                     proc.wait()
                     if proc.returncode == 0:
-                        win.after(0, lambda: label_var.set("✅ done"))
+                        win.after(0, lambda: _append_log("  [OK] done\n"))
                     else:
-                        win.after(0, lambda: label_var.set(f"❌ exit {proc.returncode}"))
+                        win.after(0, lambda: _append_log(f"  [FAILED] exit code {proc.returncode}\n"))
                 except FileNotFoundError:
-                    win.after(0, lambda: label_var.set("❌ not found"))
                     win.after(0, lambda: _append_log(f"  command not found: {cmd[0]}\n"))
                 except Exception as exc:
-                    win.after(0, lambda e=exc: label_var.set(f"❌ error"))
                     win.after(0, lambda e=exc: _append_log(f"  error: {e}\n"))
                 finally:
-                    win.after(0, lambda: btn.configure(state=tk.NORMAL))
+                    for b in btns:
+                        win.after(0, lambda b=b: b.configure(state=tk.NORMAL))
+                    if refresh:
+                        _refresh_version(pkg, name)
             threading.Thread(target=_worker, daemon=True).start()
 
-        for i, (name, _pkg, check_cmd, update_cmd) in enumerate(DEPS):
+        def _downgrade(name, pkg, btns):
+            """Find and install the version just below the currently installed one."""
+            def _worker():
+                for b in btns:
+                    win.after(0, lambda b=b: b.configure(state=tk.DISABLED))
+                cur = _installed_version(pkg)
+                win.after(0, lambda: _append_log(
+                    f"\n▶ Finding previous version of {pkg} (current: {cur})…\n"))
+                prev = _previous_version(pkg, cur)
+                if not prev:
+                    win.after(0, lambda: _append_log(
+                        f"  Could not determine a previous version for {pkg}.\n"))
+                    for b in btns:
+                        win.after(0, lambda b=b: b.configure(state=tk.NORMAL))
+                    return
+                win.after(0, lambda: _append_log(f"  Downgrading {pkg} → {prev}\n"))
+                # Re-enable buttons; _run_cmd manages its own disable/enable + refresh
+                for b in btns:
+                    win.after(0, lambda b=b: b.configure(state=tk.NORMAL))
+                win.after(0, lambda: _run_cmd(
+                    ["pip", "install", f"{pkg}=={prev}"], name, pkg, btns))
+            threading.Thread(target=_worker, daemon=True).start()
+
+        for name, pkg in DEPS:
             row = ttk.Frame(rows_frame)
             row.pack(fill=tk.X, pady=2)
 
             ttk.Label(row, text=name, width=18, anchor=tk.W).pack(side=tk.LEFT)
 
-            status_var = tk.StringVar(value="—")
-            status_vars[name] = status_var
-            ttk.Label(row, textvariable=status_var, width=16, anchor=tk.W).pack(side=tk.LEFT, padx=(4, 8))
+            version_var = tk.StringVar(value="checking…")
+            version_vars[name] = version_var
+            ttk.Label(row, textvariable=version_var, width=18, anchor=tk.W).pack(side=tk.LEFT, padx=(4, 8))
 
-            # Check version button
-            check_btn = ttk.Button(row, text="Check", width=7)
-            check_btn.pack(side=tk.LEFT, padx=(0, 4))
-            check_btn.configure(command=lambda c=check_cmd, sv=status_var, b=check_btn: _run_cmd(c, sv, b))
-
-            # Update button — disabled for system deps (ffmpeg)
-            if update_cmd:
-                upd_btn = ttk.Button(row, text="Update", width=7)
-                upd_btn.pack(side=tk.LEFT)
-                upd_btn.configure(command=lambda c=update_cmd, sv=status_var, b=upd_btn: _run_cmd(c, sv, b))
+            row_btns = []
+            if pkg:
+                upd_btn = ttk.Button(row, text="Update", width=8)
+                dng_btn = ttk.Button(row, text="Downgrade", width=10)
+                row_btns = [upd_btn, dng_btn]
+                upd_btn.configure(command=lambda n=name, p=pkg, bs=row_btns: _run_cmd(
+                    ["pip", "install", "--upgrade", p], n, p, bs))
+                dng_btn.configure(command=lambda n=name, p=pkg, bs=row_btns: _downgrade(n, p, bs))
+                upd_btn.pack(side=tk.LEFT, padx=(0, 4))
+                dng_btn.pack(side=tk.LEFT)
             else:
                 ttk.Label(row, text="(system)", foreground="gray").pack(side=tk.LEFT)
 
         # --- Update all button ---
         def _update_all():
-            for name, _pkg, _check, update_cmd in DEPS:
-                if update_cmd:
-                    sv = status_vars[name]
-                    _run_cmd(update_cmd, sv, update_all_btn)
+            for name, pkg in DEPS:
+                if pkg:
+                    _run_cmd(["pip", "install", "--upgrade", pkg], name, pkg, [update_all_btn])
         update_all_btn = ttk.Button(outer, text="⬆ Update All pip packages", command=_update_all)
         update_all_btn.pack(anchor=tk.W, pady=(0, 8))
 
@@ -667,6 +756,10 @@ class MainWindow:
         log_text.configure(yscrollcommand=log_scroll.set)
 
         ttk.Button(outer, text="Close", command=win.destroy).pack(anchor=tk.E, pady=(6, 0))
+
+        # Populate the current installed version for every row on open
+        for _name, _pkg in DEPS:
+            _refresh_version(_pkg, _name)
 
     def _save_theme_to_env(self, theme):
         """
