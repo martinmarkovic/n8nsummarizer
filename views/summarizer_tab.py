@@ -320,6 +320,14 @@ class SummarizerTab(BaseTab):
         self.prompt_combo.bind("<<ComboboxSelected>>", self._on_preset_changed)
         self.prompt_combo.bind("<Button-3>", self._on_preset_combo_rightclick)
         self._last_valid_preset = DEFAULT_PROMPT_KEY
+
+        # Visible delete button for custom presets (enabled only when a custom preset is selected)
+        self.delete_preset_btn = ttk.Button(
+            settings_frame, text="🗑", width=3, command=self._delete_custom_prompt
+        )
+        self.delete_preset_btn.grid(row=row, column=2, sticky="w", padx=(0, 5))
+        # Keep its enabled/disabled state in sync with the current selection
+        self.prompt_combo.bind("<<ComboboxSelected>>", self._update_delete_btn_state, add="+")
         
         # Prompt text area
         row += 1
@@ -340,6 +348,7 @@ class SummarizerTab(BaseTab):
         self.prompt_combo.config(values=names)
         self.prompt_preset_var.set(default_key)
         self.prompt_text.insert("1.0", default_prompt)
+        self._update_delete_btn_state()
 
     def _on_provider_changed(self):
         """Handle provider selection changes."""
@@ -461,6 +470,7 @@ class SummarizerTab(BaseTab):
             self._last_valid_preset = fallback
             self.prompt_text.delete("1.0", tk.END)
             self.prompt_text.insert("1.0", self.prompt_manager.get_prompt(fallback))
+        self._update_delete_btn_state()
         
 
 
@@ -473,6 +483,47 @@ class SummarizerTab(BaseTab):
         """
         from utils import tts_engine_pyttsx3
         tts_engine_pyttsx3.speak(text)
+
+    def _selection_or_all(self, widget):
+        """Return the current selection in `widget`, or its full text if nothing is selected."""
+        try:
+            if widget.tag_ranges("sel"):
+                selected = widget.get("sel.first", "sel.last")
+                if selected and selected.strip():
+                    return selected
+        except tk.TclError:
+            pass
+        return widget.get("1.0", tk.END)
+
+    def _make_readonly_selectable(self, widget):
+        """
+        Make a Text widget read-only while still allowing selection and copy.
+
+        A widget with state="disabled" cannot be selected with the mouse, which
+        would break selection-based TTS. Instead we keep it enabled and block
+        edit keystrokes, allowing navigation, selection, and copy/select-all.
+        """
+        def _block_edit(event):
+            # Allow Ctrl/Command shortcuts (copy, select-all, etc.)
+            if event.state & 0x4:  # Control held
+                return
+            # Allow navigation keys
+            if event.keysym in (
+                "Left", "Right", "Up", "Down", "Home", "End",
+                "Prior", "Next", "Shift_L", "Shift_R", "Control_L", "Control_R",
+            ):
+                return
+            return "break"  # Block everything else (typing/deleting)
+
+        widget.bind("<Key>", _block_edit)
+        # Block paste and cut explicitly
+        widget.bind("<<Paste>>", lambda e: "break")
+        widget.bind("<<Cut>>", lambda e: "break")
+
+    def _set_readonly_text(self, widget, text):
+        """Replace the content of a read-only-selectable Text widget."""
+        widget.delete("1.0", tk.END)
+        widget.insert("1.0", text)
 
     def _on_prompt_text_rightclick(self, event):
         """Handle right-click on prompt textbox"""
@@ -537,13 +588,29 @@ class SummarizerTab(BaseTab):
         if not self.prompt_manager:
             return
         name = self.prompt_preset_var.get()
+        # Guard: only custom presets are deletable
+        if not self.prompt_manager.is_custom(name):
+            messagebox.showinfo(
+                "Cannot delete",
+                "Only custom presets (below the separator line) can be deleted."
+            )
+            return
         if not messagebox.askyesno("Delete prompt", f"Delete custom prompt '{name}'?\nThis cannot be undone."):
             return
         try:
             self.prompt_manager.delete_custom(name)
             self._reload_presets()
+            self._update_delete_btn_state()
         except (ValueError, KeyError) as e:
             messagebox.showerror("Error", str(e))
+
+    def _update_delete_btn_state(self, event=None):
+        """Enable the delete button only when a deletable custom preset is selected."""
+        if not hasattr(self, "delete_preset_btn"):
+            return
+        name = self.prompt_preset_var.get()
+        is_custom = bool(self.prompt_manager and self.prompt_manager.is_custom(name))
+        self.delete_preset_btn.config(state="normal" if is_custom else "disabled")
     
     def _setup_file_info_section(self):
         """Setup file information display section."""
@@ -601,9 +668,16 @@ class SummarizerTab(BaseTab):
         # Add TTS context menu to content preview text
         from views.context_menu import AppContextMenu
         content_menu = AppContextMenu(self.content_text)
-        content_menu.add_tts_read_command(lambda: self.content_text.get("1.0", tk.END))
+        content_menu.add_tts_read_command(lambda: self._selection_or_all(self.content_text))
         content_menu.add_tts_stop_command()
         content_menu.bind()
+
+        # Fullscreen expand button (editable content syncs back on close)
+        from views.fullscreen import attach_fullscreen_button
+        attach_fullscreen_button(
+            content_preview_frame, self.content_text,
+            title="Content Preview & Edit", editable=True
+        )
         
         # Response display (right)
         response_frame = ttk.LabelFrame(
@@ -617,10 +691,11 @@ class SummarizerTab(BaseTab):
             response_frame,
             height=20,
             wrap=tk.WORD,
-            font=("Courier", 10),
-            state="disabled"
+            font=("Courier", 10)
         )
         self.response_text.pack(fill="both", expand=True)
+        # Read-only, but still selectable so TTS can read from a selection
+        self._make_readonly_selectable(self.response_text)
         
         # Add context menu to response text
         self._register_context_menu(self.response_text, [
@@ -628,19 +703,24 @@ class SummarizerTab(BaseTab):
             {"label": "Clear", "command": self._clear_response}
         ])
         
-        # Add TTS commands to response text context menu
+        # Add TTS commands to response text context menu (reads selection if any)
         from views.context_menu import AppContextMenu
         menu = AppContextMenu(self.response_text)
-        menu.add_tts_read_command(lambda: self.response_text.get("1.0", tk.END))
+        menu.add_tts_read_command(lambda: self._selection_or_all(self.response_text))
         menu.add_tts_stop_command()
         menu.bind()
+
+        # Fullscreen expand button (read-only view for reading the summary)
+        from views.fullscreen import attach_fullscreen_button
+        attach_fullscreen_button(
+            response_frame, self.response_text,
+            title="Response", editable=False
+        )
         
         # Initial response content
-        self.response_text.config(state="normal")
-        self.response_text.insert("1.0", 
+        self._set_readonly_text(self.response_text,
             "Select a file or enter a YouTube URL and click Summarize to get started…"
         )
-        self.response_text.config(state="disabled")
     
     def _setup_action_bar(self):
         """Setup action bar with buttons and export controls."""
@@ -732,10 +812,7 @@ class SummarizerTab(BaseTab):
     
     def _clear_response(self):
         """Clear response text."""
-        self.response_text.config(state="normal")
-        self.response_text.delete("1.0", tk.END)
-        self.response_text.insert("1.0", "Response cleared")
-        self.response_text.config(state="disabled")
+        self._set_readonly_text(self.response_text, "Response cleared")
         self.set_status("Response cleared")
     
     # Button handlers
@@ -946,10 +1023,7 @@ class SummarizerTab(BaseTab):
     
     def display_response(self, text: str):
         """Display response text."""
-        self.response_text.config(state="normal")
-        self.response_text.delete("1.0", tk.END)
-        self.response_text.insert("1.0", text)
-        self.response_text.config(state="disabled")
+        self._set_readonly_text(self.response_text, text)
     
     def show_loading(self, show: bool):
         """Show or hide loading indicator."""
@@ -989,11 +1063,8 @@ class SummarizerTab(BaseTab):
         self.info_text.config(state="disabled")
         
         # Reset response
-        self.response_text.config(state="normal")
-        self.response_text.delete("1.0", tk.END)
-        self.response_text.insert("1.0", 
+        self._set_readonly_text(self.response_text,
             "Select a file or enter a YouTube URL and click Summarize to get started…")
-        self.response_text.config(state="disabled")
         
         # Reset export buttons
         self.set_export_buttons_enabled(False)

@@ -129,6 +129,9 @@ class TranslationTab(BaseTab):
         source_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.source_text.configure(yscrollcommand=source_scroll.set)
 
+        from views.fullscreen import attach_fullscreen_button
+        attach_fullscreen_button(source_frame, self.source_text, title="Source", editable=True)
+
         # Setup right pane (Translation text)
         target_frame = ttk.LabelFrame(self.panes.right_pane, text="Translation")
         target_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
@@ -141,6 +144,9 @@ class TranslationTab(BaseTab):
         target_scroll = ttk.Scrollbar(target_frame, command=self.target_text.yview)
         target_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.target_text.configure(yscrollcommand=target_scroll.set)
+
+        from views.fullscreen import attach_fullscreen_button
+        attach_fullscreen_button(target_frame, self.target_text, title="Translation", editable=True)
 
         # Trigger automatic model discovery after UI is set up
         self.after(100, self._discover_models)
