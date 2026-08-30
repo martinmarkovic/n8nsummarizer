@@ -1,21 +1,19 @@
 # Workflow State
 
 ## Current Task
-Second commit on `v13.5.4` (follow-up to `4ea026e`): move fullscreen/TTS into the
-right-click context menu across tabs and improve dark-theme recoloring.
+First commit on `v13.5.5` (branched from `v13.5.4`): add subtitle style options to
+the Video Subtitler burn flow with persisted prefs; improve theme/font ordering.
 
-## Changes Included (staged for commit on v13.5.4)
-- `views/base_tab.py`: `_register_context_menu` now supports `tts_read`, `tts_stop`,
-  `separator`, and `fullscreen` item descriptors; add shared `_selection_or_all`.
-- `views/context_menu.py`: add `add_fullscreen_command(...)` helper.
-- `views/summarizer_tab.py`: replace ⛶ overlay buttons with consolidated right-click
-  context menus (Copy/Clear + TTS + Fullscreen) for content and response.
-- `views/transcriber_tab.py`, `views/translation_tab.py`, `views/video_subtitler_tab.py`:
-  swap overlay ⛶ buttons for right-click TTS + Fullscreen menu items.
-- `views/main_window.py`: dark/light theme now recolors `TCombobox`, `TSpinbox`,
-  `Horizontal.TScale`, combobox dropdown list, and every tk.Text/ScrolledText widget
-  recursively (`_recolor_text_widgets`).
-- `views/fullscreen.py`: inherit the source widget's bg/fg colors.
+## Changes Included (staged for commit on v13.5.5)
+- `views/video_subtitler_tab.py`: add "Subtitle Style" panel (font size, bold/italic,
+  text/outline colour, outline width, shadow, position alignment, vertical margin,
+  h/v scale). Exposes `get_subtitle_style()`, `get_burn_prefs()`, `apply_burn_prefs()`.
+- `controllers/video_subtitler_controller.py`: burn uses the selected style to build
+  `force_style` for ffmpeg subtitles filter (BorderStyle 4 opaque box vs 1 outline+shadow);
+  persist/load style prefs to `.env` via SettingsManager (`SUBTITLE_*` keys).
+- `views/main_window.py`: define base ('.') style so all ttk widgets inherit theme
+  colors; apply theme before font size and re-apply font size after theme toggle so
+  user font size isn't reset.
 
 ## Source of Truth Notes
 - `main` is the long-lived branch; feature branches are version-tagged branches
@@ -27,5 +25,5 @@ right-click context menu across tabs and improve dark-theme recoloring.
 - None.
 
 ## Next Steps
-- Commit staged follow-up changes.
-- Push to existing upstream `origin/v13.5.4`.
+- Commit staged changes.
+- Push to new upstream `origin/v13.5.5`.

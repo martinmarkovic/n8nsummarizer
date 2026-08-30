@@ -124,11 +124,10 @@ class MainWindow:
         # Setup UI
         self._setup_ui()
 
-        # IMPORTANT: Apply loaded font size AFTER tabs are created
-        # This ensures all text widgets exist before we try to configure them
-        self._apply_font_size()
-
+        # Apply theme first (sets the clam theme + colors), then font size so the
+        # font configuration wins and isn't reset by the theme's own font settings.
         self._apply_theme()
+        self._apply_font_size()
 
         # Restore last active tab AFTER all tabs are created
         self._restore_last_active_tab()
@@ -409,6 +408,18 @@ class MainWindow:
 
         colors = self.theme_colors
 
+        # Base style ('.') — every ttk widget inherits from this. Setting it here
+        # guarantees any element not explicitly styled below (e.g. the header bar)
+        # still gets the theme background/foreground instead of staying light.
+        style.configure(
+            ".",
+            background=colors["bg_primary"],
+            foreground=colors["text_primary"],
+            fieldbackground=colors["bg_secondary"],
+            bordercolor=colors["border"],
+            troughcolor=colors["bg_secondary"],
+        )
+
         # Configure widget styles
         style.configure(
             "TLabel", background=colors["bg_primary"], foreground=colors["text_primary"]
@@ -547,6 +558,11 @@ class MainWindow:
         # Title label
         if hasattr(self, "title_label"):
             self.title_label.configure(foreground=colors["text_primary"])
+
+        # Reassert font sizes — _apply_theme sets some hardcoded fonts, so re-run
+        # the font sizing to keep the user's chosen size after a theme toggle.
+        if hasattr(self, "notebook"):
+            self._apply_font_size()
 
         logger.info(f"Applied {self.current_theme} theme")
 

@@ -378,7 +378,10 @@ class VideoSubtitlerTab(BaseTab):
         def _update_opacity_label(*args):
             self.opacity_label_var.set(f"{self.bg_opacity_var.get():.2f}")
         self.bg_opacity_var.trace("w", _update_opacity_label)
-        
+
+        # === Subtitle style options ===
+        self._build_subtitle_style_panel(burn_frame, start_row=5)
+
         # Burn button
         self.burn_btn = ttk.Button(
             burn_frame,
@@ -387,7 +390,7 @@ class VideoSubtitlerTab(BaseTab):
             state=tk.DISABLED,
             width=20
         )
-        self.burn_btn.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 5))
+        self.burn_btn.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 5))
         
         # FFmpeg status
         self.ffmpeg_status_var = tk.StringVar(value="")
@@ -396,7 +399,7 @@ class VideoSubtitlerTab(BaseTab):
             textvariable=self.ffmpeg_status_var,
             foreground="blue"
         )
-        status_label.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
+        status_label.grid(row=7, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
         
         # Open output file button
         self.open_output_btn = ttk.Button(
@@ -406,8 +409,167 @@ class VideoSubtitlerTab(BaseTab):
             state=tk.DISABLED,
             width=20
         )
-        self.open_output_btn.grid(row=7, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
+        self.open_output_btn.grid(row=8, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
         
+    # ASS/libass colour codes in &HAABBGGRR (alpha 00 = opaque)
+    SUBTITLE_COLORS = {
+        "White": "&H00FFFFFF",
+        "Yellow": "&H0000FFFF",
+        "Cyan": "&H00FFFF00",
+        "Green": "&H0000FF00",
+        "Orange": "&H0000A5FF",
+        "Red": "&H000000FF",
+        "Black": "&H00000000",
+    }
+
+    # Alignment lookup: (vertical, horizontal) -> ASS numpad alignment
+    _ALIGN_MAP = {
+        ("Bottom", "Left"): 1, ("Bottom", "Center"): 2, ("Bottom", "Right"): 3,
+        ("Middle", "Left"): 4, ("Middle", "Center"): 5, ("Middle", "Right"): 6,
+        ("Top", "Left"): 7,    ("Top", "Center"): 8,    ("Top", "Right"): 9,
+    }
+
+    def _build_subtitle_style_panel(self, parent, start_row):
+        """Build the subtitle appearance controls inside the burn frame."""
+        style_frame = ttk.LabelFrame(parent, text="Subtitle Style", padding=8)
+        style_frame.grid(row=start_row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(6, 6))
+        for c in range(4):
+            style_frame.columnconfigure(c, weight=1)
+
+        color_names = list(self.SUBTITLE_COLORS.keys())
+
+        # Font size
+        ttk.Label(style_frame, text="Font size:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.font_size_var = tk.IntVar(value=24)
+        ttk.Spinbox(style_frame, from_=8, to=96, textvariable=self.font_size_var, width=6).grid(
+            row=0, column=1, sticky=tk.W, pady=2
+        )
+
+        # Bold / Italic
+        self.bold_var = tk.BooleanVar(value=False)
+        self.italic_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(style_frame, text="Bold", variable=self.bold_var).grid(row=0, column=2, sticky=tk.W, pady=2)
+        ttk.Checkbutton(style_frame, text="Italic", variable=self.italic_var).grid(row=0, column=3, sticky=tk.W, pady=2)
+
+        # Text colour
+        ttk.Label(style_frame, text="Text colour:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.text_color_var = tk.StringVar(value="White")
+        ttk.Combobox(style_frame, textvariable=self.text_color_var, values=color_names,
+                     state="readonly", width=8).grid(row=1, column=1, sticky=tk.W, pady=2)
+
+        # Outline colour
+        ttk.Label(style_frame, text="Outline colour:").grid(row=1, column=2, sticky=tk.W, pady=2)
+        self.outline_color_var = tk.StringVar(value="Black")
+        ttk.Combobox(style_frame, textvariable=self.outline_color_var, values=color_names,
+                     state="readonly", width=8).grid(row=1, column=3, sticky=tk.W, pady=2)
+
+        # Outline width
+        ttk.Label(style_frame, text="Outline width:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.outline_width_var = tk.IntVar(value=2)
+        ttk.Spinbox(style_frame, from_=0, to=8, textvariable=self.outline_width_var, width=6).grid(
+            row=2, column=1, sticky=tk.W, pady=2
+        )
+
+        # Shadow depth
+        ttk.Label(style_frame, text="Shadow:").grid(row=2, column=2, sticky=tk.W, pady=2)
+        self.shadow_var = tk.IntVar(value=0)
+        ttk.Spinbox(style_frame, from_=0, to=8, textvariable=self.shadow_var, width=6).grid(
+            row=2, column=3, sticky=tk.W, pady=2
+        )
+
+        # Position: vertical + horizontal alignment
+        ttk.Label(style_frame, text="Position:").grid(row=3, column=0, sticky=tk.W, pady=2)
+        self.v_align_var = tk.StringVar(value="Bottom")
+        ttk.Combobox(style_frame, textvariable=self.v_align_var, values=["Bottom", "Middle", "Top"],
+                     state="readonly", width=8).grid(row=3, column=1, sticky=tk.W, pady=2)
+        self.h_align_var = tk.StringVar(value="Center")
+        ttk.Combobox(style_frame, textvariable=self.h_align_var, values=["Left", "Center", "Right"],
+                     state="readonly", width=8).grid(row=3, column=2, sticky=tk.W, pady=2)
+
+        # Vertical margin (distance from edge)
+        ttk.Label(style_frame, text="Vertical margin:").grid(row=4, column=0, sticky=tk.W, pady=2)
+        self.margin_v_var = tk.IntVar(value=20)
+        ttk.Spinbox(style_frame, from_=0, to=400, textvariable=self.margin_v_var, width=6).grid(
+            row=4, column=1, sticky=tk.W, pady=2
+        )
+
+        # Horizontal / vertical scale (percent)
+        ttk.Label(style_frame, text="Horizontal scale %:").grid(row=5, column=0, sticky=tk.W, pady=2)
+        self.scale_x_var = tk.IntVar(value=100)
+        ttk.Spinbox(style_frame, from_=50, to=200, textvariable=self.scale_x_var, width=6).grid(
+            row=5, column=1, sticky=tk.W, pady=2
+        )
+        ttk.Label(style_frame, text="Vertical scale %:").grid(row=5, column=2, sticky=tk.W, pady=2)
+        self.scale_y_var = tk.IntVar(value=100)
+        ttk.Spinbox(style_frame, from_=50, to=200, textvariable=self.scale_y_var, width=6).grid(
+            row=5, column=3, sticky=tk.W, pady=2
+        )
+
+    def get_subtitle_style(self) -> dict:
+        """Return the current subtitle style options as a dict for the controller."""
+        return {
+            "font_size": self.font_size_var.get(),
+            "bold": self.bold_var.get(),
+            "italic": self.italic_var.get(),
+            "primary_colour": self.SUBTITLE_COLORS.get(self.text_color_var.get(), "&H00FFFFFF"),
+            "outline_colour": self.SUBTITLE_COLORS.get(self.outline_color_var.get(), "&H00000000"),
+            "outline": self.outline_width_var.get(),
+            "shadow": self.shadow_var.get(),
+            "alignment": self._ALIGN_MAP.get((self.v_align_var.get(), self.h_align_var.get()), 2),
+            "margin_v": self.margin_v_var.get(),
+            "scale_x": self.scale_x_var.get(),
+            "scale_y": self.scale_y_var.get(),
+        }
+
+    def get_burn_prefs(self) -> dict:
+        """
+        Return the raw burn/style selections for persistence (color names, not
+        ASS codes, so they can be restored into the comboboxes).
+        """
+        return {
+            "font_size": self.font_size_var.get(),
+            "bold": self.bold_var.get(),
+            "italic": self.italic_var.get(),
+            "text_color": self.text_color_var.get(),
+            "outline_color": self.outline_color_var.get(),
+            "outline_width": self.outline_width_var.get(),
+            "shadow": self.shadow_var.get(),
+            "v_align": self.v_align_var.get(),
+            "h_align": self.h_align_var.get(),
+            "margin_v": self.margin_v_var.get(),
+            "scale_x": self.scale_x_var.get(),
+            "scale_y": self.scale_y_var.get(),
+            "dark_bg": self.dark_bg_var.get(),
+            "bg_opacity": round(self.bg_opacity_var.get(), 2),
+        }
+
+    def apply_burn_prefs(self, prefs: dict) -> None:
+        """Apply previously-saved burn/style selections to the controls."""
+        if not prefs:
+            return
+        setters = {
+            "font_size": self.font_size_var.set,
+            "bold": self.bold_var.set,
+            "italic": self.italic_var.set,
+            "text_color": self.text_color_var.set,
+            "outline_color": self.outline_color_var.set,
+            "outline_width": self.outline_width_var.set,
+            "shadow": self.shadow_var.set,
+            "v_align": self.v_align_var.set,
+            "h_align": self.h_align_var.set,
+            "margin_v": self.margin_v_var.set,
+            "scale_x": self.scale_x_var.set,
+            "scale_y": self.scale_y_var.set,
+            "dark_bg": self.dark_bg_var.set,
+            "bg_opacity": self.bg_opacity_var.set,
+        }
+        for key, setter in setters.items():
+            if key in prefs and prefs[key] is not None:
+                try:
+                    setter(prefs[key])
+                except Exception:
+                    pass
+
     def set_controller(self, controller):
         """Set the controller for this view."""
         self.controller = controller

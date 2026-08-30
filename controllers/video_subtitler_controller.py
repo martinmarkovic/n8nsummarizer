@@ -56,6 +56,9 @@ class VideoSubtitlerController:
                 tab.output_dir_var.set(saved_dir)
 
         tab.set_controller(self)
+
+        # Restore last-used subtitle style/burn preferences from settings
+        self._load_burn_prefs()
         
         # Create callback for video utils (instance method to avoid scope issues)
         self.tab_progress_callback = lambda percent, message: self.tab.after(0, lambda p=percent, m=message: self.tab.update_progress(p, m))
@@ -453,19 +456,44 @@ class VideoSubtitlerController:
             # Check if dark background is enabled
             use_dark_bg = self.tab.get_dark_bg()
             opacity = self.tab.get_bg_opacity()
-            
+
+            # Gather user-selected subtitle style options (with safe fallbacks)
+            try:
+                style = self.tab.get_subtitle_style()
+            except AttributeError:
+                style = {}
+
+            # Remember these selections as the new "last pick"
+            self._save_burn_prefs()
+
+            style_parts = [
+                f"FontSize={style.get('font_size', 24)}",
+                f"PrimaryColour={style.get('primary_colour', '&H00FFFFFF')}",
+                f"OutlineColour={style.get('outline_colour', '&H00000000')}",
+                f"Bold={-1 if style.get('bold') else 0}",
+                f"Italic={-1 if style.get('italic') else 0}",
+                f"Alignment={style.get('alignment', 2)}",
+                f"MarginV={style.get('margin_v', 20)}",
+                f"ScaleX={style.get('scale_x', 100)}",
+                f"ScaleY={style.get('scale_y', 100)}",
+                f"Shadow={style.get('shadow', 0)}",
+            ]
+
             if use_dark_bg:
-                # subtitles filter with force_style to add a semi-transparent box behind text
-                # BackColour uses AABBGGRR hex format — AA is alpha (00=opaque, FF=transparent)
+                # Opaque box behind text. BackColour is &HAABBGGRR — AA is alpha
+                # (00 = fully opaque, FF = fully transparent).
                 alpha_hex = format(int((1.0 - opacity) * 255), '02X')
-                back_colour = f"&H{alpha_hex}000000&"
-                vf_filter = (
-                    f"subtitles={srt_path_fixed}:force_style="
-                    f"'BackColour={back_colour},BorderStyle=4,"
-                    f"Outline=0,Shadow=0,MarginV=20'"
-                )
+                back_colour = f"&H{alpha_hex}000000"
+                style_parts.append(f"BackColour={back_colour}")
+                style_parts.append("BorderStyle=4")  # opaque box
+                # For box style, Outline controls box padding
+                style_parts.append(f"Outline={style.get('outline', 2)}")
             else:
-                vf_filter = f"subtitles={srt_path_fixed}"
+                style_parts.append("BorderStyle=1")  # outline + shadow
+                style_parts.append(f"Outline={style.get('outline', 2)}")
+
+            force_style = ",".join(style_parts)
+            vf_filter = f"subtitles={srt_path_fixed}:force_style='{force_style}'"
             
             cmd = [
                 "ffmpeg", "-y",
@@ -543,6 +571,67 @@ class VideoSubtitlerController:
         if self.settings:
             self.settings.set("SUBTITLER_OUTPUT_DIR", path)
         self._output_dir = Path(path)
+
+    # --- Subtitle style / burn preferences persistence (.env via SettingsManager) ---
+    _BURN_PREF_KEYS = {
+        # pref_key: (env_key, type)
+        "font_size": ("SUBTITLE_FONT_SIZE", int),
+        "bold": ("SUBTITLE_BOLD", bool),
+        "italic": ("SUBTITLE_ITALIC", bool),
+        "text_color": ("SUBTITLE_TEXT_COLOR", str),
+        "outline_color": ("SUBTITLE_OUTLINE_COLOR", str),
+        "outline_width": ("SUBTITLE_OUTLINE_WIDTH", int),
+        "shadow": ("SUBTITLE_SHADOW", int),
+        "v_align": ("SUBTITLE_V_ALIGN", str),
+        "h_align": ("SUBTITLE_H_ALIGN", str),
+        "margin_v": ("SUBTITLE_MARGIN_V", int),
+        "scale_x": ("SUBTITLE_SCALE_X", int),
+        "scale_y": ("SUBTITLE_SCALE_Y", int),
+        "dark_bg": ("SUBTITLE_DARK_BG", bool),
+        "bg_opacity": ("SUBTITLE_BG_OPACITY", float),
+    }
+
+    def _load_burn_prefs(self):
+        """Load saved subtitle style prefs from settings and apply to the tab."""
+        if not self.settings:
+            return
+        prefs = {}
+        for pref_key, (env_key, typ) in self._BURN_PREF_KEYS.items():
+            raw = self.settings.get(env_key, "")
+            if raw == "":
+                continue  # Not saved yet — keep the in-code default
+            try:
+                if typ is bool:
+                    prefs[pref_key] = str(raw).strip().lower() in ("1", "true", "yes")
+                elif typ is int:
+                    prefs[pref_key] = int(float(raw))
+                elif typ is float:
+                    prefs[pref_key] = float(raw)
+                else:
+                    prefs[pref_key] = str(raw)
+            except (ValueError, TypeError):
+                continue
+        if prefs:
+            try:
+                self.tab.apply_burn_prefs(prefs)
+            except Exception as e:
+                logger.debug(f"Could not apply saved burn prefs: {e}")
+
+    def _save_burn_prefs(self):
+        """Persist the current subtitle style prefs to settings (.env)."""
+        if not self.settings:
+            return
+        try:
+            prefs = self.tab.get_burn_prefs()
+        except Exception:
+            return
+        for pref_key, (env_key, typ) in self._BURN_PREF_KEYS.items():
+            if pref_key not in prefs:
+                continue
+            value = prefs[pref_key]
+            if typ is bool:
+                value = "1" if value else "0"
+            self.settings.set(env_key, str(value))
 
     def set_translation_llm_config(self, provider, model, url):
         """Set LLM configuration for translation from Translation tab.
