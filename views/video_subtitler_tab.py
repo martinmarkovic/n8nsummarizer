@@ -93,6 +93,7 @@ class VideoSubtitlerTab(BaseTab):
         
         url_entry = ttk.Entry(self.url_frame, textvariable=self.url_var)
         url_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        self._register_entry_context_menu(url_entry)
         
         # Local File Input Frame (initially hidden)
         self.local_frame = ttk.Frame(settings_frame)
@@ -103,6 +104,7 @@ class VideoSubtitlerTab(BaseTab):
         
         local_file_entry = ttk.Entry(self.local_frame, textvariable=self.local_file_path, state="readonly")
         local_file_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        self._register_entry_context_menu(local_file_entry, allow_paste=False)
         
         ttk.Button(self.local_frame, text="Browse", command=self._browse_local_file, width=8).pack(side=tk.LEFT)
         
@@ -135,6 +137,7 @@ class VideoSubtitlerTab(BaseTab):
             state="readonly"
         )
         output_entry.grid(row=4, column=1, sticky=(tk.W, tk.E), padx=(0, 5), pady=(10, 5))
+        self._register_entry_context_menu(output_entry, allow_paste=False)
         settings_frame.columnconfigure(1, weight=1)
         
         ttk.Button(
@@ -237,10 +240,13 @@ class VideoSubtitlerTab(BaseTab):
         # Enable burn button when SRT content is present
         self.srt_text.bind("<<Modified>>", self._on_srt_text_modified)
 
-        # Right-click context menu (TTS + fullscreen)
+        # Right-click context menu (copy/paste + TTS + fullscreen)
         self._register_context_menu(
             self.srt_text,
             [
+                {"copy": True},
+                {"paste": True},
+                {"separator": True},
                 {"tts_read": lambda: self._selection_or_all(self.srt_text)},
                 {"tts_stop": True},
                 {"separator": True},
@@ -296,10 +302,13 @@ class VideoSubtitlerTab(BaseTab):
         # Enable burn button when translated SRT content is present
         self.translated_srt_text.bind("<<Modified>>", self._on_translated_srt_text_modified)
 
-        # Right-click context menu (TTS + fullscreen)
+        # Right-click context menu (copy/paste + TTS + fullscreen)
         self._register_context_menu(
             self.translated_srt_text,
             [
+                {"copy": True},
+                {"paste": True},
+                {"separator": True},
                 {"tts_read": lambda: self._selection_or_all(self.translated_srt_text)},
                 {"tts_stop": True},
                 {"separator": True},

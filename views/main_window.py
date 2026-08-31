@@ -149,9 +149,54 @@ class MainWindow:
         # Bind tab change event to save preference
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
+        # Chrome-style tab hotkeys (Ctrl+1..Ctrl+8, Ctrl+9 = last tab)
+        self._setup_tab_hotkeys()
+
         logger.info(
             f"MainWindow initialized (v6.3 - {self.current_theme} theme, {self.current_font_size}px font)"
         )
+
+    def _setup_tab_hotkeys(self):
+        """
+        Bind Chrome-style keyboard shortcuts for switching tabs.
+
+        - Ctrl+1 … Ctrl+8 select the tab at that position (1-based)
+        - Ctrl+9 always selects the last tab
+
+        Both the number row and the numeric keypad are bound. Shortcuts are
+        registered with bind_all so they work regardless of which widget
+        (text box, entry, etc.) currently has focus.
+        """
+        for n in range(1, 9):  # 1..8 → tab index 0..7
+            self.root.bind_all(
+                f"<Control-Key-{n}>",
+                lambda e, idx=n - 1: self._select_tab_by_index(idx),
+            )
+            self.root.bind_all(
+                f"<Control-KP_{n}>",
+                lambda e, idx=n - 1: self._select_tab_by_index(idx),
+            )
+
+        # Ctrl+9 → last tab (matches Chrome)
+        self.root.bind_all("<Control-Key-9>", lambda e: self._select_tab_by_index(-1))
+        self.root.bind_all("<Control-KP_9>", lambda e: self._select_tab_by_index(-1))
+
+    def _select_tab_by_index(self, index):
+        """
+        Select the notebook tab at `index`. A negative index selects the last
+        tab. Out-of-range indices are ignored.
+        """
+        try:
+            total = self.notebook.index("end")
+            if total == 0:
+                return "break"
+            if index < 0:
+                index = total - 1
+            if 0 <= index < total:
+                self.notebook.select(index)
+        except tk.TclError:
+            pass
+        return "break"
 
     def _restore_last_active_tab(self):
         """

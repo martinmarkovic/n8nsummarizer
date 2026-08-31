@@ -197,6 +197,7 @@ class SummarizerTab(BaseTab):
         )
         self.url_entry.grid(row=youtube_row, column=1, sticky=(tk.W, tk.E), padx=5)
         self.url_var.set("https://")
+        self._register_entry_context_menu(self.url_entry)
         
         youtube_row += 1
         ttk.Label(self._youtube_frame, text="Format:").grid(row=youtube_row, column=0, sticky="w")
@@ -284,6 +285,7 @@ class SummarizerTab(BaseTab):
             textvariable=self.webhook_var
         )
         self.webhook_entry.grid(row=row, column=1, sticky="ew", padx=5)
+        self._register_entry_context_menu(self.webhook_entry)
         
         # Test connection button
         ttk.Button(
@@ -529,11 +531,21 @@ class SummarizerTab(BaseTab):
         widget.insert("1.0", text)
 
     def _on_prompt_text_rightclick(self, event):
-        """Handle right-click on prompt textbox"""
-        if not self.prompt_manager:
-            return
+        """Handle right-click on prompt textbox (Copy/Paste + Save as prompt)."""
         menu = tk.Menu(self, tearoff=0)
-        menu.add_command(label="💾 Save as prompt", command=self._save_prompt_as_custom)
+
+        def _paste():
+            self.prompt_text.focus_set()
+            self.prompt_text.event_generate("<<Paste>>")
+
+        def _copy():
+            self.prompt_text.event_generate("<<Copy>>")
+
+        menu.add_command(label="Paste", command=_paste)
+        menu.add_command(label="Copy", command=_copy)
+        if self.prompt_manager:
+            menu.add_separator()
+            menu.add_command(label="💾 Save as prompt", command=self._save_prompt_as_custom)
         menu.tk_popup(event.x_root, event.y_root)
         menu.grab_release()
     
@@ -671,6 +683,9 @@ class SummarizerTab(BaseTab):
         # Add TTS context menu to content preview text
         from views.context_menu import AppContextMenu
         content_menu = AppContextMenu(self.content_text)
+        content_menu.add_copy_command()
+        content_menu.add_paste_command()
+        content_menu.add_separator()
         content_menu.add_tts_read_command(lambda: self._selection_or_all(self.content_text))
         content_menu.add_tts_stop_command()
         content_menu.add_separator()

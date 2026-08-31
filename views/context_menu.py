@@ -46,6 +46,72 @@ class AppContextMenu:
         """Add a separator line to the context menu."""
         self._items.append({"type": "separator"})
 
+    def add_copy_command(self, label: str = "Copy"):
+        """
+        Add a 'Copy' command that copies the current selection to the clipboard,
+        or the whole widget content if nothing is selected.
+
+        Works for both tk.Text / ScrolledText and (ttk.)Entry widgets.
+        """
+        def copy_command():
+            w = self.widget
+            text = ""
+            if isinstance(w, tk.Text):
+                try:
+                    if w.tag_ranges("sel"):
+                        text = w.get("sel.first", "sel.last")
+                    else:
+                        text = w.get("1.0", tk.END)
+                except tk.TclError:
+                    text = ""
+            else:  # (ttk.)Entry and similar
+                try:
+                    if w.selection_present():
+                        text = w.selection_get()
+                    else:
+                        text = w.get()
+                except (tk.TclError, AttributeError):
+                    try:
+                        text = w.get()
+                    except Exception:
+                        text = ""
+            text = text.rstrip("\n") if text else ""
+            if text:
+                w.clipboard_clear()
+                w.clipboard_append(text)
+                w.update_idletasks()
+
+        self._items.append({"type": "command", "label": label, "command": copy_command})
+
+    def add_paste_command(self, label: str = "Paste"):
+        """
+        Add a 'Paste' command that inserts clipboard text at the cursor,
+        replacing the current selection if one exists.
+
+        Uses the widget's native <<Paste>> handling so it behaves correctly for
+        both tk.Text / ScrolledText and (ttk.)Entry widgets. No-op on read-only
+        or disabled widgets, or when the clipboard is empty.
+        """
+        def paste_command():
+            w = self.widget
+            # Skip if clipboard is empty / non-text
+            try:
+                if not w.clipboard_get():
+                    return
+            except tk.TclError:
+                return
+            # Don't try to paste into a disabled/read-only widget
+            try:
+                state = str(w.cget("state"))
+                if state in ("disabled", "readonly"):
+                    return
+            except tk.TclError:
+                pass
+            w.focus_set()
+            w.event_generate("<<Paste>>")
+
+        self._items.append({"type": "command", "label": label, "command": paste_command})
+
     def add_tts_read_command(self, text_getter):
         """
         Add a TTS 'Read in Voice' command to the context menu.

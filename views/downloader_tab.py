@@ -99,6 +99,7 @@ class DownloaderTab(BaseTab):
         url_entry = ttk.Entry(controls_frame, textvariable=self.url_var)
         url_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=5)
         url_entry.bind('<KeyRelease>', self._on_url_change)
+        self._register_entry_context_menu(url_entry)
         
         # Info button
         info_btn = ttk.Button(
@@ -166,6 +167,7 @@ class DownloaderTab(BaseTab):
         po_token_entry.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=5)
         po_token_entry.bind('<FocusOut>', self._on_po_token_change)
         po_token_entry.bind('<Return>', self._on_po_token_change)
+        self._register_entry_context_menu(po_token_entry)
         
         # Help button for PO Token
         help_btn = ttk.Button(
@@ -194,6 +196,7 @@ class DownloaderTab(BaseTab):
         )
         cookie_file_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(0, 5), pady=5)
         cookie_file_entry.bind('<FocusOut>', self._on_cookie_file_change)
+        self._register_entry_context_menu(cookie_file_entry)
         
         cookie_browse_btn = ttk.Button(
             self.instagram_frame,
@@ -239,6 +242,7 @@ class DownloaderTab(BaseTab):
         )
         facebook_cookie_file_entry.grid(row=3, column=1, sticky=(tk.W, tk.E), padx=(0, 5), pady=5)
         facebook_cookie_file_entry.bind('<FocusOut>', self._on_facebook_cookie_file_change)
+        self._register_entry_context_menu(facebook_cookie_file_entry)
         
         facebook_cookie_browse_btn = ttk.Button(
             self.instagram_frame,
@@ -297,6 +301,7 @@ class DownloaderTab(BaseTab):
         # Status log
         self.status_log = tk.Text(log_frame, wrap=tk.WORD, height=10)
         self.status_log.grid(row=1, column=0, sticky=(tk.N, tk.S, tk.E, tk.W))
+        self._register_context_menu(self.status_log, [{"copy": True}])
         
         log_scroll = ttk.Scrollbar(log_frame, command=self.status_log.yview)
         log_scroll.grid(row=1, column=1, sticky=(tk.N, tk.S))

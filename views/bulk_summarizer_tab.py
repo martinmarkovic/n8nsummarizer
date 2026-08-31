@@ -450,6 +450,7 @@ class BulkSummarizerTab(BaseTab):
         )
         self.status_log.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         scrollbar.config(command=self.status_log.yview)
+        self._register_context_menu(self.status_log, [{"copy": True}])
 
     # ------------------------------------------------------------------
     # Public API

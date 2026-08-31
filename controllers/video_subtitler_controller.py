@@ -450,8 +450,10 @@ class VideoSubtitlerController:
             output_path = self._output_dir / output_filename
             self.output_video_path = output_path
             
-            # Build FFmpeg command with forward slashes for Windows compatibility
-            srt_path_fixed = str(srt_file).replace("\\", "/")
+            # Build FFmpeg command with forward slashes for Windows compatibility.
+            # Also escape the drive-letter colon so the subtitles filtergraph parser
+            # doesn't treat it as an option separator (e.g. C:/x -> C\:/x).
+            srt_path_fixed = str(srt_file).replace("\\", "/").replace(":", "\\:")
             
             # Check if dark background is enabled
             use_dark_bg = self.tab.get_dark_bg()
@@ -495,66 +497,148 @@ class VideoSubtitlerController:
             force_style = ",".join(style_parts)
             vf_filter = f"subtitles={srt_path_fixed}:force_style='{force_style}'"
             
+            import subprocess
+            import os
+
+            # Resolve the ffmpeg / ffprobe executables. Honour FFMPEG_PATH from
+            # Settings (.env) if set, otherwise fall back to PATH lookup.
+            ffmpeg_exe = os.getenv("FFMPEG_PATH", "").strip()
+            if not (ffmpeg_exe and os.path.isfile(ffmpeg_exe)):
+                ffmpeg_exe = "ffmpeg"
+            if ffmpeg_exe != "ffmpeg":
+                # Derive ffprobe sitting next to a fully-qualified ffmpeg
+                probe_name = "ffprobe.exe" if os.name == "nt" else "ffprobe"
+                cand = os.path.join(os.path.dirname(ffmpeg_exe), probe_name)
+                ffprobe_exe = cand if os.path.isfile(cand) else "ffprobe"
+            else:
+                ffprobe_exe = "ffprobe"
+
+            # -nostdin: never read stdin (a common cause of "frozen" ffmpeg when
+            #           launched from a GUI process).
+            # -progress pipe:1 -nostats: emit machine-readable progress on stdout
+            #           (newline-delimited key=value), which is far more reliable to
+            #           parse than the \r-updated stats line on stderr.
             cmd = [
-                "ffmpeg", "-y",
+                ffmpeg_exe, "-y", "-hide_banner", "-nostdin",
                 "-i", str(input_video),
                 "-vf", vf_filter,
                 "-c:a", "copy",
+                "-progress", "pipe:1", "-nostats",
                 str(output_path)
             ]
-            
+
+            _NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+
+            logger.info("Burning subtitles. FFmpeg command: %s", " ".join(cmd))
+
             self.tab.after(0, lambda: self.tab.update_ffmpeg_status("🔄 Starting FFmpeg..."))
             self.tab.after(0, lambda: self.tab.update_progress(0, "FFmpeg: Starting"))
-            
-            # Run FFmpeg with progress parsing
-            import subprocess
-            
-            # First get total duration using ffprobe
+
+            # First get total duration using ffprobe (for progress %)
             duration_cmd = [
-                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                ffprobe_exe, "-v", "error", "-show_entries", "format=duration",
                 "-of", "default=noprint_wrappers=1:nokey=1", str(input_video)
             ]
-            
+
+            total_duration = 0
             try:
-                duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, timeout=30)
-                total_duration = float(duration_result.stdout.strip()) if duration_result.returncode == 0 else 0
-            except (subprocess.TimeoutExpired, ValueError):
+                duration_result = subprocess.run(
+                    duration_cmd, capture_output=True, text=True, timeout=30,
+                    creationflags=_NO_WINDOW,
+                )
+                if duration_result.returncode == 0:
+                    total_duration = float(duration_result.stdout.strip() or 0)
+            except (subprocess.TimeoutExpired, ValueError, FileNotFoundError) as probe_err:
+                logger.warning("ffprobe duration lookup failed: %s", probe_err)
                 total_duration = 0
-            
-            # Run FFmpeg and parse progress
-            process = subprocess.Popen(cmd, stderr=subprocess.PIPE, universal_newlines=True)
-            
-            while True:
-                line = process.stderr.readline()
-                if not line and process.poll() is not None:
+
+            # Launch FFmpeg. Catch a missing executable explicitly so the user gets
+            # a clear message instead of a silent failure.
+            try:
+                process = subprocess.Popen(
+                    cmd,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    universal_newlines=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    creationflags=_NO_WINDOW,
+                )
+            except FileNotFoundError:
+                logger.error("FFmpeg executable not found: %s", ffmpeg_exe)
+                self.tab.after(0, lambda: self.tab.show_error(
+                    "FFmpeg was not found. Install FFmpeg and add it to PATH, or set its "
+                    "path in Settings → Paths (FFmpeg)."
+                ))
+                return
+
+            # The first burn can pause here for a while: the libass subtitles filter
+            # builds a system font cache before it renders the first frame (heavy
+            # disk/CPU, progress stays at 0%). Tell the user so it doesn't look frozen.
+            self.tab.after(0, lambda: self.tab.update_ffmpeg_status(
+                "🔄 FFmpeg running… (first run may build a font cache — this can take a minute)"
+            ))
+
+            # Drain stderr on a background thread so the pipe can never fill up and
+            # deadlock ffmpeg, and so we can report the real error on failure.
+            stderr_chunks = []
+
+            def _drain_stderr():
+                try:
+                    for line in process.stderr:
+                        stderr_chunks.append(line)
+                except Exception:
+                    pass
+
+            stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
+            stderr_thread.start()
+
+            # Parse machine-readable progress from stdout (-progress pipe:1).
+            # Lines look like:  out_time=00:00:04.050000  /  progress=continue|end
+            last_pct = -1.0
+            for raw in process.stdout:
+                line = raw.strip()
+                if not line:
+                    continue
+                if line.startswith("out_time=") and total_duration > 0:
+                    m = re.search(r"out_time=([0-9:.]+)", line)
+                    if m:
+                        parts = m.group(1).split(":")
+                        if len(parts) == 3:
+                            try:
+                                h, mm, ss = map(float, parts)
+                            except ValueError:
+                                continue
+                            elapsed = h * 3600 + mm * 60 + ss
+                            percent = max(0.0, min(100.0, (elapsed / total_duration) * 100))
+                            # Throttle UI updates to whole-tenths changes
+                            if percent - last_pct >= 0.1:
+                                last_pct = percent
+                                self.tab.after(
+                                    0,
+                                    lambda p=percent: self.tab.update_progress(p, f"FFmpeg: {p:.1f}%"),
+                                )
+                elif line == "progress=end":
                     break
-                
-                # Parse time progress from FFmpeg output
-                if "time=" in line:
-                    time_match = re.search(r"time=([0-9:.]+)", line)
-                    if time_match:
-                        time_str = time_match.group(1)
-                        # Convert HH:MM:SS.ms to seconds
-                        time_parts = time_str.split(":")
-                        if len(time_parts) == 3:
-                            hours, minutes, seconds = map(float, time_parts)
-                            elapsed_seconds = hours * 3600 + minutes * 60 + seconds
-                            
-                            if total_duration > 0:
-                                percent = (elapsed_seconds / total_duration) * 100
-                                self.tab.after(0, lambda p=percent: self.tab.update_progress(p, f"FFmpeg: {p:.1f}%"))
-            
+
             returncode = process.wait()
-            
+            stderr_thread.join(timeout=5)
+            full_err = "".join(stderr_chunks)
+
             if returncode == 0:
+                logger.info("FFmpeg burn completed successfully: %s", output_path)
                 self.tab.after(0, lambda: self.tab.update_ffmpeg_status("✅ Done! Subtitles burned."))
                 self.tab.after(0, lambda: self.tab.enable_open_btn())
                 self.tab.after(0, lambda: self.tab.update_progress(100, "Burn complete."))
             else:
-                # Get last 500 chars of stderr for error message
-                stderr_output = process.stderr.read() if process.stderr else ""
-                error_msg = stderr_output[-500:] if len(stderr_output) > 500 else stderr_output
-                self.tab.after(0, lambda: self.tab.show_error(f"FFmpeg failed: {error_msg}"))
+                logger.error(
+                    "FFmpeg burn failed (exit %s).\nCommand: %s\nSTDERR tail:\n%s",
+                    returncode, " ".join(cmd), full_err[-2000:],
+                )
+                error_msg = full_err[-800:].strip() or f"exit code {returncode} (no output)"
+                self.tab.after(0, lambda m=error_msg: self.tab.show_error(f"FFmpeg failed: {m}"))
+                self.tab.after(0, lambda: self.tab.update_ffmpeg_status("❌ FFmpeg failed."))
                 
         except Exception as e:
             logger.error(f"VideoSubtitler FFmpeg error: {e}", exc_info=True)

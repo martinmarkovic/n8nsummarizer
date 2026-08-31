@@ -180,6 +180,10 @@ class BaseTab(ttk.Frame, ABC):
         for item in items:
             if "separator" in item:
                 menu.add_separator()
+            elif item.get("copy"):
+                menu.add_copy_command(item["label"] if item.get("label") else "Copy")
+            elif item.get("paste"):
+                menu.add_paste_command(item["label"] if item.get("label") else "Paste")
             elif item.get("tts_read"):
                 menu.add_tts_read_command(item["tts_read"])
             elif item.get("tts_stop"):
@@ -195,6 +199,27 @@ class BaseTab(ttk.Frame, ABC):
         # Build and bind the menu
         menu.bind()
 
+        return menu
+
+    def _register_entry_context_menu(self, entry, allow_paste: bool = True) -> "AppContextMenu":
+        """
+        Attach a simple right-click context menu (Copy + optional Paste) to a
+        small single-line widget such as an (ttk.)Entry used for URLs or paths.
+
+        Args:
+            entry: The Entry widget to attach the menu to.
+            allow_paste: Include a Paste item (skip for read-only fields).
+
+        Returns:
+            The AppContextMenu instance.
+        """
+        from views.context_menu import AppContextMenu
+
+        menu = AppContextMenu(entry)
+        if allow_paste:
+            menu.add_paste_command()
+        menu.add_copy_command()
+        menu.bind()
         return menu
 
     def _selection_or_all(self, widget) -> str:

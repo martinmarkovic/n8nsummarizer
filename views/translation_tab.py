@@ -129,10 +129,13 @@ class TranslationTab(BaseTab):
         source_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.source_text.configure(yscrollcommand=source_scroll.set)
 
-        # Right-click context menu for the source text (TTS + fullscreen)
+        # Right-click context menu for the source text (copy/paste + TTS + fullscreen)
         self._register_context_menu(
             self.source_text,
             [
+                {"copy": True},
+                {"paste": True},
+                {"separator": True},
                 {"tts_read": lambda: self._selection_or_all(self.source_text)},
                 {"tts_stop": True},
                 {"separator": True},
@@ -160,6 +163,9 @@ class TranslationTab(BaseTab):
         self._register_context_menu(
             self.target_text,
             [
+                {"copy": True},
+                {"paste": True},
+                {"separator": True},
                 {"label": "Export as .txt", "command": self._export_translation_txt},
                 {"label": "Export as .srt", "command": self._export_translation_srt},
                 {"separator": True},
@@ -218,6 +224,7 @@ class TranslationTab(BaseTab):
             width=30
         )
         self.webhook_entry.grid(row=2, column=1, padx=4, pady=5, sticky=tk.W)
+        self._register_entry_context_menu(self.webhook_entry)
 
         # Row 2: Test connection button and Remember settings checkbox
         ttk.Button(

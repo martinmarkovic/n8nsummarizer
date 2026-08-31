@@ -149,6 +149,7 @@ class TranscriberTab(BaseTab):
         ttk.Label(self.local_frame, text="File:").grid(row=0, column=0, sticky=tk.W)
         self.file_entry = ttk.Entry(self.local_frame, textvariable=self.file_path_var)
         self.file_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
+        self._register_entry_context_menu(self.file_entry)
         
         self.browse_btn = ttk.Button(
             self.local_frame,
@@ -162,6 +163,7 @@ class TranscriberTab(BaseTab):
         ttk.Label(self.youtube_frame, text="URL:").grid(row=0, column=0, sticky=tk.W)
         self.url_entry = ttk.Entry(self.youtube_frame, textvariable=self.url_var)
         self.url_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
+        self._register_entry_context_menu(self.url_entry)
         self.youtube_frame.columnconfigure(1, weight=1)
     
     def _setup_device_section(self):
@@ -216,6 +218,7 @@ class TranscriberTab(BaseTab):
         ttk.Label(self.custom_path_frame, text="Path:").grid(row=0, column=0, sticky=tk.W, padx=10)
         self.custom_path_entry = ttk.Entry(self.custom_path_frame, textvariable=self.output_custom_path_var)
         self.custom_path_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
+        self._register_entry_context_menu(self.custom_path_entry)
         
         self.browse_output_btn = ttk.Button(
             self.custom_path_frame,
@@ -317,10 +320,13 @@ class TranscriberTab(BaseTab):
         scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.transcript_text.configure(yscrollcommand=scrollbar.set)
 
-        # Right-click context menu (TTS + fullscreen)
+        # Right-click context menu (copy/paste + TTS + fullscreen)
         self._register_context_menu(
             self.transcript_text,
             [
+                {"copy": True},
+                {"paste": True},
+                {"separator": True},
                 {"tts_read": lambda: self._selection_or_all(self.transcript_text)},
                 {"tts_stop": True},
                 {"separator": True},
