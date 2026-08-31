@@ -228,6 +228,14 @@ class SettingsManager:
         """Set Facebook cookie browser."""
         self.set("FACEBOOK_COOKIE_BROWSER", browser)
     
+    def get_language(self) -> str:
+        """Get the UI language code (e.g. 'en', 'hr'). Defaults to 'en'."""
+        return self.get("APP_LANGUAGE", "en")
+
+    def set_language(self, language: str) -> None:
+        """Set the UI language code (persisted to .env as APP_LANGUAGE)."""
+        self.set("APP_LANGUAGE", language)
+
     def get_transcriber_output_location(self) -> str:
         """Get transcriber output location preference."""
         return self.get("TRANSCRIBER_OUTPUT_LOCATION", "original")

@@ -52,6 +52,8 @@ from utils.logger import logger
 from utils.settings_manager import SettingsManager
 from utils.prompt_manager import PromptManager
 from utils.version import get_titled_version
+from utils import i18n
+from utils.i18n import t
 from views.summarizer_tab import SummarizerTab  # NEW v9.3
 from views.transcriber_tab import TranscriberTab
 from views.bulk_summarizer_tab import BulkSummarizerTab
@@ -116,6 +118,12 @@ class MainWindow:
 
         # Store settings manager
         self.settings = settings_manager
+
+        # Localization: load the saved UI language and activate it BEFORE any
+        # widgets are built, so every t(...) lookup during _setup_ui() resolves
+        # to the chosen language. (Restart-to-apply: a language change only
+        # takes full effect on the next launch.)
+        i18n.set_language(self.settings.get_language())
 
         # Theme state - load from .env or use default
         self.current_theme = self._load_theme_from_env()
@@ -318,7 +326,7 @@ class MainWindow:
         controls_frame = ttk.Frame(header_frame)
         controls_frame.grid(row=0, column=1, sticky=tk.E, padx=(10, 0))
 
-        ttk.Label(controls_frame, text="Font:").pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Label(controls_frame, text=t("header.font")).pack(side=tk.LEFT, padx=(0, 4))
 
         # Decrease button — steps by 2 (original behaviour)
         self.font_decrease_btn = ttk.Button(
@@ -344,7 +352,7 @@ class MainWindow:
         self.font_entry.bind("<Return>",   lambda _e: self._on_font_entry_commit())
         self.font_entry.bind("<FocusOut>", lambda _e: self._on_font_entry_commit())
 
-        ttk.Label(controls_frame, text="px").pack(side=tk.LEFT, padx=(0, 2))
+        ttk.Label(controls_frame, text=t("header.px")).pack(side=tk.LEFT, padx=(0, 2))
 
         # Increase button — steps by 2 (original behaviour)
         self.font_increase_btn = ttk.Button(
@@ -355,14 +363,14 @@ class MainWindow:
         # Theme toggle button
         self.theme_btn = ttk.Button(
             controls_frame,
-            text="🌙 Dark Mode" if self.current_theme == "light" else "☀️ Light Mode",
+            text=t("header.dark_mode") if self.current_theme == "light" else t("header.light_mode"),
             command=self._toggle_theme,
         )
         self.theme_btn.pack(side=tk.LEFT, padx=(0, 8))
 
         # Settings button (replaces old cogwheel → deps manager direct link)
         self.settings_btn = ttk.Button(
-            controls_frame, text="⚙ Settings", command=self._open_settings
+            controls_frame, text=t("header.settings"), command=self._open_settings
         )
         self.settings_btn.pack(side=tk.LEFT)
 
@@ -394,31 +402,31 @@ class MainWindow:
 
         # Tab 0: Summarizer (NEW v9.3 - replaces File and YouTube tabs)
         self.summarizer_tab = SummarizerTab(self.notebook, prompt_manager=self.prompt_manager)
-        self.notebook.add(self.summarizer_tab, text="📝 Summarizer")
+        self.notebook.add(self.summarizer_tab, text=t("tab.summarizer"))
         
         # Tab 1: Transcriber
         self.transcriber_tab = TranscriberTab(self.notebook, self.settings)
-        self.notebook.add(self.transcriber_tab, text="🗡 Transcriber")
+        self.notebook.add(self.transcriber_tab, text=t("tab.transcriber"))
 
         # Tab 1: Bulk Summarizer
         self.bulk_summarizer_tab = BulkSummarizerTab(self.notebook)
-        self.notebook.add(self.bulk_summarizer_tab, text="📦 Bulk Summarizer")
+        self.notebook.add(self.bulk_summarizer_tab, text=t("tab.bulk_summarizer"))
 
         # Tab 2: Bulk Transcriber
         self.bulk_transcriber_tab = BulkTranscriberTab(self.notebook)
-        self.notebook.add(self.bulk_transcriber_tab, text="🎬 Bulk Transcriber")
+        self.notebook.add(self.bulk_transcriber_tab, text=t("tab.bulk_transcriber"))
 
         # Tab 3: Translation
         self.translation_tab = TranslationTab(self.notebook)
-        self.notebook.add(self.translation_tab, text="🌐 Translation")
+        self.notebook.add(self.translation_tab, text=t("tab.translation"))
 
         # Tab 4: Downloader
         self.downloader_tab = DownloaderTab(self.notebook)
-        self.notebook.add(self.downloader_tab, text="📥 Downloader")
+        self.notebook.add(self.downloader_tab, text=t("tab.downloader"))
 
         # Tab 5: Video Subtitler
         self.video_subtitler_tab = VideoSubtitlerTab(self.notebook)
-        self.notebook.add(self.video_subtitler_tab, text="🎞 Video Subtitler")
+        self.notebook.add(self.video_subtitler_tab, text=t("tab.video_subtitler"))
 
         logger.info("All tabs initialized (v9.5 - Removed File and YouTube Summarizer tabs)")
 
@@ -433,7 +441,7 @@ class MainWindow:
         status_frame.grid(row=2, column=0, sticky=(tk.W, tk.E))
         status_frame.columnconfigure(0, weight=1)
 
-        self.status_var = tk.StringVar(value="Ready")
+        self.status_var = tk.StringVar(value=t("status.ready"))
         self.status_label = ttk.Label(
             status_frame, textvariable=self.status_var, relief=tk.SUNKEN
         )
@@ -642,7 +650,7 @@ class MainWindow:
 
         # Update button text
         self.theme_btn.configure(
-            text="🌙 Dark Mode" if self.current_theme == "light" else "☀️ Light Mode"
+            text=t("header.dark_mode") if self.current_theme == "light" else t("header.light_mode")
         )
 
         # Apply new theme
@@ -677,7 +685,7 @@ class MainWindow:
             return
 
         win = tk.Toplevel(self.root)
-        win.title("⚙ Settings")
+        win.title(t("settings.title"))
         win.geometry("560x540")
         win.minsize(420, 300)
         win.resizable(True, True)
@@ -720,12 +728,12 @@ class MainWindow:
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
         win.bind("<MouseWheel>", _on_mousewheel)
 
-        ttk.Label(outer, text="Settings", font=("Segoe UI", 13, "bold")).pack(
+        ttk.Label(outer, text=t("settings.heading"), font=("Segoe UI", 13, "bold")).pack(
             anchor=tk.W, pady=(0, 12)
         )
 
         # ── Appearance ────────────────────────────────────────────────
-        appear_frame = ttk.LabelFrame(outer, text="Appearance", padding=10)
+        appear_frame = ttk.LabelFrame(outer, text=t("settings.appearance"), padding=10)
         appear_frame.pack(fill=tk.X, pady=(0, 10))
 
         # --- Theme colors ---
@@ -837,6 +845,24 @@ class MainWindow:
         text_var.trace_add("write", lambda *_: _sync_preview(text_var, text_preview))
         accent_var.trace_add("write", lambda *_: _sync_preview(accent_var, accent_preview))
 
+        # --- Language ---
+        lang_row = ttk.Frame(appear_frame)
+        lang_row.pack(fill=tk.X, pady=(8, 0))
+        ttk.Label(lang_row, text=t("settings.language"), width=14, anchor=tk.W).pack(side=tk.LEFT)
+        lang_var = tk.StringVar(value=i18n.name_for_code(i18n.get_language()))
+        ttk.Combobox(
+            lang_row,
+            textvariable=lang_var,
+            state="readonly",
+            width=16,
+            values=[i18n.name_for_code(code) for code in i18n.SUPPORTED_LANGUAGES],
+        ).pack(side=tk.LEFT)
+        ttk.Label(
+            appear_frame,
+            text=t("settings.language_hint"),
+            foreground=colors.get("text_secondary", "gray"),
+        ).pack(anchor=tk.W, pady=(2, 0))
+
         # --- Font size ---
         font_row = ttk.Frame(appear_frame)
         font_row.pack(fill=tk.X, pady=(8, 0))
@@ -896,28 +922,42 @@ class MainWindow:
         ).pack(anchor=tk.W)
 
         # ── Buttons (packed into the pinned bottom bar) ───────────────
+        def _notify_restart_if_needed(language_changed):
+            """Show the restart-to-apply prompt when the language was changed."""
+            if language_changed:
+                from tkinter import messagebox
+                messagebox.showinfo(
+                    t("settings.restart_title"),
+                    t("settings.restart_message"),
+                    parent=win,
+                )
+
         def _apply_and_close():
-            self._apply_settings_from_dialog(
+            language_changed = self._apply_settings_from_dialog(
                 bg_var.get().strip(),
                 text_var.get().strip(),
                 accent_var.get().strip(),
                 ffmpeg_var.get().strip(),
+                i18n.code_for_name(lang_var.get()),
             )
+            _notify_restart_if_needed(language_changed)
             win.destroy()
 
         def _apply_only():
-            self._apply_settings_from_dialog(
+            language_changed = self._apply_settings_from_dialog(
                 bg_var.get().strip(),
                 text_var.get().strip(),
                 accent_var.get().strip(),
                 ffmpeg_var.get().strip(),
+                i18n.code_for_name(lang_var.get()),
             )
+            _notify_restart_if_needed(language_changed)
 
-        ttk.Button(btn_bar, text="Apply & Close", command=_apply_and_close).pack(
+        ttk.Button(btn_bar, text=t("settings.apply_close"), command=_apply_and_close).pack(
             side=tk.RIGHT, padx=(6, 0)
         )
-        ttk.Button(btn_bar, text="Apply", command=_apply_only).pack(side=tk.RIGHT)
-        ttk.Button(btn_bar, text="Cancel", command=win.destroy).pack(side=tk.LEFT)
+        ttk.Button(btn_bar, text=t("settings.apply"), command=_apply_only).pack(side=tk.RIGHT)
+        ttk.Button(btn_bar, text=t("settings.cancel"), command=win.destroy).pack(side=tk.LEFT)
 
     def _pick_color(self, var: tk.StringVar, preview: tk.Label, title: str):
         """Open the system color-chooser and write the result into *var*."""
@@ -956,8 +996,29 @@ class MainWindow:
         text_color: str,
         accent_color: str,
         ffmpeg_path: str,
-    ):
-        """Persist settings from the dialog and apply theme / path changes live."""
+        language: str = None,
+    ) -> bool:
+        """Persist settings from the dialog and apply theme / path changes live.
+
+        Theme, color and path changes take effect immediately. The UI language
+        is restart-to-apply: it is saved here but only rendered on the next
+        launch (widgets read their text once, at construction).
+
+        Returns:
+            True if the UI language was changed (so the caller can prompt for a
+            restart), False otherwise.
+        """
+        # --- Language (restart-to-apply) ---
+        language_changed = False
+        if language:
+            prev_language = self.settings.get_language()
+            if language != prev_language:
+                self.settings.set_language(language)
+                language_changed = True
+                logger.info(
+                    f"Saved UI language: {prev_language!r} → {language!r} (restart required)"
+                )
+
         # --- Paths (save to .env and sync into os.environ for this session) ---
         self.settings.set("FFMPEG_PATH", ffmpeg_path)
         # Keep os.environ in sync so cli_runner picks up new values immediately
@@ -976,6 +1037,8 @@ class MainWindow:
         # Rebuild the active theme dict with custom colors if provided, then re-apply
         self._rebuild_theme_colors()
         self._apply_theme()
+
+        return language_changed
 
     def _sync_path_env_vars(self):
         """Sync FFMPEG_PATH / TRANSCRIBE_PATH from SettingsManager into os.environ.
