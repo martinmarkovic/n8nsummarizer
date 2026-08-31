@@ -1149,6 +1149,56 @@ class MainWindow:
                     ["pip", "install", f"{pkg}=={prev}"], name, pkg, btns))
             threading.Thread(target=_worker, daemon=True).start()
 
+        def _check_update(name, pkg, btns):
+            """Check whether a newer version exists (without installing) and log the result."""
+            def _worker():
+                for b in btns:
+                    win.after(0, lambda b=b: b.configure(state=tk.DISABLED))
+                try:
+                    cur = _installed_version(pkg)
+
+                    # System dependency (ffmpeg) — no PyPI to compare against
+                    if pkg is None:
+                        win.after(0, lambda: _append_log(
+                            f"\n▶ {name}: installed {cur} — system dependency, "
+                            f"check/update manually.\n"))
+                        return
+
+                    win.after(0, lambda: _append_log(
+                        f"\n▶ Checking {pkg} (installed: {cur})…\n"))
+
+                    versions = _available_versions(pkg)
+                    if not versions:
+                        win.after(0, lambda: _append_log(
+                            f"  Could not retrieve available versions for {pkg}.\n"))
+                        return
+
+                    # Determine the newest available version
+                    try:
+                        from packaging.version import parse as _vparse
+                        latest = max(versions, key=_vparse)
+                        newer = (
+                            cur not in ("not installed", "unknown")
+                            and _vparse(latest) > _vparse(cur)
+                        )
+                    except Exception:
+                        latest = versions[0]  # pip lists newest-first
+                        newer = cur not in ("not installed", "unknown") and latest != cur
+
+                    if cur in ("not installed", "unknown"):
+                        win.after(0, lambda: _append_log(
+                            f"  Latest available: {latest} (not currently installed)\n"))
+                    elif newer:
+                        win.after(0, lambda: _append_log(
+                            f"  [UPDATE AVAILABLE] {pkg}: {cur} → {latest}\n"))
+                    else:
+                        win.after(0, lambda: _append_log(
+                            f"  [UP TO DATE] {pkg} {cur} (latest: {latest})\n"))
+                finally:
+                    for b in btns:
+                        win.after(0, lambda b=b: b.configure(state=tk.NORMAL))
+            threading.Thread(target=_worker, daemon=True).start()
+
         for name, pkg in DEPS:
             row = ttk.Frame(rows_frame)
             row.pack(fill=tk.X, pady=2)
@@ -1163,14 +1213,22 @@ class MainWindow:
             if pkg:
                 upd_btn = ttk.Button(row, text="Update", width=8)
                 dng_btn = ttk.Button(row, text="Downgrade", width=10)
-                row_btns = [upd_btn, dng_btn]
+                chk_btn = ttk.Button(row, text="Check", width=8)
+                row_btns = [upd_btn, dng_btn, chk_btn]
                 upd_btn.configure(command=lambda n=name, p=pkg, bs=row_btns: _run_cmd(
                     ["pip", "install", "--upgrade", p], n, p, bs))
                 dng_btn.configure(command=lambda n=name, p=pkg, bs=row_btns: _downgrade(n, p, bs))
+                chk_btn.configure(command=lambda n=name, p=pkg, bs=row_btns: _check_update(n, p, bs))
                 upd_btn.pack(side=tk.LEFT, padx=(0, 4))
-                dng_btn.pack(side=tk.LEFT)
+                dng_btn.pack(side=tk.LEFT, padx=(0, 4))
+                chk_btn.pack(side=tk.LEFT)
             else:
-                ttk.Label(row, text="(system)", foreground="gray").pack(side=tk.LEFT)
+                # System dependency (ffmpeg): no pip Update/Downgrade, but still a Check button
+                chk_btn = ttk.Button(row, text="Check", width=8)
+                row_btns = [chk_btn]
+                chk_btn.configure(command=lambda n=name, p=pkg, bs=row_btns: _check_update(n, p, bs))
+                ttk.Label(row, text="(system)", foreground="gray").pack(side=tk.LEFT, padx=(0, 6))
+                chk_btn.pack(side=tk.LEFT)
 
         # --- Update all button ---
         def _update_all():

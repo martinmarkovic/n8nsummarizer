@@ -114,6 +114,17 @@ def main():
         translation_controller = TranslationController(window.translation_tab)
         logger.info("TranslationController initialized")
 
+        # Wire "Send to Translation tab" from the Summarizer response context menu:
+        # drop the response text into the Translation tab's Source box and switch to it.
+        def send_summary_to_translation(text):
+            window.translation_tab.set_source_text(text)
+            window.notebook.select(window.translation_tab)
+            window.set_status("Response sent to Translation tab")
+            logger.info(f"Forwarded {len(text)} chars from Summarizer to Translation source")
+
+        window.summarizer_tab.on_send_to_translation = send_summary_to_translation
+        logger.info("Wired Summarizer → Translation 'Send to Translation tab' action")
+
         # Initialize Video Subtitler tab controller
         # Wires: VideoSubtitlerTab UI ↔ VideoSubtitlerController ↔ VideoSubtitlerModel
         video_subtitler_controller = VideoSubtitlerController(window.video_subtitler_tab, settings, translation_controller)

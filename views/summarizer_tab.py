@@ -112,6 +112,9 @@ class SummarizerTab(BaseTab):
         self.on_export_docx = None
         self.on_copy_clicked = None
         self.on_clear_clicked = None
+        # Called with the response text when "Send to Translation tab" is picked.
+        # Wired in main.py to set the Translation tab's source box and switch tabs.
+        self.on_send_to_translation = None
         
         logger.info("SummarizerTab initialized - unified file/YouTube summarization with LLM")
     
@@ -698,6 +701,8 @@ class SummarizerTab(BaseTab):
         menu.add_command("Copy All", self._copy_all_response)
         menu.add_command("Clear", self._clear_response)
         menu.add_separator()
+        menu.add_command("Send to Translation tab", self._send_to_translation)
+        menu.add_separator()
         menu.add_tts_read_command(lambda: self._selection_or_all(self.response_text))
         menu.add_tts_stop_command()
         menu.add_separator()
@@ -801,6 +806,25 @@ class SummarizerTab(BaseTab):
         """Clear response text."""
         self._set_readonly_text(self.response_text, "Response cleared")
         self.set_status("Response cleared")
+
+    def _send_to_translation(self):
+        """Send the response text to the Translation tab's Source box and switch to it."""
+        text = self.response_text.get("1.0", tk.END).strip()
+        if not text:
+            messagebox.showinfo(
+                "Nothing to send", "The response is empty — summarize something first."
+            )
+            return
+
+        if callable(self.on_send_to_translation):
+            self.on_send_to_translation(text)
+            self.set_status(f"Sent {len(text)} characters to the Translation tab")
+        else:
+            logger.warning("on_send_to_translation not wired; cannot forward to Translation tab")
+            messagebox.showwarning(
+                "Unavailable",
+                "The Translation tab isn't available to receive this text.",
+            )
     
     # Button handlers
     def _browse_file(self):

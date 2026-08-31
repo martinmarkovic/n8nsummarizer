@@ -1,25 +1,18 @@
 # Workflow State
 
 ## Current Task
-First commit on `v13.6` (branched from `v13.5.5`): add a full Settings dialog
-(custom theme colors, font entry, path overrides), improve executable path
-resolution in cli_runner, and document new .env options.
+First commit on `v13.6.1` (branched from `v13.6`): add "Send to Translation tab"
+from Summarizer response, and a "Check" (update available) button in the
+Dependencies Manager.
 
-## Changes Included (staged for commit on v13.6)
-- `views/main_window.py`:
-  - New "⚙ Settings" popup (replaces direct cogwheel → deps): Appearance (custom
-    BG/Text/Accent colors with color-picker + live preview + Clear), font size
-    note, Paths (FFmpeg), Tools (Dependencies Manager shortcut).
-  - Font size now a direct-entry field clamped to [FONT_MIN=8, FONT_MAX=20];
-    +2/-2 buttons and `.env` save via SettingsManager.
-  - `_rebuild_theme_colors()` overlays saved custom colors onto base palette;
-    `_sync_path_env_vars()` pushes SettingsManager path values into os.environ;
-    theme toggle resets custom colors.
-  - Dependencies Manager adds `transcribe-anything` pip row.
-- `models/transcription/cli_runner.py`: `_resolve_transcribe_path()` /
-  `_resolve_ffmpeg_path()` with priority env var → hardcoded default → PATH.
-- `.env.example`: document APP_COLOR_BG/TEXT/ACCENT, APP_THEME, APP_FONT_SIZE,
-  FFMPEG_PATH, TRANSCRIBE_PATH.
+## Changes Included (staged for commit on v13.6.1)
+- `views/summarizer_tab.py`: add context-menu item "Send to Translation tab" on
+  the response text (`_send_to_translation`); new `on_send_to_translation` callback.
+- `main.py`: wire `window.summarizer_tab.on_send_to_translation` to set the
+  Translation tab's Source box and switch to it.
+- `views/main_window.py` (Dependencies Manager): add a "Check" per-row button
+  (`_check_update`) that compares installed vs newest available version and logs
+  UP TO DATE / UPDATE AVAILABLE / not installed.
 
 ## Source of Truth Notes
 - `main` is the long-lived branch; feature branches are version-tagged branches
@@ -32,5 +25,4 @@ resolution in cli_runner, and document new .env options.
 
 ## Next Steps
 - Commit staged changes.
-- Push to new upstream `origin/v13.6`.
-- Then branch out to `v13.6.1`.
+- Push to existing upstream `origin/v13.6.1` (new upstream).
