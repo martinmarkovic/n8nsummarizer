@@ -2,6 +2,11 @@
 
 Extracted from models/transcribe_model.py to keep subprocess and
 encoding details in a single place.
+
+Path resolution order (both executables):
+  1. Value of TRANSCRIBE_PATH / FFMPEG_PATH env var (set via Settings → Paths)
+  2. Hardcoded developer-machine path (fallback to "transcribe-anything" / "ffmpeg" if missing)
+  3. System PATH lookup
 """
 
 from __future__ import annotations
@@ -13,6 +18,59 @@ import sys
 from typing import Optional, Tuple
 
 from utils.logger import logger
+
+# ---------------------------------------------------------------------------
+# Default / fallback paths (kept here so the Settings dialog can read them)
+# ---------------------------------------------------------------------------
+_DEFAULT_TRANSCRIBE_PATH = "F:/Python scripts/n8nsummarizer/myenv/Scripts/transcribe-anything.exe"
+_DEFAULT_FFMPEG_PATH = "ffmpeg"
+
+_DEFAULT_SCRIPTS_DIR = "F:/Python scripts/n8nsummarizer/myenv/Scripts"
+
+
+def _resolve_transcribe_path() -> str:
+    """Return the transcribe-anything executable path to use.
+
+    Priority: TRANSCRIBE_PATH env var → hardcoded default → PATH lookup.
+    """
+    # 1. User-configured path from .env (loaded by dotenv at app start)
+    env_path = os.getenv("TRANSCRIBE_PATH", "").strip()
+    if env_path:
+        if os.path.exists(env_path):
+            logger.debug("Using TRANSCRIBE_PATH from .env: %s", env_path)
+            return env_path
+        else:
+            logger.warning(
+                "TRANSCRIBE_PATH set to %r but file not found; falling back.", env_path
+            )
+
+    # 2. Hardcoded default path
+    if os.path.exists(_DEFAULT_TRANSCRIBE_PATH):
+        logger.debug("Using hardcoded default transcribe-anything path.")
+        return _DEFAULT_TRANSCRIBE_PATH
+
+    # 3. Bare name → PATH lookup
+    logger.warning(
+        "transcribe-anything not found at expected path, using PATH lookup"
+    )
+    return "transcribe-anything"
+
+
+def _resolve_ffmpeg_path() -> str:
+    """Return the ffmpeg executable path to use.
+
+    Priority: FFMPEG_PATH env var → 'ffmpeg' (PATH lookup).
+    """
+    env_path = os.getenv("FFMPEG_PATH", "").strip()
+    if env_path:
+        if os.path.exists(env_path):
+            logger.debug("Using FFMPEG_PATH from .env: %s", env_path)
+            return env_path
+        else:
+            logger.warning(
+                "FFMPEG_PATH set to %r but file not found; falling back to 'ffmpeg'.", env_path
+            )
+    return _DEFAULT_FFMPEG_PATH
 
 
 def run_transcribe_cli(
@@ -27,13 +85,9 @@ def run_transcribe_cli(
     """
 
     try:
-        # Use full path to transcribe-anything since subprocess with list doesn't search PATH
-        transcribe_anything_path = "F:/Python scripts/n8nsummarizer/myenv/Scripts/transcribe-anything.exe"
-        if not os.path.exists(transcribe_anything_path):
-            # Fallback to just "transcribe-anything" if full path doesn't exist
-            transcribe_anything_path = "transcribe-anything"
-            logger.warning("transcribe-anything not found at expected path, using PATH lookup")
-        
+        # Resolve the transcribe-anything executable (env override → default → PATH)
+        transcribe_anything_path = _resolve_transcribe_path()
+
         # For YouTube URLs, don't quote them since transcribe-anything will extract the title
         # and the quotes would become part of the filename. For local file paths, quoting
         # is also not needed since we're using list format (not shell=True).
@@ -54,18 +108,17 @@ def run_transcribe_cli(
         env["PYTHONIOENCODING"] = "utf-8"
         env["PYTHONLEGACYWINDOWSSTDIO"] = "0"
         
-        # Add the project's virtual environment Scripts directory to PATH
-        # This ensures both transcribe-anything and yt-dlp.exe can be found
-        project_scripts_dir = "F:/Python scripts/n8nsummarizer/myenv/Scripts"
-        if os.path.exists(project_scripts_dir):
-            env["PATH"] = project_scripts_dir + os.pathsep + env["PATH"]
-            logger.debug("Added project virtual env scripts to PATH: %s", project_scripts_dir)
+        # Prepend the resolved scripts directory (from env or hardcoded default)
+        scripts_dir = os.path.dirname(transcribe_anything_path) if os.path.isabs(transcribe_anything_path) else _DEFAULT_SCRIPTS_DIR
+        if os.path.exists(scripts_dir):
+            env["PATH"] = scripts_dir + os.pathsep + env["PATH"]
+            logger.debug("Added scripts dir to PATH: %s", scripts_dir)
         else:
-            logger.warning("Project scripts directory not found: %s", project_scripts_dir)
+            logger.warning("Scripts directory not found: %s", scripts_dir)
         
         # Also try to find yt-dlp in common locations
         common_yt_dlp_locations = [
-            "F:/Python scripts/n8nsummarizer/myenv/Scripts",
+            _DEFAULT_SCRIPTS_DIR,
             "C:/Python314/Scripts",
             "C:/Python3133/Scripts",
             "C:/Python39/Scripts",

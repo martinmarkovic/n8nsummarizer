@@ -1,19 +1,25 @@
 # Workflow State
 
 ## Current Task
-First commit on `v13.5.5` (branched from `v13.5.4`): add subtitle style options to
-the Video Subtitler burn flow with persisted prefs; improve theme/font ordering.
+First commit on `v13.6` (branched from `v13.5.5`): add a full Settings dialog
+(custom theme colors, font entry, path overrides), improve executable path
+resolution in cli_runner, and document new .env options.
 
-## Changes Included (staged for commit on v13.5.5)
-- `views/video_subtitler_tab.py`: add "Subtitle Style" panel (font size, bold/italic,
-  text/outline colour, outline width, shadow, position alignment, vertical margin,
-  h/v scale). Exposes `get_subtitle_style()`, `get_burn_prefs()`, `apply_burn_prefs()`.
-- `controllers/video_subtitler_controller.py`: burn uses the selected style to build
-  `force_style` for ffmpeg subtitles filter (BorderStyle 4 opaque box vs 1 outline+shadow);
-  persist/load style prefs to `.env` via SettingsManager (`SUBTITLE_*` keys).
-- `views/main_window.py`: define base ('.') style so all ttk widgets inherit theme
-  colors; apply theme before font size and re-apply font size after theme toggle so
-  user font size isn't reset.
+## Changes Included (staged for commit on v13.6)
+- `views/main_window.py`:
+  - New "⚙ Settings" popup (replaces direct cogwheel → deps): Appearance (custom
+    BG/Text/Accent colors with color-picker + live preview + Clear), font size
+    note, Paths (FFmpeg), Tools (Dependencies Manager shortcut).
+  - Font size now a direct-entry field clamped to [FONT_MIN=8, FONT_MAX=20];
+    +2/-2 buttons and `.env` save via SettingsManager.
+  - `_rebuild_theme_colors()` overlays saved custom colors onto base palette;
+    `_sync_path_env_vars()` pushes SettingsManager path values into os.environ;
+    theme toggle resets custom colors.
+  - Dependencies Manager adds `transcribe-anything` pip row.
+- `models/transcription/cli_runner.py`: `_resolve_transcribe_path()` /
+  `_resolve_ffmpeg_path()` with priority env var → hardcoded default → PATH.
+- `.env.example`: document APP_COLOR_BG/TEXT/ACCENT, APP_THEME, APP_FONT_SIZE,
+  FFMPEG_PATH, TRANSCRIBE_PATH.
 
 ## Source of Truth Notes
 - `main` is the long-lived branch; feature branches are version-tagged branches
@@ -26,4 +32,5 @@ the Video Subtitler burn flow with persisted prefs; improve theme/font ordering.
 
 ## Next Steps
 - Commit staged changes.
-- Push to new upstream `origin/v13.5.5`.
+- Push to new upstream `origin/v13.6`.
+- Then branch out to `v13.6.1`.

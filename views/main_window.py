@@ -87,11 +87,17 @@ class MainWindow:
         7. Video Subtitler (index 6)
     """
 
-    # Font sizes
-    FONT_SIZES = [8, 10, 12, 14, 16, 18, 20]
+    # Font sizes (allowed range for validation; user can type any value in [MIN, MAX])
+    FONT_MIN = 8
+    FONT_MAX = 20
+    FONT_SIZES = [8, 10, 12, 14, 16, 18, 20]  # kept for legacy load validation
     DEFAULT_FONT_SIZE = 10
     ENV_KEY_FONT_SIZE = "APP_FONT_SIZE"
     ENV_FILE = ".env"
+
+    # Hardcoded fallback paths (shown as placeholder/default in Settings)
+    DEFAULT_TRANSCRIBE_PATH = "F:/Python scripts/n8nsummarizer/myenv/Scripts/transcribe-anything.exe"
+    DEFAULT_FFMPEG_PATH = "ffmpeg"
 
     def __init__(self, root, settings_manager: SettingsManager):
         """
@@ -113,6 +119,8 @@ class MainWindow:
 
         # Theme state - load from .env or use default
         self.current_theme = self._load_theme_from_env()
+        # Start with the base palette; _rebuild_theme_colors will overlay any saved
+        # custom colors from .env on top of it.
         self.theme_colors = LIGHT_THEME if self.current_theme == "light" else DARK_THEME
 
         # Font size state - load from .env if available
@@ -123,6 +131,12 @@ class MainWindow:
 
         # Setup UI
         self._setup_ui()
+
+        # Sync path overrides from .env into os.environ so cli_runner sees them
+        self._sync_path_env_vars()
+
+        # Overlay any saved custom colors before the first paint
+        self._rebuild_theme_colors()
 
         # Apply theme first (sets the clam theme + colors), then font size so the
         # font configuration wins and isn't reset by the theme's own font settings.
@@ -183,15 +197,16 @@ class MainWindow:
             env_font_size = os.getenv(self.ENV_KEY_FONT_SIZE)
             if env_font_size:
                 font_size = int(env_font_size)
-                # Validate that it's in our FONT_SIZES list
-                if font_size in self.FONT_SIZES:
+                # Clamp to allowed range
+                if self.FONT_MIN <= font_size <= self.FONT_MAX:
                     logger.info(f"Loaded font size from .env: {font_size}px")
                     return font_size
                 else:
+                    clamped = max(self.FONT_MIN, min(self.FONT_MAX, font_size))
                     logger.warning(
-                        f"Font size {font_size} not in allowed sizes, using default"
+                        f"Font size {font_size} out of range, clamping to {clamped}"
                     )
-                    return self.DEFAULT_FONT_SIZE
+                    return clamped
             else:
                 logger.debug("No font size preference found in .env, using default")
                 return self.DEFAULT_FONT_SIZE
@@ -202,44 +217,11 @@ class MainWindow:
             return self.DEFAULT_FONT_SIZE
 
     def _save_font_size_to_env(self, font_size: int) -> bool:
-        """
-        Save font size preference to .env file.
-
-        Updates or creates APP_FONT_SIZE in .env file without overwriting other settings.
-
-        Args:
-            font_size: Font size in pixels to save
-
-        Returns:
-            True if successful, False otherwise
-        """
+        """Save font size preference to .env via SettingsManager (preserves comments)."""
         try:
-            env_path = Path(self.ENV_FILE)
-
-            # Read existing .env content
-            env_content = {}
-            if env_path.exists():
-                with open(env_path, "r") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith("#"):
-                            if "=" in line:
-                                key, value = line.split("=", 1)
-                                # Skip APP_FONT_SIZE as we'll add updated version
-                                if key.strip() != self.ENV_KEY_FONT_SIZE:
-                                    env_content[key.strip()] = value.strip()
-
-            # Add/update font size
-            env_content[self.ENV_KEY_FONT_SIZE] = str(font_size)
-
-            # Write back to .env
-            with open(env_path, "w") as f:
-                for key, value in env_content.items():
-                    f.write(f"{key}={value}\n")
-
+            self.settings.set(self.ENV_KEY_FONT_SIZE, str(font_size))
             logger.info(f"Saved font size preference to .env: {font_size}px")
             return True
-
         except Exception as e:
             logger.error(f"Error saving font size to .env: {str(e)}")
             return False
@@ -273,7 +255,7 @@ class MainWindow:
 
     def _setup_header(self, parent):
         """
-        Setup header with title, font size controls, and theme toggle.
+        Setup header with title, font size controls, theme toggle, and settings button.
 
         Args:
             parent: Parent frame
@@ -287,30 +269,43 @@ class MainWindow:
         )
         self.title_label.grid(row=0, column=0, sticky=tk.W)
 
-        # Font size controls
+        # Controls on the right side
         controls_frame = ttk.Frame(header_frame)
         controls_frame.grid(row=0, column=1, sticky=tk.E, padx=(10, 0))
 
-        ttk.Label(controls_frame, text="Font:").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(controls_frame, text="Font:").pack(side=tk.LEFT, padx=(0, 4))
 
-        # Decrease font button
+        # Decrease button — steps by 2 (original behaviour)
         self.font_decrease_btn = ttk.Button(
             controls_frame, text="🔍-", width=3, command=self._decrease_font_size
         )
         self.font_decrease_btn.pack(side=tk.LEFT, padx=(0, 2))
 
-        # Font size display - Initialize with current font size
-        self.font_size_var = tk.StringVar(value=f"{self.current_font_size}px")
-        self.font_size_label = ttk.Label(
-            controls_frame, textvariable=self.font_size_var, width=6, anchor=tk.CENTER
+        # Font size entry — type any integer in [FONT_MIN, FONT_MAX] for precise
+        # control (not restricted to the +2/-2 steps of the buttons). A plain Entry
+        # is used (not a Spinbox) so there are no redundant arrow controls.
+        vcmd = (self.root.register(self._validate_font_entry), "%P")
+        self.font_size_var = tk.StringVar(value=str(self.current_font_size))
+        self.font_entry = ttk.Entry(
+            controls_frame,
+            textvariable=self.font_size_var,
+            width=4,
+            justify=tk.CENTER,
+            validate="key",
+            validatecommand=vcmd,
         )
-        self.font_size_label.pack(side=tk.LEFT, padx=2)
+        self.font_entry.pack(side=tk.LEFT, padx=(0, 2))
+        # Commit typed value on Enter or focus-out
+        self.font_entry.bind("<Return>",   lambda _e: self._on_font_entry_commit())
+        self.font_entry.bind("<FocusOut>", lambda _e: self._on_font_entry_commit())
 
-        # Increase font button
+        ttk.Label(controls_frame, text="px").pack(side=tk.LEFT, padx=(0, 2))
+
+        # Increase button — steps by 2 (original behaviour)
         self.font_increase_btn = ttk.Button(
             controls_frame, text="🔍+", width=3, command=self._increase_font_size
         )
-        self.font_increase_btn.pack(side=tk.LEFT, padx=(2, 15))
+        self.font_increase_btn.pack(side=tk.LEFT, padx=(2, 12))
 
         # Theme toggle button
         self.theme_btn = ttk.Button(
@@ -320,11 +315,11 @@ class MainWindow:
         )
         self.theme_btn.pack(side=tk.LEFT, padx=(0, 8))
 
-        # Cogwheel — dependencies manager
-        self.deps_btn = ttk.Button(
-            controls_frame, text="⚙", width=3, command=self._open_deps_manager
+        # Settings button (replaces old cogwheel → deps manager direct link)
+        self.settings_btn = ttk.Button(
+            controls_frame, text="⚙ Settings", command=self._open_settings
         )
-        self.deps_btn.pack(side=tk.LEFT)
+        self.settings_btn.pack(side=tk.LEFT)
 
     def _setup_tabs(self, parent):
         """
@@ -586,8 +581,18 @@ class MainWindow:
     def _toggle_theme(self):
         """
         Toggle between dark and light mode.
+
+        Choosing a mode is a full reset: any custom colors (background / text /
+        accent) are cleared so the pure light or dark palette applies to
+        everything, not just the font.
         """
         self.current_theme = "dark" if self.current_theme == "light" else "light"
+
+        # Clear saved custom colors so the base palette fully takes over
+        for key in ("APP_COLOR_BG", "APP_COLOR_TEXT", "APP_COLOR_ACCENT"):
+            self.settings.set(key, "")
+
+        # Use the pure base palette for the chosen mode
         self.theme_colors = DARK_THEME if self.current_theme == "dark" else LIGHT_THEME
 
         # Update button text
@@ -604,6 +609,377 @@ class MainWindow:
         # Call callback if set
         if self.on_theme_toggle:
             self.on_theme_toggle(self.current_theme)
+
+    # ------------------------------------------------------------------
+    # Settings dialog
+    # ------------------------------------------------------------------
+
+    def _open_settings(self):
+        """Open the Settings popup window.
+
+        Sections:
+        - Appearance  — custom theme colors (bg + text) and font size
+        - Paths       — FFmpeg and transcribe-anything paths
+        - Tools       — shortcut to the Dependencies Manager
+        """
+        # Prevent multiple instances
+        if (
+            hasattr(self, "_settings_window")
+            and self._settings_window
+            and self._settings_window.winfo_exists()
+        ):
+            self._settings_window.lift()
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title("⚙ Settings")
+        win.geometry("560x540")
+        win.minsize(420, 300)
+        win.resizable(True, True)
+        win.grab_set()
+        self._settings_window = win
+
+        # Apply current theme colors to the popup
+        colors = self.theme_colors
+        win.configure(bg=colors["bg_primary"])
+
+        # --- Pinned action-button bar at the bottom (always visible) ---
+        btn_bar = ttk.Frame(win, padding=(14, 10))
+        btn_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+        # --- Scrollable body (canvas + vertical scrollbar) ---
+        body = ttk.Frame(win)
+        body.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        canvas = tk.Canvas(body, highlightthickness=0, bg=colors["bg_primary"])
+        vscroll = ttk.Scrollbar(body, orient=tk.VERTICAL, command=canvas.yview)
+        canvas.configure(yscrollcommand=vscroll.set)
+        vscroll.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        outer = ttk.Frame(canvas, padding=14)
+        outer_id = canvas.create_window((0, 0), window=outer, anchor="nw")
+
+        # Keep the scroll region in sync with the content size
+        def _on_outer_config(_event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        outer.bind("<Configure>", _on_outer_config)
+
+        # Stretch the inner frame to the canvas width so content fills horizontally
+        def _on_canvas_config(event):
+            canvas.itemconfigure(outer_id, width=event.width)
+        canvas.bind("<Configure>", _on_canvas_config)
+
+        # Mouse-wheel scrolling (safe: the dialog is modal via grab_set)
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        win.bind("<MouseWheel>", _on_mousewheel)
+
+        ttk.Label(outer, text="Settings", font=("Segoe UI", 13, "bold")).pack(
+            anchor=tk.W, pady=(0, 12)
+        )
+
+        # ── Appearance ────────────────────────────────────────────────
+        appear_frame = ttk.LabelFrame(outer, text="Appearance", padding=10)
+        appear_frame.pack(fill=tk.X, pady=(0, 10))
+
+        # --- Theme colors ---
+        color_row = ttk.Frame(appear_frame)
+        color_row.pack(fill=tk.X, pady=(0, 8))
+
+        ttk.Label(color_row, text="Theme colors  (leave blank to use default light/dark palette):",
+                  wraplength=480).pack(anchor=tk.W, pady=(0, 6))
+
+        # Load currently saved custom colors (may be empty = "use default")
+        saved_bg     = self.settings.get("APP_COLOR_BG", "")
+        saved_text   = self.settings.get("APP_COLOR_TEXT", "")
+        saved_accent = self.settings.get("APP_COLOR_ACCENT", "")
+
+        # Background color
+        bg_row = ttk.Frame(appear_frame)
+        bg_row.pack(fill=tk.X, pady=2)
+        ttk.Label(bg_row, text="Background:", width=14, anchor=tk.W).pack(side=tk.LEFT)
+        bg_var = tk.StringVar(value=saved_bg)
+        bg_entry = ttk.Entry(bg_row, textvariable=bg_var, width=10)
+        bg_entry.pack(side=tk.LEFT, padx=(0, 6))
+        bg_preview = tk.Label(
+            bg_row,
+            bg=saved_bg if saved_bg else colors["bg_primary"],
+            width=3,
+            relief=tk.SOLID,
+            borderwidth=1,
+        )
+        bg_preview.pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(
+            bg_row,
+            text="Pick…",
+            command=lambda: self._pick_color(bg_var, bg_preview, "Background color"),
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(
+            bg_row,
+            text="Clear",
+            command=lambda: self._clear_color(bg_var, bg_preview, colors["bg_primary"]),
+        ).pack(side=tk.LEFT)
+
+        # Text / foreground color
+        text_row = ttk.Frame(appear_frame)
+        text_row.pack(fill=tk.X, pady=2)
+        ttk.Label(text_row, text="Text:", width=14, anchor=tk.W).pack(side=tk.LEFT)
+        text_var = tk.StringVar(value=saved_text)
+        text_entry = ttk.Entry(text_row, textvariable=text_var, width=10)
+        text_entry.pack(side=tk.LEFT, padx=(0, 6))
+        text_preview = tk.Label(
+            text_row,
+            bg=saved_text if saved_text else colors["text_primary"],
+            width=3,
+            relief=tk.SOLID,
+            borderwidth=1,
+        )
+        text_preview.pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(
+            text_row,
+            text="Pick…",
+            command=lambda: self._pick_color(text_var, text_preview, "Text color"),
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(
+            text_row,
+            text="Clear",
+            command=lambda: self._clear_color(text_var, text_preview, colors["text_primary"]),
+        ).pack(side=tk.LEFT)
+
+        # Accent color — borders, buttons, section labels, secondary text
+        accent_row = ttk.Frame(appear_frame)
+        accent_row.pack(fill=tk.X, pady=2)
+        ttk.Label(accent_row, text="Accent:", width=14, anchor=tk.W).pack(side=tk.LEFT)
+        accent_var = tk.StringVar(value=saved_accent)
+        accent_entry = ttk.Entry(accent_row, textvariable=accent_var, width=10)
+        accent_entry.pack(side=tk.LEFT, padx=(0, 6))
+        accent_preview = tk.Label(
+            accent_row,
+            bg=saved_accent if saved_accent else colors["accent"],
+            width=3,
+            relief=tk.SOLID,
+            borderwidth=1,
+        )
+        accent_preview.pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(
+            accent_row,
+            text="Pick…",
+            command=lambda: self._pick_color(accent_var, accent_preview, "Accent color"),
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(
+            accent_row,
+            text="Clear",
+            command=lambda: self._clear_color(accent_var, accent_preview, colors["accent"]),
+        ).pack(side=tk.LEFT)
+
+        ttk.Label(
+            appear_frame,
+            text="  Accent tints borders, buttons, tabs and section labels.",
+            foreground=colors.get("text_secondary", "gray"),
+        ).pack(anchor=tk.W, pady=(2, 0))
+
+        # Live-sync preview squares when user types a hex value manually
+        def _sync_preview(var, preview):
+            val = var.get().strip()
+            if val and (len(val) in (4, 7)) and val.startswith("#"):
+                try:
+                    preview.configure(bg=val)
+                except tk.TclError:
+                    pass
+
+        bg_var.trace_add("write", lambda *_: _sync_preview(bg_var, bg_preview))
+        text_var.trace_add("write", lambda *_: _sync_preview(text_var, text_preview))
+        accent_var.trace_add("write", lambda *_: _sync_preview(accent_var, accent_preview))
+
+        # --- Font size ---
+        font_row = ttk.Frame(appear_frame)
+        font_row.pack(fill=tk.X, pady=(8, 0))
+        ttk.Label(font_row, text="Font size:", width=14, anchor=tk.W).pack(side=tk.LEFT)
+        ttk.Label(
+            font_row,
+            text=f"(currently {self.current_font_size}px — change via the header controls)",
+            foreground=colors["text_secondary"] if "text_secondary" in colors else "gray",
+        ).pack(side=tk.LEFT)
+
+        # ── Paths ─────────────────────────────────────────────────────
+        paths_frame = ttk.LabelFrame(outer, text="Paths", padding=10)
+        paths_frame.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Label(
+            paths_frame,
+            text="Paths saved to .env override the built-in defaults.",
+            wraplength=480,
+        ).pack(anchor=tk.W, pady=(0, 8))
+
+        # FFmpeg
+        ffmpeg_row = ttk.Frame(paths_frame)
+        ffmpeg_row.pack(fill=tk.X, pady=2)
+        ttk.Label(ffmpeg_row, text="FFmpeg:", width=20, anchor=tk.W).pack(side=tk.LEFT)
+        saved_ffmpeg = self.settings.get("FFMPEG_PATH", "")
+        ffmpeg_var = tk.StringVar(value=saved_ffmpeg)
+        ttk.Entry(ffmpeg_row, textvariable=ffmpeg_var).pack(
+            side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6)
+        )
+        ttk.Button(
+            ffmpeg_row,
+            text="Browse…",
+            command=lambda: self._browse_exe(ffmpeg_var),
+        ).pack(side=tk.LEFT)
+        # placeholder hint
+        ttk.Label(
+            paths_frame,
+            text=f"  Default: {self.DEFAULT_FFMPEG_PATH}  (searched on system PATH if blank)",
+            foreground=colors.get("text_secondary", "gray"),
+        ).pack(anchor=tk.W)
+
+        ttk.Label(
+            paths_frame,
+            text="  (transcribe-anything is a pip package — manage its version in the Dependencies Manager below.)",
+            foreground=colors.get("text_secondary", "gray"),
+            wraplength=480,
+        ).pack(anchor=tk.W, pady=(6, 0))
+
+        # ── Tools ─────────────────────────────────────────────────────
+        tools_frame = ttk.LabelFrame(outer, text="Tools", padding=10)
+        tools_frame.pack(fill=tk.X, pady=(0, 12))
+
+        ttk.Button(
+            tools_frame,
+            text="⬆  Dependencies Manager…",
+            command=lambda: [win.grab_release(), self._open_deps_manager()],
+        ).pack(anchor=tk.W)
+
+        # ── Buttons (packed into the pinned bottom bar) ───────────────
+        def _apply_and_close():
+            self._apply_settings_from_dialog(
+                bg_var.get().strip(),
+                text_var.get().strip(),
+                accent_var.get().strip(),
+                ffmpeg_var.get().strip(),
+            )
+            win.destroy()
+
+        def _apply_only():
+            self._apply_settings_from_dialog(
+                bg_var.get().strip(),
+                text_var.get().strip(),
+                accent_var.get().strip(),
+                ffmpeg_var.get().strip(),
+            )
+
+        ttk.Button(btn_bar, text="Apply & Close", command=_apply_and_close).pack(
+            side=tk.RIGHT, padx=(6, 0)
+        )
+        ttk.Button(btn_bar, text="Apply", command=_apply_only).pack(side=tk.RIGHT)
+        ttk.Button(btn_bar, text="Cancel", command=win.destroy).pack(side=tk.LEFT)
+
+    def _pick_color(self, var: tk.StringVar, preview: tk.Label, title: str):
+        """Open the system color-chooser and write the result into *var*."""
+        from tkinter import colorchooser
+        initial = var.get().strip() or None
+        result = colorchooser.askcolor(color=initial, title=title, parent=self.root)
+        if result and result[1]:
+            hex_color = result[1]
+            var.set(hex_color)
+            try:
+                preview.configure(bg=hex_color)
+            except tk.TclError:
+                pass
+
+    def _clear_color(self, var: tk.StringVar, preview: tk.Label, fallback_color: str):
+        """Clear the custom color var and reset the preview to the theme fallback."""
+        var.set("")
+        try:
+            preview.configure(bg=fallback_color)
+        except tk.TclError:
+            pass
+
+    def _browse_exe(self, var: tk.StringVar):
+        """Open a file-browse dialog and put the chosen path into *var*."""
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            title="Select executable",
+            filetypes=[("Executable", "*.exe"), ("All files", "*.*")],
+        )
+        if path:
+            var.set(path)
+
+    def _apply_settings_from_dialog(
+        self,
+        bg_color: str,
+        text_color: str,
+        accent_color: str,
+        ffmpeg_path: str,
+    ):
+        """Persist settings from the dialog and apply theme / path changes live."""
+        # --- Paths (save to .env and sync into os.environ for this session) ---
+        self.settings.set("FFMPEG_PATH", ffmpeg_path)
+        # Keep os.environ in sync so cli_runner picks up new values immediately
+        if ffmpeg_path:
+            os.environ["FFMPEG_PATH"] = ffmpeg_path
+        else:
+            os.environ.pop("FFMPEG_PATH", None)
+        logger.info(f"Saved paths — FFMPEG_PATH={ffmpeg_path!r}")
+
+        # --- Colors ---
+        self.settings.set("APP_COLOR_BG", bg_color)
+        self.settings.set("APP_COLOR_TEXT", text_color)
+        self.settings.set("APP_COLOR_ACCENT", accent_color)
+        logger.info(f"Saved colors — BG={bg_color!r}, TEXT={text_color!r}, ACCENT={accent_color!r}")
+
+        # Rebuild the active theme dict with custom colors if provided, then re-apply
+        self._rebuild_theme_colors()
+        self._apply_theme()
+
+    def _sync_path_env_vars(self):
+        """Sync FFMPEG_PATH / TRANSCRIBE_PATH from SettingsManager into os.environ.
+
+        load_dotenv() runs at import time from config.py, so values already in
+        .env are usually picked up.  This call ensures anything written by
+        SettingsManager (which keeps its own dict) is also reflected in
+        os.environ for cli_runner to read via os.getenv().
+        """
+        for key in ("FFMPEG_PATH", "TRANSCRIBE_PATH"):
+            val = self.settings.get(key, "").strip()
+            if val:
+                os.environ[key] = val
+            else:
+                os.environ.pop(key, None)
+
+    def _rebuild_theme_colors(self):
+        """Rebuild self.theme_colors using saved custom colors (if any).
+
+        Custom colors from .env override their counterparts in the current
+        LIGHT/DARK palette; anything left blank keeps the base palette value.
+          - APP_COLOR_BG     → bg_primary, bg_secondary
+          - APP_COLOR_TEXT   → text_primary
+          - APP_COLOR_ACCENT → accent, border, button_bg, button_hover,
+                               accent_light, text_secondary
+        """
+        base = DARK_THEME if self.current_theme == "dark" else LIGHT_THEME
+        # Start from a fresh copy so we don't mutate the module-level constant
+        merged = dict(base)
+
+        custom_bg     = self.settings.get("APP_COLOR_BG", "").strip()
+        custom_text   = self.settings.get("APP_COLOR_TEXT", "").strip()
+        custom_accent = self.settings.get("APP_COLOR_ACCENT", "").strip()
+
+        if custom_bg:
+            merged["bg_primary"]   = custom_bg
+            merged["bg_secondary"] = custom_bg   # keep both bg keys consistent
+        if custom_text:
+            merged["text_primary"] = custom_text
+        if custom_accent:
+            # Accent drives all the "chrome": borders, buttons, tabs, labels.
+            merged["accent"]        = custom_accent
+            merged["border"]        = custom_accent
+            merged["button_bg"]     = custom_accent
+            merged["button_hover"]  = custom_accent
+            merged["accent_light"]  = custom_accent
+            merged["text_secondary"] = custom_accent
+
+        self.theme_colors = merged
 
     def _open_deps_manager(self):
         """
@@ -623,13 +999,14 @@ class MainWindow:
 
         # (display_name, pip_package)  — pip_package None means a system dependency
         DEPS = [
-            ("yt-dlp",         "yt-dlp"),
-            ("openai-whisper", "openai-whisper"),
-            ("requests",       "requests"),
-            ("python-docx",    "python-docx"),
-            ("python-dotenv",  "python-dotenv"),
-            ("openai",         "openai"),
-            ("ffmpeg",         None),  # system dep, no pip management
+            ("yt-dlp",              "yt-dlp"),
+            ("transcribe-anything", "transcribe-anything"),
+            ("openai-whisper",      "openai-whisper"),
+            ("requests",            "requests"),
+            ("python-docx",         "python-docx"),
+            ("python-dotenv",       "python-dotenv"),
+            ("openai",              "openai"),
+            ("ffmpeg",              None),  # system dep, no pip management
         ]
 
         _NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
@@ -850,35 +1227,37 @@ class MainWindow:
 
         return DEFAULT_THEME
 
-    def _increase_font_size(self):
-        """
-        Increase font size of all text widgets and save preference to .env
-        """
-        # Find next size
-        current_index = self.FONT_SIZES.index(self.current_font_size)
-        if current_index < len(self.FONT_SIZES) - 1:
-            self.current_font_size = self.FONT_SIZES[current_index + 1]
+    def _validate_font_entry(self, new_value: str) -> bool:
+        """Validate the font entry: allow empty (mid-typing) or 1-2 digits."""
+        return new_value == "" or (new_value.isdigit() and len(new_value) <= 2)
+
+    def _on_font_entry_commit(self):
+        """Apply the font size currently typed in the entry, clamping to [FONT_MIN, FONT_MAX]."""
+        try:
+            val = int(self.font_size_var.get())
+        except (ValueError, TypeError):
+            # Empty or non-numeric — restore last good value
+            self.font_size_var.set(str(self.current_font_size))
+            return
+        val = max(self.FONT_MIN, min(self.FONT_MAX, val))
+        self.font_size_var.set(str(val))
+        if val != self.current_font_size:
+            self.current_font_size = val
             self._apply_font_size()
-            # Save to .env
             self._save_font_size_to_env(self.current_font_size)
-            logger.info(
-                f"Font size increased to {self.current_font_size}px (saved to .env)"
-            )
+            logger.info(f"Font size set to {self.current_font_size}px (saved to .env)")
+
+    def _increase_font_size(self):
+        """Increase font size by 2 (capped at FONT_MAX). Original button behaviour."""
+        new = min(self.FONT_MAX, self.current_font_size + 2)
+        self.font_size_var.set(str(new))
+        self._on_font_entry_commit()
 
     def _decrease_font_size(self):
-        """
-        Decrease font size of all text widgets and save preference to .env
-        """
-        # Find previous size
-        current_index = self.FONT_SIZES.index(self.current_font_size)
-        if current_index > 0:
-            self.current_font_size = self.FONT_SIZES[current_index - 1]
-            self._apply_font_size()
-            # Save to .env
-            self._save_font_size_to_env(self.current_font_size)
-            logger.info(
-                f"Font size decreased to {self.current_font_size}px (saved to .env)"
-            )
+        """Decrease font size by 2 (floored at FONT_MIN). Original button behaviour."""
+        new = max(self.FONT_MIN, self.current_font_size - 2)
+        self.font_size_var.set(str(new))
+        self._on_font_entry_commit()
 
     def _apply_font_size(self):
         """
@@ -886,8 +1265,8 @@ class MainWindow:
 
         v6.3: Applies to all tabs including Downloader
         """
-        # Update display label
-        self.font_size_var.set(f"{self.current_font_size}px")
+        # Keep spinbox display in sync
+        self.font_size_var.set(str(self.current_font_size))
 
         fs = self.current_font_size
 
