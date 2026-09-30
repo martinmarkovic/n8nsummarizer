@@ -30,6 +30,7 @@ from datetime import datetime
 import os
 from views.base_tab import BaseTab
 from utils.logger import logger
+from utils.i18n import t
 
 
 class BulkTranscriberTab(BaseTab):
@@ -38,8 +39,8 @@ class BulkTranscriberTab(BaseTab):
     def __init__(self, notebook):
         # CRITICAL: Initialize variables BEFORE calling super().__init__()
         self.notebook = notebook
-        self.source_folder_var = tk.StringVar(value="[No folder selected]")
-        self.output_folder_var = tk.StringVar(value="[Default (Parent folder)]")
+        self.source_folder_var = tk.StringVar(value=t("bulk_transcriber.folder.none"))
+        self.output_folder_var = tk.StringVar(value=t("bulk_transcriber.folder.default_parent"))
 
         # Media type selections (video and audio formats)
         # Video formats
@@ -145,13 +146,13 @@ class BulkTranscriberTab(BaseTab):
 
     def _setup_folder_selection(self):
         """Folder selection - full width at top (row 0)"""
-        folder_frame = ttk.LabelFrame(self, text="Select Media Folder")
+        folder_frame = ttk.LabelFrame(self, text=t("bulk_transcriber.frame.select_folder"))
         folder_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=10, pady=10)
         folder_frame.columnconfigure(1, weight=1)
 
         ttk.Button(
             folder_frame,
-            text="[Browse...]",
+            text=t("bulk_transcriber.btn.browse"),
             command=self._browse_folder
         ).pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -162,20 +163,24 @@ class BulkTranscriberTab(BaseTab):
 
     def _browse_folder(self):
         """Open folder selection dialog"""
-        folder = filedialog.askdirectory(title="Select folder with media files to transcribe")
+        folder = filedialog.askdirectory(title=t("bulk_transcriber.dialog.select_source"))
         if folder:
             self.source_folder_var.set(folder)
             file_count = self._count_matching_files(folder)
             self.append_log(
-                f"Folder selected: {Path(folder).name} ({file_count} matching media files)",
+                t("bulk_transcriber.log.folder_selected").format(
+                    name=Path(folder).name, count=file_count
+                ),
                 "info"
             )
             if file_count > 0:
                 self.start_button.config(state=tk.NORMAL)
             else:
                 self.start_button.config(state=tk.DISABLED)
-                self.append_log("No media files found in selected folder", "warning")
-            self.output_folder_var.set(f"[Default: {Path(folder).parent.name}]")
+                self.append_log(t("bulk_transcriber.log.no_media_found"), "warning")
+            self.output_folder_var.set(
+                t("bulk_transcriber.folder.default_named").format(name=Path(folder).parent.name)
+            )
 
     def _count_matching_files(self, folder: str) -> int:
         """Count media files matching selected types"""
@@ -204,15 +209,15 @@ class BulkTranscriberTab(BaseTab):
 
     def _setup_media_type_video(self):
         """Checkboxes for video format selection - inside scrollable left panel"""
-        video_frame = ttk.LabelFrame(self._left_inner, text="Video Formats")
+        video_frame = ttk.LabelFrame(self._left_inner, text=t("bulk_transcriber.frame.video"))
         video_frame.pack(fill=tk.X, padx=10, pady=10)
 
         formats = [
-            ("MP4 (Default)", self.media_type_mp4),
-            ("MOV",           self.media_type_mov),
-            ("AVI",           self.media_type_avi),
-            ("MKV",           self.media_type_mkv),
-            ("WebM",          self.media_type_webm),
+            (t("bulk_transcriber.media.video.mp4"),  self.media_type_mp4),
+            (t("bulk_transcriber.media.video.mov"),  self.media_type_mov),
+            (t("bulk_transcriber.media.video.avi"),  self.media_type_avi),
+            (t("bulk_transcriber.media.video.mkv"),  self.media_type_mkv),
+            (t("bulk_transcriber.media.video.webm"), self.media_type_webm),
         ]
         for label, var in formats:
             ttk.Checkbutton(
@@ -222,17 +227,17 @@ class BulkTranscriberTab(BaseTab):
 
     def _setup_media_type_audio(self):
         """Checkboxes for audio format selection - inside scrollable left panel"""
-        audio_frame = ttk.LabelFrame(self._left_inner, text="Audio Formats")
+        audio_frame = ttk.LabelFrame(self._left_inner, text=t("bulk_transcriber.frame.audio"))
         audio_frame.pack(fill=tk.X, padx=10, pady=10)
 
         formats = [
-            ("MP3",  self.media_type_mp3),
-            ("WAV",  self.media_type_wav),
-            ("M4A",  self.media_type_m4a),
-            ("FLAC", self.media_type_flac),
-            ("AAC",  self.media_type_aac),
-            ("WMA",  self.media_type_wma),
-            ("OPUS", self.media_type_opus),
+            (t("bulk_transcriber.media.audio.mp3"),  self.media_type_mp3),
+            (t("bulk_transcriber.media.audio.wav"),  self.media_type_wav),
+            (t("bulk_transcriber.media.audio.m4a"),  self.media_type_m4a),
+            (t("bulk_transcriber.media.audio.flac"), self.media_type_flac),
+            (t("bulk_transcriber.media.audio.aac"),  self.media_type_aac),
+            (t("bulk_transcriber.media.audio.wma"),  self.media_type_wma),
+            (t("bulk_transcriber.media.audio.opus"), self.media_type_opus),
         ]
         for label, var in formats:
             ttk.Checkbutton(
@@ -263,25 +268,25 @@ class BulkTranscriberTab(BaseTab):
 
     def _on_media_type_changed(self):
         if not self._any_media_type_selected():
-            self.append_log("At least one media format must be selected", "warning")
+            self.append_log(t("bulk_transcriber.log.min_one_media"), "warning")
         self._update_start_button_state()
         self._save_preferences()
 
     def _setup_recursive_option(self):
         """Recursive subfolder scanning checkbox - inside scrollable left panel"""
-        recursive_frame = ttk.LabelFrame(self._left_inner, text="Scanning Options")
+        recursive_frame = ttk.LabelFrame(self._left_inner, text=t("bulk_transcriber.frame.scanning"))
         recursive_frame.pack(fill=tk.X, padx=10, pady=10)
 
         ttk.Checkbutton(
             recursive_frame,
-            text="Scan Subfolders (recursive scanning)",
+            text=t("bulk_transcriber.chk.scan_subfolders"),
             variable=self.recursive_subfolders,
             command=self._on_recursive_changed
         ).pack(anchor=tk.W, padx=10, pady=5)
 
         ttk.Label(
             recursive_frame,
-            text="When enabled: Scans all subfolders and maintains folder structure in output",
+            text=t("bulk_transcriber.lbl.recursive_hint"),
             foreground="gray",
             font=("TkDefaultFont", 9)
         ).pack(anchor=tk.W, padx=30, pady=(0, 5))
@@ -290,23 +295,28 @@ class BulkTranscriberTab(BaseTab):
         folder = self.get_source_folder()
         if folder:
             file_count = self._count_matching_files(folder)
-            label = "with subfolders" if self.recursive_subfolders.get() else "without subfolders"
+            label = (
+                t("bulk_transcriber.log.with_subfolders")
+                if self.recursive_subfolders.get()
+                else t("bulk_transcriber.log.without_subfolders")
+            )
             self.append_log(
-                f"Scanning mode updated ({label}): {file_count} matching files", "info"
+                t("bulk_transcriber.log.scanning_mode").format(label=label, count=file_count),
+                "info"
             )
             self._update_start_button_state()
         self._save_preferences()
 
     def _setup_output_format(self):
         """Checkboxes for transcript output format options - inside scrollable left panel"""
-        output_frame = ttk.LabelFrame(self._left_inner, text="Output Transcript Formats")
+        output_frame = ttk.LabelFrame(self._left_inner, text=t("bulk_transcriber.frame.output_formats"))
         output_frame.pack(fill=tk.X, padx=10, pady=10)
 
         formats = [
-            ("SRT (Default - Subtitles)", self.output_format_srt),
-            ("TXT (Plain text)",           self.output_format_txt),
-            ("VTT (WebVTT format)",        self.output_format_vtt),
-            ("JSON (Structured data)",     self.output_format_json),
+            (t("bulk_transcriber.output.srt"),  self.output_format_srt),
+            (t("bulk_transcriber.output.txt"),  self.output_format_txt),
+            (t("bulk_transcriber.output.vtt"),  self.output_format_vtt),
+            (t("bulk_transcriber.output.json"), self.output_format_json),
         ]
         for label, var in formats:
             ttk.Checkbutton(
@@ -316,19 +326,19 @@ class BulkTranscriberTab(BaseTab):
 
         ttk.Label(
             output_frame,
-            text="Note: At least one output format must be selected",
+            text=t("bulk_transcriber.lbl.output_note"),
             foreground="gray",
             font=("TkDefaultFont", 9)
         ).pack(anchor=tk.W, padx=10, pady=(10, 5))
 
     def _setup_output_location(self):
         """Output location radio buttons - inside scrollable left panel"""
-        loc_frame = ttk.LabelFrame(self._left_inner, text="Output Location")
+        loc_frame = ttk.LabelFrame(self._left_inner, text=t("bulk_transcriber.frame.output_location"))
         loc_frame.pack(fill=tk.X, padx=10, pady=10)
 
         ttk.Radiobutton(
             loc_frame,
-            text="Default (Parent folder of source)",
+            text=t("bulk_transcriber.radio.default_location"),
             variable=self.output_location_default,
             value=True,
             command=self._on_output_location_changed
@@ -339,7 +349,7 @@ class BulkTranscriberTab(BaseTab):
 
         ttk.Radiobutton(
             button_frame,
-            text="Custom Location:",
+            text=t("bulk_transcriber.radio.custom_location"),
             variable=self.output_location_default,
             value=False,
             command=self._on_output_location_changed
@@ -347,7 +357,7 @@ class BulkTranscriberTab(BaseTab):
 
         ttk.Button(
             button_frame,
-            text="[Browse...]",
+            text=t("bulk_transcriber.btn.browse"),
             command=self._browse_output_folder
         ).pack(side=tk.LEFT, padx=5)
 
@@ -360,24 +370,28 @@ class BulkTranscriberTab(BaseTab):
         if self.output_location_default.get():
             folder = self.get_source_folder()
             if folder:
-                self.output_folder_var.set(f"[Default: {Path(folder).parent.name}]")
+                self.output_folder_var.set(
+                    t("bulk_transcriber.folder.default_named").format(name=Path(folder).parent.name)
+                )
 
     def _browse_output_folder(self):
-        folder = filedialog.askdirectory(title="Select output folder for transcripts")
+        folder = filedialog.askdirectory(title=t("bulk_transcriber.dialog.select_output"))
         if folder:
             self.output_folder_var.set(folder)
             self.output_location_default.set(False)
-            self.append_log(f"Output folder set to: {Path(folder).name}", "info")
+            self.append_log(
+                t("bulk_transcriber.log.output_folder_set").format(name=Path(folder).name), "info"
+            )
 
     def _setup_processing_section(self):
         """Start/Cancel buttons - inside scrollable left panel"""
-        proc_frame = ttk.LabelFrame(self._left_inner, text="Processing")
+        proc_frame = ttk.LabelFrame(self._left_inner, text=t("bulk_transcriber.frame.processing"))
         proc_frame.pack(fill=tk.X, padx=10, pady=10)
 
         info_frame = ttk.Frame(proc_frame)
         info_frame.pack(fill=tk.X, padx=10, pady=5)
 
-        self.status_label = ttk.Label(info_frame, text="Ready", foreground="green")
+        self.status_label = ttk.Label(info_frame, text=t("bulk_transcriber.lbl.ready"), foreground="green")
         self.status_label.pack(side=tk.LEFT)
 
         button_frame = ttk.Frame(proc_frame)
@@ -385,7 +399,7 @@ class BulkTranscriberTab(BaseTab):
 
         self.start_button = ttk.Button(
             button_frame,
-            text="Start Transcribing",
+            text=t("bulk_transcriber.btn.start"),
             command=self._on_start_clicked,
             state=tk.DISABLED
         )
@@ -393,7 +407,7 @@ class BulkTranscriberTab(BaseTab):
 
         self.cancel_button = ttk.Button(
             button_frame,
-            text="Cancel",
+            text=t("bulk_transcriber.btn.cancel"),
             command=self._on_cancel_clicked,
             state=tk.DISABLED
         )
@@ -401,10 +415,10 @@ class BulkTranscriberTab(BaseTab):
 
     def _setup_progress_section(self):
         """Progress bar - inside scrollable left panel"""
-        prog_frame = ttk.LabelFrame(self._left_inner, text="Progress")
+        prog_frame = ttk.LabelFrame(self._left_inner, text=t("bulk_transcriber.frame.progress"))
         prog_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        self.current_file_var = tk.StringVar(value="Idle")
+        self.current_file_var = tk.StringVar(value=t("bulk_transcriber.lbl.idle"))
         ttk.Label(prog_frame, textvariable=self.current_file_var).pack(
             anchor=tk.W, padx=10, pady=5
         )
@@ -416,14 +430,16 @@ class BulkTranscriberTab(BaseTab):
         )
         self.progress_bar.pack(fill=tk.X, padx=10, pady=10)
 
-        self.progress_text_var = tk.StringVar(value="0 / 0 files")
+        self.progress_text_var = tk.StringVar(
+            value=t("bulk_transcriber.progress.files").format(current=0, total=0)
+        )
         ttk.Label(prog_frame, textvariable=self.progress_text_var).pack(
             anchor=tk.W, padx=10, pady=5
         )
 
     def _setup_status_log(self):
         """Status log with scroll - right column (row 1, col 1)"""
-        log_frame = ttk.LabelFrame(self, text="Status Log")
+        log_frame = ttk.LabelFrame(self, text=t("bulk_transcriber.frame.status_log"))
         log_frame.grid(row=1, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=10)
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
@@ -448,7 +464,7 @@ class BulkTranscriberTab(BaseTab):
 
     def get_source_folder(self) -> str:
         folder = self.source_folder_var.get()
-        return folder if folder != "[No folder selected]" else None
+        return folder if folder != t("bulk_transcriber.folder.none") else None
 
     def get_output_folder(self) -> str:
         folder = self.source_folder_var.get()
@@ -492,10 +508,14 @@ class BulkTranscriberTab(BaseTab):
     def update_progress(self, current: int, total: int):
         percentage = (current / total * 100) if total > 0 else 0
         self.progress_bar['value'] = percentage
-        self.progress_text_var.set(f"{current} / {total} files")
+        self.progress_text_var.set(
+            t("bulk_transcriber.progress.files").format(current=current, total=total)
+        )
 
     def set_current_file(self, filename: str):
-        self.current_file_var.set(f"Processing: {filename}")
+        self.current_file_var.set(
+            t("bulk_transcriber.progress.processing").format(filename=filename)
+        )
 
     def append_log(self, message: str, status: str = "info"):
         self.status_log.config(state=tk.NORMAL)
@@ -507,11 +527,13 @@ class BulkTranscriberTab(BaseTab):
         self.status_log.config(state=tk.DISABLED)
 
     def clear_all(self):
-        self.source_folder_var.set("[No folder selected]")
-        self.output_folder_var.set("[Default (Parent folder)]")
+        self.source_folder_var.set(t("bulk_transcriber.folder.none"))
+        self.output_folder_var.set(t("bulk_transcriber.folder.default_parent"))
         self.progress_bar['value'] = 0
-        self.progress_text_var.set("0 / 0 files")
-        self.current_file_var.set("Idle")
+        self.progress_text_var.set(
+            t("bulk_transcriber.progress.files").format(current=0, total=0)
+        )
+        self.current_file_var.set(t("bulk_transcriber.lbl.idle"))
         self.status_log.config(state=tk.NORMAL)
         self.status_log.delete('1.0', tk.END)
         self.status_log.config(state=tk.DISABLED)
@@ -534,7 +556,7 @@ class BulkTranscriberTab(BaseTab):
             self.on_start_requested()
         else:
             logger.warning("No start callback registered for Bulk Transcriber!")
-            self.append_log("ERROR: Start callback not registered. Check main.py", "error")
+            self.append_log(t("bulk_transcriber.log.start_callback_missing"), "error")
 
     def _on_cancel_clicked(self):
         if self.on_cancel_requested:

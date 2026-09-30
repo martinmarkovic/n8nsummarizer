@@ -23,6 +23,7 @@ from pathlib import Path
 
 from views.base_tab import BaseTab
 from controllers.downloader_controller import DownloaderController
+from utils.i18n import t
 
 
 class DownloaderTab(BaseTab):
@@ -33,10 +34,10 @@ class DownloaderTab(BaseTab):
         
         # State variables
         self.url_var = tk.StringVar()
-        self.download_path_var = tk.StringVar(value="[No folder selected]")
+        self.download_path_var = tk.StringVar(value=t("downloader.status.no_folder"))
         self.resolution_var = tk.StringVar()
         self.po_token_var = tk.StringVar()
-        self.progress_var = tk.StringVar(value="Ready")
+        self.progress_var = tk.StringVar(value=t("downloader.status.ready"))
         
         # Instagram/Facebook cookie settings
         self.instagram_cookie_file_var = tk.StringVar()
@@ -87,12 +88,12 @@ class DownloaderTab(BaseTab):
         self.rowconfigure(2, weight=1)  # Log area expands
         
         # === Row 0: Input Controls Frame ===
-        controls_frame = ttk.LabelFrame(self, text="Download Settings", padding=15)
+        controls_frame = ttk.LabelFrame(self, text=t("downloader.frame.settings"), padding=15)
         controls_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         controls_frame.columnconfigure(1, weight=1)
         
         # URL Input
-        ttk.Label(controls_frame, text="YouTube URL:").grid(
+        ttk.Label(controls_frame, text=t("downloader.lbl.youtube_url")).grid(
             row=0, column=0, sticky=tk.W, padx=(0, 10), pady=5
         )
         
@@ -104,14 +105,14 @@ class DownloaderTab(BaseTab):
         # Info button
         info_btn = ttk.Button(
             controls_frame,
-            text="Info",
+            text=t("downloader.btn.info"),
             width=8,
             command=self._fetch_video_info
         )
         info_btn.grid(row=0, column=2, padx=(5, 0), pady=5)
         
         # Destination Folder
-        ttk.Label(controls_frame, text="Save to:").grid(
+        ttk.Label(controls_frame, text=t("downloader.lbl.save_to")).grid(
             row=1, column=0, sticky=tk.W, padx=(0, 10), pady=5
         )
         
@@ -124,13 +125,13 @@ class DownloaderTab(BaseTab):
         
         browse_btn = ttk.Button(
             controls_frame,
-            text="Browse...",
+            text=t("downloader.btn.browse"),
             command=self._browse_folder
         )
         browse_btn.grid(row=1, column=2, padx=(5, 0), pady=5)
         
         # === Row 2: Quality Selection ===
-        ttk.Label(controls_frame, text="Quality:").grid(
+        ttk.Label(controls_frame, text=t("downloader.lbl.quality")).grid(
             row=2, column=0, sticky=tk.W, padx=(0, 10), pady=5
         )
         
@@ -148,14 +149,14 @@ class DownloaderTab(BaseTab):
         # Download Button
         self.download_btn = ttk.Button(
             controls_frame,
-            text="⬇ Download",
+            text=t("downloader.btn.download"),
             command=self._start_download,
             width=12
         )
         self.download_btn.grid(row=2, column=2, padx=(5, 0), pady=5)
         
         # === Row 3: PO Token Input ===
-        ttk.Label(controls_frame, text="PO Token:").grid(
+        ttk.Label(controls_frame, text=t("downloader.lbl.po_token")).grid(
             row=3, column=0, sticky=tk.W, padx=(0, 10), pady=5
         )
         
@@ -172,20 +173,20 @@ class DownloaderTab(BaseTab):
         # Help button for PO Token
         help_btn = ttk.Button(
             controls_frame,
-            text="❓ Help",
+            text=t("downloader.btn.help"),
             width=12,
         command=self._show_po_token_help
         )
         help_btn.grid(row=3, column=2, padx=(5, 0), pady=5)
         
         # === Row 4: Instagram Settings (initially hidden) ===
-        self.instagram_frame = ttk.LabelFrame(controls_frame, text="Instagram Settings")
+        self.instagram_frame = ttk.LabelFrame(controls_frame, text=t("downloader.frame.instagram"))
         self.instagram_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(20, 5))
         self.instagram_frame.columnconfigure(1, weight=1)
         self.instagram_frame.grid_remove()  # Hidden by default
         
         # Cookie File Path
-        ttk.Label(self.instagram_frame, text="Cookie File:").grid(
+        ttk.Label(self.instagram_frame, text=t("downloader.lbl.cookie_file")).grid(
             row=0, column=0, sticky=tk.W, padx=(10, 5), pady=5
         )
         
@@ -200,14 +201,14 @@ class DownloaderTab(BaseTab):
         
         cookie_browse_btn = ttk.Button(
             self.instagram_frame,
-            text="Browse...",
+            text=t("downloader.btn.browse"),
             width=10,
             command=self._browse_cookie_file
         )
         cookie_browse_btn.grid(row=0, column=2, padx=(0, 10), pady=5)
         
         # Cookie Browser
-        ttk.Label(self.instagram_frame, text="Cookie Browser:").grid(
+        ttk.Label(self.instagram_frame, text=t("downloader.lbl.cookie_browser")).grid(
             row=1, column=0, sticky=tk.W, padx=(10, 5), pady=5
         )
         
@@ -225,14 +226,14 @@ class DownloaderTab(BaseTab):
         # Help text
         help_label = ttk.Label(
             self.instagram_frame,
-            text="Required for Stories and private content",
+            text=t("downloader.lbl.cookie_help"),
             foreground="gray",
             font=("TkDefaultFont", 8)
         )
         help_label.grid(row=2, column=0, columnspan=3, sticky=tk.W, padx=10, pady=(0, 5))
         
         # Facebook Cookie Settings
-        ttk.Label(self.instagram_frame, text="Facebook Cookie File:").grid(
+        ttk.Label(self.instagram_frame, text=t("downloader.lbl.facebook_cookie_file")).grid(
             row=3, column=0, sticky=tk.W, padx=(10, 5), pady=5
         )
         
@@ -246,14 +247,14 @@ class DownloaderTab(BaseTab):
         
         facebook_cookie_browse_btn = ttk.Button(
             self.instagram_frame,
-            text="Browse...",
+            text=t("downloader.btn.browse"),
             width=10,
             command=self._browse_facebook_cookie_file
         )
         facebook_cookie_browse_btn.grid(row=3, column=2, padx=(0, 10), pady=5)
         
         # Facebook Cookie Browser
-        ttk.Label(self.instagram_frame, text="Facebook Cookie Browser:").grid(
+        ttk.Label(self.instagram_frame, text=t("downloader.lbl.facebook_cookie_browser")).grid(
             row=4, column=0, sticky=tk.W, padx=(10, 5), pady=5
         )
         
@@ -270,14 +271,14 @@ class DownloaderTab(BaseTab):
         # Facebook Help text
         facebook_help_label = ttk.Label(
             self.instagram_frame,
-            text="Required for private Facebook videos",
+            text=t("downloader.lbl.facebook_cookie_help"),
             foreground="gray",
             font=("TkDefaultFont", 8)
         )
         facebook_help_label.grid(row=5, column=0, columnspan=3, sticky=tk.W, padx=10, pady=(0, 5))
         
         # === Row 1: Video Info Display ===
-        info_frame = ttk.LabelFrame(self, text="Video Information", padding=10)
+        info_frame = ttk.LabelFrame(self, text=t("downloader.frame.video_info"), padding=10)
         info_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), padx=10, pady=(0, 10))
         info_frame.columnconfigure(0, weight=1)
         
@@ -285,7 +286,7 @@ class DownloaderTab(BaseTab):
         self.info_text.grid(row=0, column=0, sticky=(tk.W, tk.E))
         
         # === Row 2: Progress & Log ===
-        log_frame = ttk.LabelFrame(self, text="Download Progress", padding=10)
+        log_frame = ttk.LabelFrame(self, text=t("downloader.frame.progress"), padding=10)
         log_frame.grid(row=2, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
         log_frame.rowconfigure(1, weight=1)
         log_frame.columnconfigure(0, weight=1)
@@ -315,12 +316,12 @@ class DownloaderTab(BaseTab):
             
     def _browse_folder(self):
         """Open folder browser dialog for selecting download destination."""
-        folder = filedialog.askdirectory(title="Select Download Folder")
+        folder = filedialog.askdirectory(title=t("downloader.dialog.select_folder"))
         if folder:
             self.download_path_var.set(folder)
             if self.controller:
                 self.controller.set_download_path(folder)
-                self.log_message(f"Download folder set: {folder}")
+                self.log_message(t("downloader.log.folder_set").format(path=folder))
                 
     def _on_resolution_change(self, event=None):
         """Handle resolution selection change."""
@@ -338,7 +339,7 @@ class DownloaderTab(BaseTab):
             
         if self.controller:
             self.controller.set_resolution(resolution)
-            self.log_message(f"Quality changed to: {resolution}")
+            self.log_message(t("downloader.log.quality_changed").format(resolution=resolution))
     
     def _on_po_token_change(self, event=None):
         """Handle PO Token input change."""
@@ -346,49 +347,37 @@ class DownloaderTab(BaseTab):
         if self.controller:
             self.controller.set_po_token(token)
             if token:
-                self.log_message("PO Token updated (stored for future use)")
+                self.log_message(t("downloader.log.token_updated"))
             else:
-                self.log_message("PO Token cleared")
+                self.log_message(t("downloader.log.token_cleared"))
     
     def _show_po_token_help(self):
         """Show help dialog for PO Token."""
-        help_text = (
-            "PO Token (optional) can be used for future features.\n\n"
-            "Current downloads work without PO Token using simplified format strings.\n\n"
-            "How to get PO Token (if needed later):\n\n"
-            "1. Install the browser extension (see docs/browser_extension/)\n"
-            "2. Open YouTube in your browser\n"
-            "3. Click the extension icon\n"
-            "4. Click 'Extract PO Token'\n"
-            "5. Token is automatically copied to clipboard\n"
-            "6. Paste it here\n\n"
-            "Token lasts 2-7 days before needing refresh.\n\n"
-            "Manual extraction: See docs/YOUTUBE_PO_TOKEN_GUIDE.md"
-        )
-        messagebox.showinfo("PO Token Help", help_text)
+        help_text = t("downloader.help.po_token_body")
+        messagebox.showinfo(t("downloader.help.po_token_title"), help_text)
             
     # Instagram cookie methods
     def _browse_cookie_file(self):
         """Browse for cookie file."""
         file_path = filedialog.askopenfilename(
-            title="Select cookie file",
-            filetypes=[("Cookie Files", "*.txt"), ("All Files", "*.*")]
+            title=t("downloader.dialog.select_cookie"),
+            filetypes=[(t("downloader.filetype.cookie"), "*.txt"), (t("downloader.filetype.all"), "*.*")]
         )
         if file_path:
             self.cookie_file_var.set(file_path)
             self.controller.set_instagram_cookie_file(file_path)
-            self.log_message(f"Instagram cookie file set: {file_path}")
+            self.log_message(t("downloader.log.instagram_cookie_file_set").format(path=file_path))
 
     def _browse_facebook_cookie_file(self):
         """Browse for Facebook cookie file."""
         file_path = filedialog.askopenfilename(
-            title="Select Facebook cookie file",
-            filetypes=[("Cookie Files", "*.txt"), ("All Files", "*.*")]
+            title=t("downloader.dialog.select_facebook_cookie"),
+            filetypes=[(t("downloader.filetype.cookie"), "*.txt"), (t("downloader.filetype.all"), "*.*")]
         )
         if file_path:
             self.facebook_cookie_file_var.set(file_path)
             self.controller.set_facebook_cookie_file(file_path)
-            self.log_message(f"Facebook cookie file set: {file_path}")
+            self.log_message(t("downloader.log.facebook_cookie_file_set").format(path=file_path))
     
     def _on_cookie_file_change(self, event=None):
         """Handle cookie file input change."""
@@ -396,9 +385,9 @@ class DownloaderTab(BaseTab):
         if self.controller:
             self.controller.set_instagram_cookie_file(path)
             if path:
-                self.log_message(f"Instagram cookie file set: {path}")
+                self.log_message(t("downloader.log.instagram_cookie_file_set").format(path=path))
             else:
-                self.log_message("Instagram cookie file cleared")
+                self.log_message(t("downloader.log.instagram_cookie_file_cleared"))
     
     def _on_cookie_browser_change(self, event=None):
         """Handle cookie browser selection change."""
@@ -406,9 +395,9 @@ class DownloaderTab(BaseTab):
         if self.controller:
             self.controller.set_instagram_cookie_browser(browser)
             if browser:
-                self.log_message(f"Instagram cookie browser set: {browser}")
+                self.log_message(t("downloader.log.instagram_cookie_browser_set").format(browser=browser))
             else:
-                self.log_message("Instagram cookie browser cleared")
+                self.log_message(t("downloader.log.instagram_cookie_browser_cleared"))
 
     def _on_facebook_cookie_file_change(self, event=None):
         """Handle Facebook cookie file input change."""
@@ -416,9 +405,9 @@ class DownloaderTab(BaseTab):
         if self.controller:
             self.controller.set_facebook_cookie_file(path)
             if path:
-                self.log_message(f"Facebook cookie file set: {path}")
+                self.log_message(t("downloader.log.facebook_cookie_file_set").format(path=path))
             else:
-                self.log_message("Facebook cookie file cleared")
+                self.log_message(t("downloader.log.facebook_cookie_file_cleared"))
 
     def _on_facebook_cookie_browser_change(self, event=None):
         """Handle Facebook cookie browser selection change."""
@@ -426,9 +415,9 @@ class DownloaderTab(BaseTab):
         if self.controller:
             self.controller.set_facebook_cookie_browser(browser)
             if browser:
-                self.log_message(f"Facebook cookie browser set: {browser}")
+                self.log_message(t("downloader.log.facebook_cookie_browser_set").format(browser=browser))
             else:
-                self.log_message("Facebook cookie browser cleared")
+                self.log_message(t("downloader.log.facebook_cookie_browser_cleared"))
     
     def _on_url_change(self, event=None):
         """Handle URL change - show Instagram settings if Instagram or Facebook URL detected."""
@@ -445,7 +434,7 @@ class DownloaderTab(BaseTab):
         """Fetch and display video information."""
         url = self.url_var.get().strip()
         if not url:
-            messagebox.showwarning("No URL", "Please enter a YouTube URL first")
+            messagebox.showwarning(t("downloader.msg.no_url_title"), t("downloader.msg.no_url_body"))
             return
             
         if self.controller:
@@ -537,7 +526,7 @@ class DownloaderTab(BaseTab):
         Args:
             message: Error message
         """
-        messagebox.showerror("Download Error", message)
+        messagebox.showerror(t("downloader.msg.error_title"), message)
         
     def show_success(self, message: str):
         """Show success dialog.
@@ -545,7 +534,7 @@ class DownloaderTab(BaseTab):
         Args:
             message: Success message
         """
-        messagebox.showinfo("Download Complete", message)
+        messagebox.showinfo(t("downloader.msg.complete_title"), message)
         
     def after_download(self, success: bool, message: str):
         """Called after download completes (from background thread).
@@ -574,5 +563,5 @@ class DownloaderTab(BaseTab):
         self.info_text.delete("1.0", tk.END)
         self.info_text.config(state=tk.DISABLED)
         self.status_log.delete("1.0", tk.END)
-        self.progress_var.set("Ready")
+        self.progress_var.set(t("downloader.status.ready"))
         # Don't clear download path and PO token - user likely wants to reuse them

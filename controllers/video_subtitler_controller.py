@@ -415,24 +415,54 @@ class VideoSubtitlerController:
                 return
 
             try:
+                # Make sure the temp dir exists (the user may have deleted it)
+                srt_file.parent.mkdir(parents=True, exist_ok=True)
                 srt_file.write_text(ui_content, encoding="utf-8")
             except Exception as write_err:
                 self.tab.after(0, lambda e=write_err: self.tab.show_error(f"Could not write subtitle file: {e}"))
                 return
             
-            # Resolve the input video. Prefer the exact file we just processed/downloaded
-            # so we never burn onto a stale leftover from a previous session.
+            # Resolve the input video to burn onto.
+            #
+            # Priority:
+            #   1. Local-file mode  -> the exact file the user selected on disk
+            #      (e.g. a video on their Desktop). We never touch temp_subtitler.
+            #   2. URL / online mode -> the video we downloaded/processed
+            #      (self.input_video_path), which lives in temp_subtitler.
+            #   3. Fallback         -> scan temp_subtitler for a video.* file.
             VIDEO_EXTENSIONS = {".mp4", ".webm", ".mkv", ".avi", ".mov"}
             input_video = None
-            if self.input_video_path and Path(self.input_video_path).is_file():
-                input_video = Path(self.input_video_path)
+
+            try:
+                input_mode = self.tab.get_input_mode()
+            except Exception:
+                input_mode = None
+
+            if input_mode == "local":
+                local_sel = self.tab.get_local_file_path()
+                if local_sel and Path(local_sel).is_file():
+                    input_video = Path(local_sel)
+                    logger.info("Burn: using user-selected local video: %s", input_video)
+                else:
+                    self.tab.after(0, lambda: self.tab.show_error(
+                        "No local video selected. Choose a file with the 'Local File' "
+                        "browse button before burning."
+                    ))
+                    return
             else:
-                # Fallback: scan temp folder for a video.* file (deterministic order)
-                candidates = sorted(
-                    f for f in TEMP_DIR.iterdir()
-                    if f.is_file() and f.stem == "video" and f.suffix.lower() in VIDEO_EXTENSIONS
-                )
-                input_video = candidates[0] if candidates else None
+                # URL / online source — use the downloaded/processed video in temp.
+                if self.input_video_path and Path(self.input_video_path).is_file():
+                    input_video = Path(self.input_video_path)
+                else:
+                    # Fallback: scan temp folder for a video.* file (deterministic order)
+                    try:
+                        candidates = sorted(
+                            f for f in TEMP_DIR.iterdir()
+                            if f.is_file() and f.stem == "video" and f.suffix.lower() in VIDEO_EXTENSIONS
+                        )
+                    except FileNotFoundError:
+                        candidates = []
+                    input_video = candidates[0] if candidates else None
 
             if not input_video:
                 self.tab.after(0, lambda: self.tab.show_error(
@@ -459,43 +489,67 @@ class VideoSubtitlerController:
             use_dark_bg = self.tab.get_dark_bg()
             opacity = self.tab.get_bg_opacity()
 
-            # Gather user-selected subtitle style options (with safe fallbacks)
-            try:
-                style = self.tab.get_subtitle_style()
-            except AttributeError:
-                style = {}
-
-            # Remember these selections as the new "last pick"
+            # Remember current selections as the new "last pick"
             self._save_burn_prefs()
 
-            style_parts = [
-                f"FontSize={style.get('font_size', 24)}",
-                f"PrimaryColour={style.get('primary_colour', '&H00FFFFFF')}",
-                f"OutlineColour={style.get('outline_colour', '&H00000000')}",
-                f"Bold={-1 if style.get('bold') else 0}",
-                f"Italic={-1 if style.get('italic') else 0}",
-                f"Alignment={style.get('alignment', 2)}",
-                f"MarginV={style.get('margin_v', 20)}",
-                f"ScaleX={style.get('scale_x', 100)}",
-                f"ScaleY={style.get('scale_y', 100)}",
-                f"Shadow={style.get('shadow', 0)}",
-            ]
+            # Burn mode: "simple" (minimal, known-good command — default) or
+            # "advanced" (full style panel with font/colour/scale/etc.).
+            try:
+                burn_mode = self.tab.get_burn_mode()
+            except AttributeError:
+                burn_mode = "simple"
 
-            if use_dark_bg:
-                # Opaque box behind text. BackColour is &HAABBGGRR — AA is alpha
-                # (00 = fully opaque, FF = fully transparent).
-                alpha_hex = format(int((1.0 - opacity) * 255), '02X')
-                back_colour = f"&H{alpha_hex}000000"
-                style_parts.append(f"BackColour={back_colour}")
-                style_parts.append("BorderStyle=4")  # opaque box
-                # For box style, Outline controls box padding
-                style_parts.append(f"Outline={style.get('outline', 2)}")
+            if burn_mode == "advanced":
+                # --- Advanced: build a full force_style from the style panel ---
+                try:
+                    style = self.tab.get_subtitle_style()
+                except AttributeError:
+                    style = {}
+
+                style_parts = [
+                    f"FontSize={style.get('font_size', 16)}",
+                    f"PrimaryColour={style.get('primary_colour', '&H00FFFFFF')}",
+                    f"OutlineColour={style.get('outline_colour', '&H00000000')}",
+                    f"Bold={-1 if style.get('bold') else 0}",
+                    f"Italic={-1 if style.get('italic') else 0}",
+                    f"Alignment={style.get('alignment', 2)}",
+                    f"MarginV={style.get('margin_v', 20)}",
+                    f"ScaleX={style.get('scale_x', 100)}",
+                    f"ScaleY={style.get('scale_y', 100)}",
+                    f"Shadow={style.get('shadow', 0)}",
+                ]
+
+                if use_dark_bg:
+                    # Opaque box behind text. BackColour is &HAABBGGRR — AA is alpha
+                    # (00 = fully opaque, FF = fully transparent).
+                    alpha_hex = format(int((1.0 - opacity) * 255), '02X')
+                    back_colour = f"&H{alpha_hex}000000"
+                    style_parts.append(f"BackColour={back_colour}")
+                    style_parts.append("BorderStyle=4")  # opaque box
+                    # For box style, Outline controls box padding
+                    style_parts.append(f"Outline={style.get('outline', 2)}")
+                else:
+                    style_parts.append("BorderStyle=1")  # outline + shadow
+                    style_parts.append(f"Outline={style.get('outline', 2)}")
+
+                force_style = ",".join(style_parts)
+                vf_filter = f"subtitles={srt_path_fixed}:force_style='{force_style}'"
             else:
-                style_parts.append("BorderStyle=1")  # outline + shadow
-                style_parts.append(f"Outline={style.get('outline', 2)}")
+                # --- Simple (default): the original minimal command ---
+                # Lets libass use its own sensible defaults for font/size/colour.
+                # The only options are the optional dark background box.
+                if use_dark_bg:
+                    alpha_hex = format(int((1.0 - opacity) * 255), '02X')
+                    back_colour = f"&H{alpha_hex}000000"
+                    force_style = (
+                        f"BackColour={back_colour},BorderStyle=4,"
+                        f"Outline=0,Shadow=0,MarginV=20"
+                    )
+                    vf_filter = f"subtitles={srt_path_fixed}:force_style='{force_style}'"
+                else:
+                    vf_filter = f"subtitles={srt_path_fixed}"
 
-            force_style = ",".join(style_parts)
-            vf_filter = f"subtitles={srt_path_fixed}:force_style='{force_style}'"
+            logger.info("Burn mode: %s | vf: %s", burn_mode, vf_filter)
             
             import subprocess
             import os
@@ -673,6 +727,7 @@ class VideoSubtitlerController:
         "scale_y": ("SUBTITLE_SCALE_Y", int),
         "dark_bg": ("SUBTITLE_DARK_BG", bool),
         "bg_opacity": ("SUBTITLE_BG_OPACITY", float),
+        "burn_mode": ("SUBTITLE_BURN_MODE", str),
     }
 
     def _load_burn_prefs(self):

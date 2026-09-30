@@ -12,6 +12,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import List, Dict, Callable, Optional
 from .constants import FILE_TYPES
+from utils.i18n import t
 
 
 class FileTypeSelector:
@@ -54,10 +55,12 @@ class FileTypeSelector:
         """
         self.on_change_callback = on_change
         
-        for file_key, file_label in self.file_types.items():
+        for file_key in self.file_types.keys():
             ttk.Checkbutton(
                 parent_frame,
-                text=file_label,
+                # Display label is localized via t(); the logic key (file_key)
+                # is never translated and drives selection state.
+                text=t(f"bulk_summarizer.filetype.{file_key}"),
                 variable=self.vars[file_key],
                 command=self._on_checkbox_changed
             ).pack(anchor=tk.W, padx=10, pady=5)

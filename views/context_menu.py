@@ -7,6 +7,7 @@ by any tab in the application without duplicating boilerplate code.
 
 import tkinter as tk
 from utils import tts_engine_pyttsx3
+from utils.i18n import t
 
 
 class AppContextMenu:
@@ -46,13 +47,15 @@ class AppContextMenu:
         """Add a separator line to the context menu."""
         self._items.append({"type": "separator"})
 
-    def add_copy_command(self, label: str = "Copy"):
+    def add_copy_command(self, label: str = None):
         """
         Add a 'Copy' command that copies the current selection to the clipboard,
         or the whole widget content if nothing is selected.
 
         Works for both tk.Text / ScrolledText and (ttk.)Entry widgets.
         """
+        if label is None:
+            label = t("context_menu.copy")
         def copy_command():
             w = self.widget
             text = ""
@@ -83,7 +86,7 @@ class AppContextMenu:
 
         self._items.append({"type": "command", "label": label, "command": copy_command})
 
-    def add_paste_command(self, label: str = "Paste"):
+    def add_paste_command(self, label: str = None):
         """
         Add a 'Paste' command that inserts clipboard text at the cursor,
         replacing the current selection if one exists.
@@ -92,6 +95,8 @@ class AppContextMenu:
         both tk.Text / ScrolledText and (ttk.)Entry widgets. No-op on read-only
         or disabled widgets, or when the clipboard is empty.
         """
+        if label is None:
+            label = t("context_menu.paste")
         def paste_command():
             w = self.widget
             # Skip if clipboard is empty / non-text
@@ -125,7 +130,7 @@ class AppContextMenu:
         
         self._items.append({
             "type": "command",
-            "label": "Read in Voice",
+            "label": t("context_menu.read_voice"),
             "command": read_command
         })
 
@@ -135,20 +140,24 @@ class AppContextMenu:
         """
         self._items.append({
             "type": "command",
-            "label": "Stop Reading",
+            "label": t("context_menu.stop_reading"),
             "command": tts_engine_pyttsx3.stop
         })
 
-    def add_fullscreen_command(self, title="Fullscreen", editable=False, label="⛶ Fullscreen"):
+    def add_fullscreen_command(self, title=None, editable=False, label=None):
         """
         Add a 'Fullscreen' command that opens this widget's content in a
         maximized, selectable window.
 
         Args:
-            title: Title for the fullscreen window
+            title: Title for the fullscreen window (defaults to the localized
+                   "Fullscreen" when not provided)
             editable: If True, edits sync back to this widget on close
-            label: Menu item label
+            label: Menu item label (defaults to the localized "⛶ Fullscreen")
         """
+        if label is None:
+            label = t("context_menu.fullscreen")
+
         def open_full():
             from views.fullscreen import open_fullscreen
             open_fullscreen(self.widget, title=title, editable=editable)

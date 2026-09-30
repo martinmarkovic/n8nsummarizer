@@ -13,6 +13,7 @@ from tkinter import ttk
 from typing import Dict, Callable
 from datetime import datetime
 from .constants import STATUS_INDICATORS
+from utils.i18n import t
 
 
 class BulkSummarizerUI:
@@ -80,13 +81,13 @@ class BulkSummarizerUI:
     
     def _create_folder_selection(self, browse_callback: Callable):
         """Create folder selection UI (Row 0, full width)"""
-        folder_frame = ttk.LabelFrame(self.parent, text="Select Source Folder")
+        folder_frame = ttk.LabelFrame(self.parent, text=t("bulk_summarizer.frame.select_source_folder"))
         folder_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=10, pady=10)
         folder_frame.columnconfigure(1, weight=1)
         
         ttk.Button(
             folder_frame,
-            text="[Browse...]",
+            text=t("bulk_summarizer.btn.browse"),
             command=browse_callback
         ).pack(side=tk.LEFT, padx=5, pady=5)
         
@@ -97,26 +98,26 @@ class BulkSummarizerUI:
     
     def create_file_type_frame(self) -> ttk.LabelFrame:
         """Create and return file type selection frame (Row 1, left column)"""
-        type_frame = ttk.LabelFrame(self.parent, text="File Types to Scan")
+        type_frame = ttk.LabelFrame(self.parent, text=t("bulk_summarizer.frame.file_types"))
         type_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         return type_frame
     
     def create_recursive_frame(self, recursive_var: tk.BooleanVar, 
                               on_change: Callable) -> ttk.LabelFrame:
         """Create recursive scanning option frame (Row 2, left column)"""
-        recursive_frame = ttk.LabelFrame(self.parent, text="Scanning Options")
+        recursive_frame = ttk.LabelFrame(self.parent, text=t("bulk_summarizer.frame.scanning_options"))
         recursive_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         
         ttk.Checkbutton(
             recursive_frame,
-            text="Scan Subfolders (recursive scanning)",
+            text=t("bulk_summarizer.chk.scan_subfolders"),
             variable=recursive_var,
             command=on_change
         ).pack(anchor=tk.W, padx=10, pady=5)
         
         info_label = ttk.Label(
             recursive_frame,
-            text="When enabled: Scans all subfolders and maintains folder structure in output",
+            text=t("bulk_summarizer.lbl.recursive_hint"),
             foreground="gray",
             font=("TkDefaultFont", 9)
         )
@@ -127,24 +128,24 @@ class BulkSummarizerUI:
     def create_output_format_frame(self, separate_var: tk.BooleanVar,
                                    combined_var: tk.BooleanVar) -> ttk.LabelFrame:
         """Create output format options frame (Row 3, left column)"""
-        output_frame = ttk.LabelFrame(self.parent, text="Output Format Options")
+        output_frame = ttk.LabelFrame(self.parent, text=t("bulk_summarizer.frame.output_format"))
         output_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         
         ttk.Checkbutton(
             output_frame,
-            text="Separate Files (Uncombined)",
+            text=t("bulk_summarizer.chk.separate_files"),
             variable=separate_var
         ).pack(anchor=tk.W, padx=10, pady=5)
         
         ttk.Checkbutton(
             output_frame,
-            text="Combined File (Single output)",
+            text=t("bulk_summarizer.chk.combined_file"),
             variable=combined_var
         ).pack(anchor=tk.W, padx=10, pady=5)
         
         info_label = ttk.Label(
             output_frame,
-            text="Note: At least one output format must be selected",
+            text=t("bulk_summarizer.lbl.output_format_note"),
             foreground="gray"
         )
         info_label.pack(anchor=tk.W, padx=10, pady=(10, 5))
@@ -155,13 +156,13 @@ class BulkSummarizerUI:
                                      browse_callback: Callable,
                                      radio_callback: Callable) -> ttk.LabelFrame:
         """Create output location selection frame (Row 4, left column)"""
-        loc_frame = ttk.LabelFrame(self.parent, text="Output Location")
+        loc_frame = ttk.LabelFrame(self.parent, text=t("bulk_summarizer.frame.output_location"))
         loc_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         loc_frame.columnconfigure(1, weight=1)
         
         ttk.Radiobutton(
             loc_frame,
-            text="Default (Parent folder of source)",
+            text=t("bulk_summarizer.rb.default_location"),
             variable=location_default_var,
             value=True,
             command=radio_callback
@@ -172,7 +173,7 @@ class BulkSummarizerUI:
         
         ttk.Radiobutton(
             button_frame,
-            text="Custom Location:",
+            text=t("bulk_summarizer.rb.custom_location"),
             variable=location_default_var,
             value=False,
             command=radio_callback
@@ -180,7 +181,7 @@ class BulkSummarizerUI:
         
         ttk.Button(
             button_frame,
-            text="[Browse...]",
+            text=t("bulk_summarizer.btn.browse"),
             command=browse_callback
         ).pack(side=tk.LEFT, padx=5)
         
@@ -194,7 +195,7 @@ class BulkSummarizerUI:
     def create_processing_section(self, start_callback: Callable,
                                  cancel_callback: Callable) -> ttk.LabelFrame:
         """Create processing buttons section (Row 5, left column)"""
-        proc_frame = ttk.LabelFrame(self.parent, text="Processing")
+        proc_frame = ttk.LabelFrame(self.parent, text=t("bulk_summarizer.frame.processing"))
         proc_frame.grid(row=5, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         proc_frame.columnconfigure(0, weight=1)
         
@@ -203,7 +204,7 @@ class BulkSummarizerUI:
         
         self.status_label = ttk.Label(
             info_frame,
-            text="Ready",
+            text=t("bulk_summarizer.status.ready"),
             foreground="green"
         )
         self.status_label.pack(side=tk.LEFT)
@@ -213,7 +214,7 @@ class BulkSummarizerUI:
         
         self.start_button = ttk.Button(
             button_frame,
-            text="Start Processing",
+            text=t("bulk_summarizer.btn.start"),
             command=start_callback,
             state=tk.DISABLED
         )
@@ -221,7 +222,7 @@ class BulkSummarizerUI:
         
         self.cancel_button = ttk.Button(
             button_frame,
-            text="Cancel",
+            text=t("bulk_summarizer.btn.cancel"),
             command=cancel_callback,
             state=tk.DISABLED
         )
@@ -231,11 +232,11 @@ class BulkSummarizerUI:
     
     def create_progress_section(self) -> ttk.LabelFrame:
         """Create progress bar section (Row 6, left column)"""
-        prog_frame = ttk.LabelFrame(self.parent, text="Progress")
+        prog_frame = ttk.LabelFrame(self.parent, text=t("bulk_summarizer.frame.progress"))
         prog_frame.grid(row=6, column=0, sticky=(tk.W, tk.E), padx=10, pady=10)
         prog_frame.columnconfigure(0, weight=1)
         
-        self.current_file_var = tk.StringVar(value="Idle")
+        self.current_file_var = tk.StringVar(value=t("bulk_summarizer.progress.idle"))
         ttk.Label(prog_frame, textvariable=self.current_file_var).pack(
             anchor=tk.W, padx=10, pady=5
         )
@@ -247,7 +248,7 @@ class BulkSummarizerUI:
         )
         self.progress_bar.pack(fill=tk.X, padx=10, pady=10)
         
-        self.progress_text_var = tk.StringVar(value="0 / 0 files")
+        self.progress_text_var = tk.StringVar(value=t("bulk_summarizer.progress.files").format(current=0, total=0))
         ttk.Label(prog_frame, textvariable=self.progress_text_var).pack(
             anchor=tk.W, padx=10, pady=5
         )
@@ -256,7 +257,7 @@ class BulkSummarizerUI:
     
     def _create_status_log(self):
         """Create status log (Right column, rows 1-6)"""
-        log_frame = ttk.LabelFrame(self.parent, text="Status Log")
+        log_frame = ttk.LabelFrame(self.parent, text=t("bulk_summarizer.frame.status_log"))
         log_frame.grid(
             row=1, column=1, rowspan=6, 
             sticky=(tk.W, tk.E, tk.N, tk.S), 
@@ -284,11 +285,11 @@ class BulkSummarizerUI:
         """Update progress bar and text"""
         percentage = (current / total * 100) if total > 0 else 0
         self.progress_bar['value'] = percentage
-        self.progress_text_var.set(f"{current} / {total} files")
+        self.progress_text_var.set(t("bulk_summarizer.progress.files").format(current=current, total=total))
     
     def set_current_file(self, filename: str):
         """Update current file being processed"""
-        self.current_file_var.set(f"Processing: {filename}")
+        self.current_file_var.set(t("bulk_summarizer.progress.processing").format(filename=filename))
     
     def append_log(self, message: str, status: str = "info"):
         """Append message to status log"""
@@ -311,8 +312,8 @@ class BulkSummarizerUI:
     def reset_progress(self):
         """Reset progress bar and text"""
         self.progress_bar['value'] = 0
-        self.progress_text_var.set("0 / 0 files")
-        self.current_file_var.set("Idle")
+        self.progress_text_var.set(t("bulk_summarizer.progress.files").format(current=0, total=0))
+        self.current_file_var.set(t("bulk_summarizer.progress.idle"))
     
     def set_buttons_enabled(self, start_enabled: bool, cancel_enabled: bool):
         """Enable/disable processing buttons"""

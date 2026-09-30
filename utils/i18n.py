@@ -20,6 +20,7 @@ Created: 2026-08-31
 """
 
 from utils.logger import logger
+from utils.translations import CATALOG as TRANSLATIONS
 
 # --- Supported languages -------------------------------------------------
 
@@ -33,47 +34,9 @@ LANGUAGE_NAMES = {
 }
 
 # --- Translation catalog -------------------------------------------------
-# key -> {language_code: text}
-# Keep English ("en") authoritative; every key MUST have an "en" value so the
-# fallback is always meaningful.
-TRANSLATIONS = {
-    # Tab titles (leading emoji is part of the label and kept in every language)
-    "tab.summarizer":        {"en": "📝 Summarizer",       "hr": "📝 Sažimač"},
-    "tab.transcriber":       {"en": "🗡 Transcriber",       "hr": "🗡 Transkriptor"},
-    "tab.bulk_summarizer":   {"en": "📦 Bulk Summarizer",   "hr": "📦 Skupno sažimanje"},
-    "tab.bulk_transcriber":  {"en": "🎬 Bulk Transcriber",  "hr": "🎬 Skupno transkribiranje"},
-    "tab.translation":       {"en": "🌐 Translation",       "hr": "🌐 Prijevod"},
-    "tab.downloader":        {"en": "📥 Downloader",        "hr": "📥 Preuzimanje"},
-    "tab.video_subtitler":   {"en": "🎞 Video Subtitler",   "hr": "🎞 Titlovanje videa"},
-
-    # Header controls
-    "header.font":           {"en": "Font:",               "hr": "Font:"},
-    "header.px":             {"en": "px",                  "hr": "px"},
-    "header.dark_mode":      {"en": "🌙 Dark Mode",         "hr": "🌙 Tamni način"},
-    "header.light_mode":     {"en": "☀️ Light Mode",        "hr": "☀️ Svijetli način"},
-    "header.settings":       {"en": "⚙ Settings",          "hr": "⚙ Postavke"},
-
-    # Status bar
-    "status.ready":          {"en": "Ready",               "hr": "Spremno"},
-
-    # Settings dialog
-    "settings.title":            {"en": "⚙ Settings",       "hr": "⚙ Postavke"},
-    "settings.heading":          {"en": "Settings",          "hr": "Postavke"},
-    "settings.appearance":       {"en": "Appearance",        "hr": "Izgled"},
-    "settings.language":         {"en": "Language:",         "hr": "Jezik:"},
-    "settings.language_hint":    {
-        "en": "  Applies after you restart the app.",
-        "hr": "  Primjenjuje se nakon ponovnog pokretanja aplikacije.",
-    },
-    "settings.apply_close":      {"en": "Apply & Close",     "hr": "Primijeni i zatvori"},
-    "settings.apply":            {"en": "Apply",             "hr": "Primijeni"},
-    "settings.cancel":           {"en": "Cancel",            "hr": "Odustani"},
-    "settings.restart_title":    {"en": "Restart required",  "hr": "Potrebno ponovno pokretanje"},
-    "settings.restart_message":  {
-        "en": "The language change will take effect after you restart the application.",
-        "hr": "Promjena jezika primijenit će se nakon ponovnog pokretanja aplikacije.",
-    },
-}
+# The catalog (key -> {language_code: text}) is assembled from per-feature
+# modules under utils/translations/. Keep English ("en") authoritative; every
+# key MUST have an "en" value so the fallback in t() is always meaningful.
 
 # --- Active language state ------------------------------------------------
 

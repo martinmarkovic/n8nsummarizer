@@ -23,6 +23,7 @@ from models.llm_client.discovery import discover_models, ModelOption
 from views.base_tab import BaseTab
 from views.resizable_panes import ResizablePanes
 from utils.logger import logger
+from utils.i18n import t
 
 
 class TranslationTab(BaseTab):
@@ -32,7 +33,7 @@ class TranslationTab(BaseTab):
         self.notebook = notebook
 
         # State variables (UI state only)
-        self.source_file_path = tk.StringVar(value="[No file selected]")
+        self.source_file_path = tk.StringVar(value=t("translation.no_file"))
         self.target_language = tk.StringVar(value="Croatian")
         self.is_translating = tk.BooleanVar(value=False)
 
@@ -73,13 +74,13 @@ class TranslationTab(BaseTab):
 
         # File selection and translation controls
         file_btn = ttk.Button(
-            top_frame, text="[Browse file...]", command=self._browse_file
+            top_frame, text=t("translation.btn.browse"), command=self._browse_file
         )
         file_btn.grid(row=0, column=0, padx=(0, 8), pady=5, sticky=tk.W)
 
         # Translate button (isolated from file_btn)
         translate_btn = ttk.Button(
-            top_frame, text="Translate", command=self._start_translation
+            top_frame, text=t("translation.btn.translate"), command=self._start_translation
         )
         translate_btn.grid(row=0, column=2, padx=(8, 0), pady=5, sticky=tk.W)
 
@@ -101,7 +102,7 @@ class TranslationTab(BaseTab):
         self._setup_llm_settings_section(top_frame)
 
         # Row 4: Language dropdown (moved down to prevent overlap with LLM settings)
-        ttk.Label(top_frame, text="Translate to:").grid(
+        ttk.Label(top_frame, text=t("translation.lbl.translate_to")).grid(
             row=4, column=0, padx=(0, 8), pady=5, sticky=tk.W
         )
 
@@ -117,7 +118,7 @@ class TranslationTab(BaseTab):
         )
 
         # Setup left pane (Source text)
-        source_frame = ttk.LabelFrame(self.panes.left_pane, text="Source")
+        source_frame = ttk.LabelFrame(self.panes.left_pane, text=t("translation.frame.source"))
         source_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
         source_frame.rowconfigure(0, weight=1)
         source_frame.columnconfigure(0, weight=1)
@@ -139,12 +140,12 @@ class TranslationTab(BaseTab):
                 {"tts_read": lambda: self._selection_or_all(self.source_text)},
                 {"tts_stop": True},
                 {"separator": True},
-                {"fullscreen": True, "title": "Source", "editable": True},
+                {"fullscreen": True, "title": t("translation.frame.source"), "editable": True},
             ],
         )
 
         # Setup right pane (Translation text)
-        target_frame = ttk.LabelFrame(self.panes.right_pane, text="Translation")
+        target_frame = ttk.LabelFrame(self.panes.right_pane, text=t("translation.frame.translation"))
         target_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
         target_frame.rowconfigure(0, weight=1)
         target_frame.columnconfigure(0, weight=1)
@@ -166,25 +167,25 @@ class TranslationTab(BaseTab):
                 {"copy": True},
                 {"paste": True},
                 {"separator": True},
-                {"label": "Export as .txt", "command": self._export_translation_txt},
-                {"label": "Export as .srt", "command": self._export_translation_srt},
+                {"label": t("translation.menu.export_txt"), "command": self._export_translation_txt},
+                {"label": t("translation.menu.export_srt"), "command": self._export_translation_srt},
                 {"separator": True},
                 {
-                    "label": "Forward to Summarization",
+                    "label": t("translation.menu.forward"),
                     "command": self._forward_to_summarization,
                 },
                 {"separator": True},
                 {"tts_read": lambda: self._selection_or_all(self.target_text)},
                 {"tts_stop": True},
                 {"separator": True},
-                {"fullscreen": True, "title": "Translation", "editable": True},
+                {"fullscreen": True, "title": t("translation.frame.translation"), "editable": True},
             ],
         )
 
     def _setup_llm_settings_section(self, parent_frame):
         """Setup LLM settings section with multi-row layout to prevent overlap"""
         # Row 1: Provider selection
-        ttk.Label(parent_frame, text="Provider:").grid(row=1, column=0, padx=(0, 8), pady=5, sticky=tk.W)
+        ttk.Label(parent_frame, text=t("translation.lbl.provider")).grid(row=1, column=0, padx=(0, 8), pady=5, sticky=tk.W)
 
         provider_frame = ttk.Frame(parent_frame)
         provider_frame.grid(row=1, column=1, padx=4, pady=5, sticky=tk.W)
@@ -216,7 +217,7 @@ class TranslationTab(BaseTab):
         self.status_label_llm.pack(side=tk.LEFT)
 
         # Row 2: Base URL
-        ttk.Label(parent_frame, text="Base URL:").grid(row=2, column=0, padx=(0, 8), pady=5, sticky=tk.W)
+        ttk.Label(parent_frame, text=t("translation.lbl.base_url")).grid(row=2, column=0, padx=(0, 8), pady=5, sticky=tk.W)
 
         self.webhook_entry = ttk.Entry(
             parent_frame,
@@ -229,19 +230,19 @@ class TranslationTab(BaseTab):
         # Row 2: Test connection button and Remember settings checkbox
         ttk.Button(
             parent_frame,
-            text="Test",
+            text=t("translation.btn.test"),
             command=self._test_connection,
             width=6
         ).grid(row=2, column=2, padx=(8, 5), pady=5, sticky=tk.W)
 
         ttk.Checkbutton(
             parent_frame,
-            text="Remember settings",
+            text=t("translation.chk.remember"),
             variable=self.save_settings_var
         ).grid(row=2, column=3, sticky=tk.W, padx=5)
 
         # Row 3: Model selection
-        ttk.Label(parent_frame, text="Model:").grid(row=3, column=0, padx=(0, 8), pady=5, sticky=tk.W)
+        ttk.Label(parent_frame, text=t("translation.lbl.model")).grid(row=3, column=0, padx=(0, 8), pady=5, sticky=tk.W)
 
         self.model_combo = ttk.Combobox(
             parent_frame,
@@ -309,7 +310,7 @@ class TranslationTab(BaseTab):
         if self.is_translating.get():
             return
 
-        file_path = filedialog.askopenfilename(title="Select file to translate")
+        file_path = filedialog.askopenfilename(title=t("translation.dialog.select_file"))
         if file_path:
             if self.on_file_selected:
                 self.on_file_selected(file_path)
@@ -345,13 +346,13 @@ class TranslationTab(BaseTab):
         base_url = self.webhook_var.get().strip()
 
         if not provider or not base_url:
-            self.models_status.set("Error: Provider and URL required")
+            self.models_status.set(t("translation.status.need_provider"))
             if self.status_indicator:
                 self.status_indicator.config(foreground="red")
             return
 
         # Show loading state
-        self.models_status.set("Connecting...")
+        self.models_status.set(t("translation.status.connecting"))
         if self.status_indicator:
             self.status_indicator.config(foreground="orange")
         self.update()
@@ -375,15 +376,15 @@ class TranslationTab(BaseTab):
 
         # Update status indicator
         if status == 'ok':
-            self.models_status.set("Connected")
+            self.models_status.set(t("translation.status.connected"))
             if self.status_indicator:
                 self.status_indicator.config(foreground="green")
         elif status == 'error':
-            self.models_status.set("Cannot reach server")
+            self.models_status.set(t("translation.status.unreachable"))
             if self.status_indicator:
                 self.status_indicator.config(foreground="red")
         else:
-            self.models_status.set("Connecting...")
+            self.models_status.set(t("translation.status.connecting"))
             if self.status_indicator:
                 self.status_indicator.config(foreground="orange")
 
@@ -509,15 +510,19 @@ class TranslationTab(BaseTab):
         # Check if there's content to export
         if not text_content:
             messagebox.showwarning(
-                title="Nothing to export", message="Translated text is empty."
+                title=t("translation.msg.nothing_export_title"),
+                message=t("translation.msg.empty_body"),
             )
             return
 
         # Ask user for save location
         file_path = filedialog.asksaveasfilename(
             defaultextension=".txt",
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
-            title="Export Translation",
+            filetypes=[
+                (t("translation.filetype.text"), "*.txt"),
+                (t("translation.filetype.all"), "*.*"),
+            ],
+            title=t("translation.dialog.export_txt"),
         )
 
         # If user confirmed the save
@@ -529,11 +534,12 @@ class TranslationTab(BaseTab):
 
                 # Show success message
                 messagebox.showinfo(
-                    title="Exported", message=f"Translation saved to:\n{file_path}"
+                    title=t("translation.msg.exported_title"),
+                    message=t("translation.msg.saved_txt").format(path=file_path),
                 )
             except IOError as e:
                  # Show error if write fails
-                messagebox.showerror(title="Export Failed", message=str(e))
+                messagebox.showerror(title=t("translation.msg.export_failed_title"), message=str(e))
 
     def _export_translation_srt(self):
         """Export translated text as .srt file via context menu."""
@@ -543,15 +549,19 @@ class TranslationTab(BaseTab):
         # Check if there's content to export
         if not text_content:
             messagebox.showwarning(
-                title="Nothing to export", message="Translated text is empty."
+                title=t("translation.msg.nothing_export_title"),
+                message=t("translation.msg.empty_body"),
             )
             return
 
         # Ask user for save location
         file_path = filedialog.asksaveasfilename(
             defaultextension=".srt",
-            filetypes=[("SubRip subtitles", "*.srt"), ("All files", "*.*")],
-            title="Export SRT Translation",
+            filetypes=[
+                (t("translation.filetype.srt"), "*.srt"),
+                (t("translation.filetype.all"), "*.*"),
+            ],
+            title=t("translation.dialog.export_srt"),
         )
 
         # If user confirmed the save
@@ -563,11 +573,12 @@ class TranslationTab(BaseTab):
 
                 # Show success message
                 messagebox.showinfo(
-                    title="Exported", message=f"SRT translation saved to:\n{file_path}"
+                    title=t("translation.msg.exported_title"),
+                    message=t("translation.msg.saved_srt").format(path=file_path),
                 )
             except IOError as e:
                 # Show error if write fails
-                messagebox.showerror(title="Export Failed", message=str(e))
+                messagebox.showerror(title=t("translation.msg.export_failed_title"), message=str(e))
 
     def _forward_to_summarization(self):
         """Forward translated text to summarization tab via context menu."""
@@ -577,7 +588,8 @@ class TranslationTab(BaseTab):
         # Check if there's content to forward
         if not text_content:
             messagebox.showwarning(
-                title="Nothing to forward", message="Translated text is empty."
+                title=t("translation.msg.nothing_forward_title"),
+                message=t("translation.msg.empty_body"),
             )
             return
 
@@ -592,15 +604,15 @@ class TranslationTab(BaseTab):
             main_window.youtube_summarizer_tab.set_summary_content(cleaned_text)
 
             messagebox.showinfo(
-                title="Forwarded Successfully",
-                message=f"Translation forwarded to summarization tab ({len(cleaned_text)} characters)",
+                title=t("translation.msg.forwarded_title"),
+                message=t("translation.msg.forwarded_body").format(n=len(cleaned_text)),
             )
         else:
             # Fallback: Store text for manual pasting
             self._forwarded_text = cleaned_text
             messagebox.showinfo(
-                title="Ready to Forward",
-                message="Text is ready. Use the 'Paste Forwarded Text' function in the summarization tab.",
+                title=t("translation.msg.ready_forward_title"),
+                message=t("translation.msg.ready_forward_body"),
             )
             return
 
@@ -610,8 +622,8 @@ class TranslationTab(BaseTab):
 
         # Show confirmation
         response = messagebox.askyesno(
-            title="Forward to Summarization",
-            message=f"Forward {len(cleaned_text)} characters to summarization tab?",
+            title=t("translation.msg.forward_confirm_title"),
+            message=t("translation.msg.forward_confirm_body").format(n=len(cleaned_text)),
         )
 
         if response:  # User confirmed
@@ -619,8 +631,8 @@ class TranslationTab(BaseTab):
             self._forwarded_text = cleaned_text
 
             messagebox.showinfo(
-                title="Ready to Forward",
-                message="Text is ready. Use the 'Paste Forwarded Text' function in the summarization tab.",
+                title=t("translation.msg.ready_forward_title"),
+                message=t("translation.msg.ready_forward_body"),
             )
 
     # --- BaseTab abstract method implementations ---
@@ -633,5 +645,5 @@ class TranslationTab(BaseTab):
         """Clear source/target text and reset file path."""
         self.source_text.delete("1.0", tk.END)
         self.target_text.delete("1.0", tk.END)
-        self.source_file_path.set("[No file selected]")
+        self.source_file_path.set(t("translation.no_file"))
         self.set_status("")

@@ -740,7 +740,7 @@ class MainWindow:
         color_row = ttk.Frame(appear_frame)
         color_row.pack(fill=tk.X, pady=(0, 8))
 
-        ttk.Label(color_row, text="Theme colors  (leave blank to use default light/dark palette):",
+        ttk.Label(color_row, text=t("settings.theme_colors_hint"),
                   wraplength=480).pack(anchor=tk.W, pady=(0, 6))
 
         # Load currently saved custom colors (may be empty = "use default")
@@ -751,7 +751,7 @@ class MainWindow:
         # Background color
         bg_row = ttk.Frame(appear_frame)
         bg_row.pack(fill=tk.X, pady=2)
-        ttk.Label(bg_row, text="Background:", width=14, anchor=tk.W).pack(side=tk.LEFT)
+        ttk.Label(bg_row, text=t("settings.color.background"), width=14, anchor=tk.W).pack(side=tk.LEFT)
         bg_var = tk.StringVar(value=saved_bg)
         bg_entry = ttk.Entry(bg_row, textvariable=bg_var, width=10)
         bg_entry.pack(side=tk.LEFT, padx=(0, 6))
@@ -765,19 +765,19 @@ class MainWindow:
         bg_preview.pack(side=tk.LEFT, padx=(0, 6))
         ttk.Button(
             bg_row,
-            text="Pick…",
-            command=lambda: self._pick_color(bg_var, bg_preview, "Background color"),
+            text=t("settings.btn.pick"),
+            command=lambda: self._pick_color(bg_var, bg_preview, t("settings.color.pick_bg_title")),
         ).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(
             bg_row,
-            text="Clear",
+            text=t("settings.btn.clear"),
             command=lambda: self._clear_color(bg_var, bg_preview, colors["bg_primary"]),
         ).pack(side=tk.LEFT)
 
         # Text / foreground color
         text_row = ttk.Frame(appear_frame)
         text_row.pack(fill=tk.X, pady=2)
-        ttk.Label(text_row, text="Text:", width=14, anchor=tk.W).pack(side=tk.LEFT)
+        ttk.Label(text_row, text=t("settings.color.text"), width=14, anchor=tk.W).pack(side=tk.LEFT)
         text_var = tk.StringVar(value=saved_text)
         text_entry = ttk.Entry(text_row, textvariable=text_var, width=10)
         text_entry.pack(side=tk.LEFT, padx=(0, 6))
@@ -791,19 +791,19 @@ class MainWindow:
         text_preview.pack(side=tk.LEFT, padx=(0, 6))
         ttk.Button(
             text_row,
-            text="Pick…",
-            command=lambda: self._pick_color(text_var, text_preview, "Text color"),
+            text=t("settings.btn.pick"),
+            command=lambda: self._pick_color(text_var, text_preview, t("settings.color.pick_text_title")),
         ).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(
             text_row,
-            text="Clear",
+            text=t("settings.btn.clear"),
             command=lambda: self._clear_color(text_var, text_preview, colors["text_primary"]),
         ).pack(side=tk.LEFT)
 
         # Accent color — borders, buttons, section labels, secondary text
         accent_row = ttk.Frame(appear_frame)
         accent_row.pack(fill=tk.X, pady=2)
-        ttk.Label(accent_row, text="Accent:", width=14, anchor=tk.W).pack(side=tk.LEFT)
+        ttk.Label(accent_row, text=t("settings.color.accent"), width=14, anchor=tk.W).pack(side=tk.LEFT)
         accent_var = tk.StringVar(value=saved_accent)
         accent_entry = ttk.Entry(accent_row, textvariable=accent_var, width=10)
         accent_entry.pack(side=tk.LEFT, padx=(0, 6))
@@ -817,18 +817,18 @@ class MainWindow:
         accent_preview.pack(side=tk.LEFT, padx=(0, 6))
         ttk.Button(
             accent_row,
-            text="Pick…",
-            command=lambda: self._pick_color(accent_var, accent_preview, "Accent color"),
+            text=t("settings.btn.pick"),
+            command=lambda: self._pick_color(accent_var, accent_preview, t("settings.color.pick_accent_title")),
         ).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(
             accent_row,
-            text="Clear",
+            text=t("settings.btn.clear"),
             command=lambda: self._clear_color(accent_var, accent_preview, colors["accent"]),
         ).pack(side=tk.LEFT)
 
         ttk.Label(
             appear_frame,
-            text="  Accent tints borders, buttons, tabs and section labels.",
+            text=t("settings.accent_hint"),
             foreground=colors.get("text_secondary", "gray"),
         ).pack(anchor=tk.W, pady=(2, 0))
 
@@ -866,27 +866,27 @@ class MainWindow:
         # --- Font size ---
         font_row = ttk.Frame(appear_frame)
         font_row.pack(fill=tk.X, pady=(8, 0))
-        ttk.Label(font_row, text="Font size:", width=14, anchor=tk.W).pack(side=tk.LEFT)
+        ttk.Label(font_row, text=t("settings.font_size"), width=14, anchor=tk.W).pack(side=tk.LEFT)
         ttk.Label(
             font_row,
-            text=f"(currently {self.current_font_size}px — change via the header controls)",
+            text=t("settings.font_size_hint").format(size=self.current_font_size),
             foreground=colors["text_secondary"] if "text_secondary" in colors else "gray",
         ).pack(side=tk.LEFT)
 
         # ── Paths ─────────────────────────────────────────────────────
-        paths_frame = ttk.LabelFrame(outer, text="Paths", padding=10)
+        paths_frame = ttk.LabelFrame(outer, text=t("settings.paths"), padding=10)
         paths_frame.pack(fill=tk.X, pady=(0, 10))
 
         ttk.Label(
             paths_frame,
-            text="Paths saved to .env override the built-in defaults.",
+            text=t("settings.paths_hint"),
             wraplength=480,
         ).pack(anchor=tk.W, pady=(0, 8))
 
         # FFmpeg
         ffmpeg_row = ttk.Frame(paths_frame)
         ffmpeg_row.pack(fill=tk.X, pady=2)
-        ttk.Label(ffmpeg_row, text="FFmpeg:", width=20, anchor=tk.W).pack(side=tk.LEFT)
+        ttk.Label(ffmpeg_row, text=t("settings.ffmpeg"), width=20, anchor=tk.W).pack(side=tk.LEFT)
         saved_ffmpeg = self.settings.get("FFMPEG_PATH", "")
         ffmpeg_var = tk.StringVar(value=saved_ffmpeg)
         ttk.Entry(ffmpeg_row, textvariable=ffmpeg_var).pack(
@@ -894,30 +894,30 @@ class MainWindow:
         )
         ttk.Button(
             ffmpeg_row,
-            text="Browse…",
+            text=t("settings.btn.browse"),
             command=lambda: self._browse_exe(ffmpeg_var),
         ).pack(side=tk.LEFT)
         # placeholder hint
         ttk.Label(
             paths_frame,
-            text=f"  Default: {self.DEFAULT_FFMPEG_PATH}  (searched on system PATH if blank)",
+            text=t("settings.ffmpeg_default_hint").format(path=self.DEFAULT_FFMPEG_PATH),
             foreground=colors.get("text_secondary", "gray"),
         ).pack(anchor=tk.W)
 
         ttk.Label(
             paths_frame,
-            text="  (transcribe-anything is a pip package — manage its version in the Dependencies Manager below.)",
+            text=t("settings.transcribe_hint"),
             foreground=colors.get("text_secondary", "gray"),
             wraplength=480,
         ).pack(anchor=tk.W, pady=(6, 0))
 
         # ── Tools ─────────────────────────────────────────────────────
-        tools_frame = ttk.LabelFrame(outer, text="Tools", padding=10)
+        tools_frame = ttk.LabelFrame(outer, text=t("settings.tools"), padding=10)
         tools_frame.pack(fill=tk.X, pady=(0, 12))
 
         ttk.Button(
             tools_frame,
-            text="⬆  Dependencies Manager…",
+            text=t("settings.deps_manager_btn"),
             command=lambda: [win.grab_release(), self._open_deps_manager()],
         ).pack(anchor=tk.W)
 
@@ -984,7 +984,7 @@ class MainWindow:
         """Open a file-browse dialog and put the chosen path into *var*."""
         from tkinter import filedialog
         path = filedialog.askopenfilename(
-            title="Select executable",
+            title=t("settings.browse_exe_title"),
             filetypes=[("Executable", "*.exe"), ("All files", "*.*")],
         )
         if path:
@@ -1120,7 +1120,7 @@ class MainWindow:
         _NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
         win = tk.Toplevel(self.root)
-        win.title("⚙ Dependencies Manager")
+        win.title(t("deps.title"))
         win.geometry("680x560")
         win.resizable(True, True)
         win.grab_set()
@@ -1129,10 +1129,10 @@ class MainWindow:
         outer = ttk.Frame(win, padding=12)
         outer.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(outer, text="Dependencies Manager", font=("Segoe UI", 12, "bold")).pack(anchor=tk.W, pady=(0, 8))
+        ttk.Label(outer, text=t("deps.heading"), font=("Segoe UI", 12, "bold")).pack(anchor=tk.W, pady=(0, 8))
 
         # --- Dependency rows ---
-        rows_frame = ttk.LabelFrame(outer, text="Installed versions", padding=8)
+        rows_frame = ttk.LabelFrame(outer, text=t("deps.installed_versions"), padding=8)
         rows_frame.pack(fill=tk.X, pady=(0, 8))
 
         # Store per-row version display vars so we can update them
@@ -1313,15 +1313,15 @@ class MainWindow:
 
             ttk.Label(row, text=name, width=18, anchor=tk.W).pack(side=tk.LEFT)
 
-            version_var = tk.StringVar(value="checking…")
+            version_var = tk.StringVar(value=t("deps.checking"))
             version_vars[name] = version_var
             ttk.Label(row, textvariable=version_var, width=18, anchor=tk.W).pack(side=tk.LEFT, padx=(4, 8))
 
             row_btns = []
             if pkg:
-                upd_btn = ttk.Button(row, text="Update", width=8)
-                dng_btn = ttk.Button(row, text="Downgrade", width=10)
-                chk_btn = ttk.Button(row, text="Check", width=8)
+                upd_btn = ttk.Button(row, text=t("deps.btn.update"), width=8)
+                dng_btn = ttk.Button(row, text=t("deps.btn.downgrade"), width=10)
+                chk_btn = ttk.Button(row, text=t("deps.btn.check"), width=8)
                 row_btns = [upd_btn, dng_btn, chk_btn]
                 upd_btn.configure(command=lambda n=name, p=pkg, bs=row_btns: _run_cmd(
                     ["pip", "install", "--upgrade", p], n, p, bs))
@@ -1332,10 +1332,10 @@ class MainWindow:
                 chk_btn.pack(side=tk.LEFT)
             else:
                 # System dependency (ffmpeg): no pip Update/Downgrade, but still a Check button
-                chk_btn = ttk.Button(row, text="Check", width=8)
+                chk_btn = ttk.Button(row, text=t("deps.btn.check"), width=8)
                 row_btns = [chk_btn]
                 chk_btn.configure(command=lambda n=name, p=pkg, bs=row_btns: _check_update(n, p, bs))
-                ttk.Label(row, text="(system)", foreground="gray").pack(side=tk.LEFT, padx=(0, 6))
+                ttk.Label(row, text=t("deps.system"), foreground="gray").pack(side=tk.LEFT, padx=(0, 6))
                 chk_btn.pack(side=tk.LEFT)
 
         # --- Update all button ---
@@ -1343,11 +1343,11 @@ class MainWindow:
             for name, pkg in DEPS:
                 if pkg:
                     _run_cmd(["pip", "install", "--upgrade", pkg], name, pkg, [update_all_btn])
-        update_all_btn = ttk.Button(outer, text="⬆ Update All pip packages", command=_update_all)
+        update_all_btn = ttk.Button(outer, text=t("deps.btn.update_all"), command=_update_all)
         update_all_btn.pack(anchor=tk.W, pady=(0, 8))
 
         # --- Log area ---
-        log_frame = ttk.LabelFrame(outer, text="Output", padding=4)
+        log_frame = ttk.LabelFrame(outer, text=t("deps.output"), padding=4)
         log_frame.pack(fill=tk.BOTH, expand=True)
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
@@ -1359,7 +1359,7 @@ class MainWindow:
         log_scroll.grid(row=0, column=1, sticky="ns")
         log_text.configure(yscrollcommand=log_scroll.set)
 
-        ttk.Button(outer, text="Close", command=win.destroy).pack(anchor=tk.E, pady=(6, 0))
+        ttk.Button(outer, text=t("deps.btn.close"), command=win.destroy).pack(anchor=tk.E, pady=(6, 0))
 
         # Populate the current installed version for every row on open
         for _name, _pkg in DEPS:

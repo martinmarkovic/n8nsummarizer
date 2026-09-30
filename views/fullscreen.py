@@ -12,6 +12,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext
 
 from utils import tts_engine_pyttsx3
+from utils.i18n import t
 
 
 def _selection_or_all(widget) -> str:
@@ -42,17 +43,19 @@ def _make_readonly_selectable(widget):
     widget.bind("<<Cut>>", lambda e: "break")
 
 
-def open_fullscreen(source_widget, title="Fullscreen", editable=False, font=None):
+def open_fullscreen(source_widget, title=None, editable=False, font=None):
     """
     Open a maximized window displaying the content of `source_widget`.
 
     Args:
         source_widget: The Text/ScrolledText widget to mirror.
-        title: Window title.
+        title: Window title (defaults to the localized "Fullscreen").
         editable: If True, edits in the fullscreen view are written back to the
             source widget on close. If False, the view is read-only (selectable).
         font: Optional font tuple for the fullscreen text area.
     """
+    if title is None:
+        title = t("fullscreen.title")
     top = tk.Toplevel(source_widget.winfo_toplevel())
     top.title(title)
     top.geometry("1100x750")
@@ -72,7 +75,7 @@ def open_fullscreen(source_widget, title="Fullscreen", editable=False, font=None
     bar.grid(row=0, column=0, sticky="ew", pady=(0, 6))
     bar.columnconfigure(0, weight=1)
     ttk.Label(bar, text=title, font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w")
-    close_btn = ttk.Button(bar, text="✕ Close", width=10, command=lambda: _close())
+    close_btn = ttk.Button(bar, text=t("fullscreen.close"), width=10, command=lambda: _close())
     close_btn.grid(row=0, column=1, sticky="e")
 
     # Large text area
@@ -123,7 +126,7 @@ def open_fullscreen(source_widget, title="Fullscreen", editable=False, font=None
     return top
 
 
-def attach_fullscreen_button(frame, text_widget, title="Fullscreen", editable=False, font=None):
+def attach_fullscreen_button(frame, text_widget, title=None, editable=False, font=None):
     """
     Place a small expand (⛶) button in the top-right corner of `frame` that opens
     a fullscreen view of `text_widget`.

@@ -12,6 +12,7 @@ Phase: v5.0.4 - Phase 3 Code Quality
 import tkinter as tk
 from tkinter import ttk
 from .constants import MEDIA_TYPES_VIDEO, MEDIA_TYPES_AUDIO, DEFAULT_MEDIA_TYPES
+from utils.i18n import t
 
 
 class MediaTypeSelector:
@@ -55,13 +56,13 @@ class MediaTypeSelector:
             row: Grid row position
             column: Grid column position (default 0)
         """
-        video_frame = ttk.LabelFrame(parent_frame, text="Video Formats")
+        video_frame = ttk.LabelFrame(parent_frame, text=t("bulk_transcriber.frame.video"))
         video_frame.grid(row=row, column=column, sticky=(tk.W, tk.E), padx=10, pady=10)
         
         for ext, label in MEDIA_TYPES_VIDEO.items():
             ttk.Checkbutton(
                 video_frame,
-                text=label,
+                text=t(f"bulk_transcriber.media.video.{ext}"),
                 variable=self.video_vars[ext],
                 command=self._on_selection_changed
             ).pack(anchor=tk.W, padx=10, pady=3)
@@ -75,13 +76,13 @@ class MediaTypeSelector:
             row: Grid row position
             column: Grid column position (default 0)
         """
-        audio_frame = ttk.LabelFrame(parent_frame, text="Audio Formats")
+        audio_frame = ttk.LabelFrame(parent_frame, text=t("bulk_transcriber.frame.audio"))
         audio_frame.grid(row=row, column=column, sticky=(tk.W, tk.E), padx=10, pady=10)
         
         for ext, label in MEDIA_TYPES_AUDIO.items():
             ttk.Checkbutton(
                 audio_frame,
-                text=label,
+                text=t(f"bulk_transcriber.media.audio.{ext}"),
                 variable=self.audio_vars[ext],
                 command=self._on_selection_changed
             ).pack(anchor=tk.W, padx=10, pady=3)
@@ -144,7 +145,7 @@ class MediaTypeSelector:
         # Validate at least one type selected
         if not self.has_selection():
             self.parent_tab.append_log(
-                "At least one media format must be selected",
+                t("bulk_transcriber.log.min_one_media"),
                 "warning"
             )
         

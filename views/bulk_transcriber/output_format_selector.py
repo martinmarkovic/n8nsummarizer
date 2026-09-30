@@ -12,6 +12,7 @@ Phase: v5.0.4 - Phase 3 Code Quality
 import tkinter as tk
 from tkinter import ttk
 from .constants import OUTPUT_FORMATS, DEFAULT_OUTPUT_FORMATS
+from utils.i18n import t
 
 
 class OutputFormatSelector:
@@ -48,13 +49,13 @@ class OutputFormatSelector:
             row: Grid row position
             column: Grid column position (default 0)
         """
-        output_frame = ttk.LabelFrame(parent_frame, text="Output Transcript Formats")
+        output_frame = ttk.LabelFrame(parent_frame, text=t("bulk_transcriber.frame.output_formats"))
         output_frame.grid(row=row, column=column, sticky=(tk.W, tk.E), padx=10, pady=10)
         
         for ext, label in OUTPUT_FORMATS.items():
             ttk.Checkbutton(
                 output_frame,
-                text=label,
+                text=t(f"bulk_transcriber.output.{ext}"),
                 variable=self.format_vars[ext],
                 command=self._on_selection_changed
             ).pack(anchor=tk.W, padx=10, pady=3)
@@ -62,7 +63,7 @@ class OutputFormatSelector:
         # Add info label
         info_label = ttk.Label(
             output_frame,
-            text="Note: At least one output format must be selected",
+            text=t("bulk_transcriber.lbl.output_note"),
             foreground="gray",
             font=("TkDefaultFont", 9)
         )

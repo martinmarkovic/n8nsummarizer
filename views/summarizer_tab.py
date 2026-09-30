@@ -29,6 +29,7 @@ from utils.prompt_manager import PromptManager
 from utils.logger import logger
 from models.llm_client.discovery import discover_models, Provider, ModelOption
 from views.base_tab import BaseTab
+from utils.i18n import t
 
 
 class SummarizerTab(BaseTab):
@@ -53,7 +54,7 @@ class SummarizerTab(BaseTab):
         self.input_mode_var = tk.StringVar(value="file")  # "file" or "youtube"
         
         # File mode state
-        self.file_path_var = tk.StringVar(value="No file selected")
+        self.file_path_var = tk.StringVar(value=t("summarizer.no_file"))
         self.current_file_directory = None
         self.current_file_basename = None
         
@@ -142,7 +143,7 @@ class SummarizerTab(BaseTab):
     
     def _setup_input_section(self):
         """Setup input section with file/YouTube mode selection."""
-        input_frame = ttk.LabelFrame(self, text="Input", padding="10")
+        input_frame = ttk.LabelFrame(self, text=t("summarizer.frame.input"), padding="10")
         input_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
         
         # Mode selection radio buttons
@@ -151,7 +152,7 @@ class SummarizerTab(BaseTab):
         
         ttk.Radiobutton(
             mode_frame,
-            text="📄 File",
+            text=t("summarizer.radio.file"),
             value="file",
             variable=self.input_mode_var,
             command=self._on_mode_changed
@@ -159,7 +160,7 @@ class SummarizerTab(BaseTab):
         
         ttk.Radiobutton(
             mode_frame,
-            text="🎬 Video URL",
+            text=t("summarizer.radio.video_url"),
             value="youtube",
             variable=self.input_mode_var,
             command=self._on_mode_changed
@@ -169,7 +170,7 @@ class SummarizerTab(BaseTab):
         self._file_frame = ttk.Frame(input_frame)
         file_row = 1
         
-        ttk.Label(self._file_frame, text="File:").grid(row=file_row, column=0, sticky="w")
+        ttk.Label(self._file_frame, text=t("summarizer.lbl.file")).grid(row=file_row, column=0, sticky="w")
         ttk.Label(
             self._file_frame,
             textvariable=self.file_path_var,
@@ -179,7 +180,7 @@ class SummarizerTab(BaseTab):
         
         ttk.Button(
             self._file_frame,
-            text="Browse…",
+            text=t("summarizer.btn.browse"),
             command=self._browse_file
         ).grid(row=file_row, column=2, padx=5)
         
@@ -200,7 +201,7 @@ class SummarizerTab(BaseTab):
         self._register_entry_context_menu(self.url_entry)
         
         youtube_row += 1
-        ttk.Label(self._youtube_frame, text="Format:").grid(row=youtube_row, column=0, sticky="w")
+        ttk.Label(self._youtube_frame, text=t("summarizer.lbl.format")).grid(row=youtube_row, column=0, sticky="w")
         format_combo = ttk.Combobox(
             self._youtube_frame,
             textvariable=self.format_var,
@@ -214,7 +215,7 @@ class SummarizerTab(BaseTab):
         self.force_retranscribe_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             self._youtube_frame,
-            text="Force re-transcribe (ignore loaded content)",
+            text=t("summarizer.chk.force_retranscribe"),
             variable=self.force_retranscribe_var
         ).grid(row=youtube_row, column=1, sticky="w", padx=5)
 
@@ -238,14 +239,14 @@ class SummarizerTab(BaseTab):
     
     def _setup_settings_section(self):
         """Setup LLM settings section."""
-        settings_frame = ttk.LabelFrame(self, text="Summarizer Settings", padding="10")
+        settings_frame = ttk.LabelFrame(self, text=t("summarizer.frame.settings"), padding="10")
         settings_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
         
         settings_frame.columnconfigure(1, weight=1)
         
         # Provider selection
         row = 0
-        ttk.Label(settings_frame, text="Provider:").grid(row=row, column=0, sticky="w")
+        ttk.Label(settings_frame, text=t("summarizer.lbl.provider")).grid(row=row, column=0, sticky="w")
         
         provider_frame = ttk.Frame(settings_frame)
         provider_frame.grid(row=row, column=1, sticky="w")
@@ -279,7 +280,7 @@ class SummarizerTab(BaseTab):
         
         # Base URL
         row += 1
-        ttk.Label(settings_frame, text="Base URL:").grid(row=row, column=0, sticky="w")
+        ttk.Label(settings_frame, text=t("summarizer.lbl.base_url")).grid(row=row, column=0, sticky="w")
         self.webhook_entry = ttk.Entry(
             settings_frame,
             textvariable=self.webhook_var
@@ -290,20 +291,20 @@ class SummarizerTab(BaseTab):
         # Test connection button
         ttk.Button(
             settings_frame,
-            text="Test",
+            text=t("summarizer.btn.test"),
             command=self._test_connection,
             width=6
         ).grid(row=row, column=2, padx=5)
         
         ttk.Checkbutton(
             settings_frame,
-            text="Remember settings",
+            text=t("summarizer.chk.remember"),
             variable=self.save_settings_var
         ).grid(row=row, column=3, sticky="w", padx=5)
         
         # Model name (changed to combobox)
         row += 1
-        ttk.Label(settings_frame, text="Model:").grid(row=row, column=0, sticky="w")
+        ttk.Label(settings_frame, text=t("summarizer.lbl.model")).grid(row=row, column=0, sticky="w")
         self.model_combo = ttk.Combobox(
             settings_frame,
             textvariable=self.model_var,
@@ -314,7 +315,7 @@ class SummarizerTab(BaseTab):
         
         # Prompt preset
         row += 1
-        ttk.Label(settings_frame, text="Prompt Preset:").grid(row=row, column=0, sticky="w")
+        ttk.Label(settings_frame, text=t("summarizer.lbl.prompt_preset")).grid(row=row, column=0, sticky="w")
         self.prompt_combo = ttk.Combobox(
             settings_frame,
             textvariable=self.prompt_preset_var,
@@ -381,13 +382,13 @@ class SummarizerTab(BaseTab):
         base_url = self.webhook_var.get().strip()
 
         if not provider or not base_url:
-            self.models_status.set("Error: Provider and URL required")
+            self.models_status.set(t("summarizer.status.need_provider"))
             if self.status_indicator:
                 self.status_indicator.config(foreground="red")
             return
 
         # Show loading state
-        self.models_status.set("Connecting...")
+        self.models_status.set(t("summarizer.status.connecting"))
         if self.status_indicator:
             self.status_indicator.config(foreground="orange")
         self.update()
@@ -412,17 +413,17 @@ class SummarizerTab(BaseTab):
 
         # Update status indicator
         if status == 'ok':
-            self.models_status.set("Connected")
+            self.models_status.set(t("summarizer.status.connected"))
             if self.status_indicator:
                 self.status_indicator.config(foreground="green")
             self.models_error.set("")
         elif status == 'error':
-            self.models_status.set("Cannot reach server")
+            self.models_status.set(t("summarizer.status.unreachable"))
             if self.status_indicator:
                 self.status_indicator.config(foreground="red")
             self.models_error.set(error or "Unknown error")
         else:
-            self.models_status.set("Connecting...")
+            self.models_status.set(t("summarizer.status.connecting"))
             if self.status_indicator:
                 self.status_indicator.config(foreground="orange")
 
@@ -541,11 +542,11 @@ class SummarizerTab(BaseTab):
         def _copy():
             self.prompt_text.event_generate("<<Copy>>")
 
-        menu.add_command(label="Paste", command=_paste)
-        menu.add_command(label="Copy", command=_copy)
+        menu.add_command(label=t("summarizer.menu.paste"), command=_paste)
+        menu.add_command(label=t("summarizer.menu.copy"), command=_copy)
         if self.prompt_manager:
             menu.add_separator()
-            menu.add_command(label="💾 Save as prompt", command=self._save_prompt_as_custom)
+            menu.add_command(label=t("summarizer.menu.save_prompt"), command=self._save_prompt_as_custom)
         menu.tk_popup(event.x_root, event.y_root)
         menu.grab_release()
     
@@ -555,13 +556,13 @@ class SummarizerTab(BaseTab):
             return
         text = self.prompt_text.get("1.0", tk.END).strip()
         if not text:
-            messagebox.showwarning("Empty prompt", "Cannot save an empty prompt.")
+            messagebox.showwarning(t("summarizer.msg.empty_prompt_title"), t("summarizer.msg.empty_prompt_body"))
             return
         dialog = tk.Toplevel(self)
-        dialog.title("Save prompt")
+        dialog.title(t("summarizer.dialog.save_prompt_title"))
         dialog.resizable(False, False)
         dialog.grab_set()
-        ttk.Label(dialog, text="Preset name:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        ttk.Label(dialog, text=t("summarizer.lbl.preset_name")).grid(row=0, column=0, padx=10, pady=10, sticky="w")
         name_var = tk.StringVar()
         name_entry = ttk.Entry(dialog, textvariable=name_var, width=30)
         name_entry.grid(row=0, column=1, padx=10, pady=10)
@@ -569,7 +570,7 @@ class SummarizerTab(BaseTab):
         def do_save():
             name = name_var.get().strip()
             if not name:
-                messagebox.showwarning("Missing name", "Please enter a name.", parent=dialog)
+                messagebox.showwarning(t("summarizer.msg.missing_name_title"), t("summarizer.msg.missing_name_body"), parent=dialog)
                 return
             try:
                 self.prompt_manager.add_custom(name, text)
@@ -578,11 +579,11 @@ class SummarizerTab(BaseTab):
                 self._last_valid_preset = name
                 dialog.destroy()
             except ValueError as e:
-                messagebox.showerror("Error", str(e), parent=dialog)
+                messagebox.showerror(t("summarizer.msg.error_title"), str(e), parent=dialog)
         btn_frame = ttk.Frame(dialog)
         btn_frame.grid(row=1, column=0, columnspan=2, pady=10)
-        ttk.Button(btn_frame, text="Save", command=do_save).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Cancel", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text=t("summarizer.btn.save"), command=do_save).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text=t("summarizer.btn.cancel"), command=dialog.destroy).pack(side=tk.LEFT, padx=5)
         dialog.bind("<Return>", lambda e: do_save())
     
     def _on_preset_combo_rightclick(self, event):
@@ -592,9 +593,9 @@ class SummarizerTab(BaseTab):
         selected = self.prompt_preset_var.get()
         menu = tk.Menu(self, tearoff=0)
         if self.prompt_manager and self.prompt_manager.is_custom(selected):
-            menu.add_command(label="🗑 Delete prompt", command=self._delete_custom_prompt)
+            menu.add_command(label=t("summarizer.menu.delete_prompt"), command=self._delete_custom_prompt)
         else:
-            menu.add_command(label="Cannot delete default prompt", state="disabled")
+            menu.add_command(label=t("summarizer.menu.cannot_delete_default"), state="disabled")
         menu.tk_popup(event.x_root, event.y_root)
         menu.grab_release()
     
@@ -606,18 +607,18 @@ class SummarizerTab(BaseTab):
         # Guard: only custom presets are deletable
         if not self.prompt_manager.is_custom(name):
             messagebox.showinfo(
-                "Cannot delete",
-                "Only custom presets (below the separator line) can be deleted."
+                t("summarizer.msg.cannot_delete_title"),
+                t("summarizer.msg.cannot_delete_body")
             )
             return
-        if not messagebox.askyesno("Delete prompt", f"Delete custom prompt '{name}'?\nThis cannot be undone."):
+        if not messagebox.askyesno(t("summarizer.msg.delete_prompt_title"), t("summarizer.msg.delete_prompt_body").format(name=name)):
             return
         try:
             self.prompt_manager.delete_custom(name)
             self._reload_presets()
             self._update_delete_btn_state()
         except (ValueError, KeyError) as e:
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror(t("summarizer.msg.error_title"), str(e))
 
     def _update_delete_btn_state(self, event=None):
         """Enable the delete button only when a deletable custom preset is selected."""
@@ -629,7 +630,7 @@ class SummarizerTab(BaseTab):
     
     def _setup_file_info_section(self):
         """Setup file information display section."""
-        self.file_info_frame = ttk.LabelFrame(self, text="File Info", padding="10")
+        self.file_info_frame = ttk.LabelFrame(self, text=t("summarizer.frame.file_info"), padding="10")
         self.file_info_frame.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
         
         # Create text widget with scrollbar
@@ -651,7 +652,7 @@ class SummarizerTab(BaseTab):
         
         # Initial content
         self.info_text.config(state="normal")
-        self.info_text.insert("1.0", "No file selected")
+        self.info_text.insert("1.0", t("summarizer.no_file"))
         self.info_text.config(state="disabled")
     
     def _setup_content_response_section(self):
@@ -667,7 +668,7 @@ class SummarizerTab(BaseTab):
         # Content preview (left)
         content_preview_frame = ttk.LabelFrame(
             content_frame,
-            text="Content Preview & Edit",
+            text=t("summarizer.frame.content_preview"),
             padding="5"
         )
         content_preview_frame.grid(row=0, column=0, sticky="nsew", padx=2, pady=0)
@@ -689,13 +690,13 @@ class SummarizerTab(BaseTab):
         content_menu.add_tts_read_command(lambda: self._selection_or_all(self.content_text))
         content_menu.add_tts_stop_command()
         content_menu.add_separator()
-        content_menu.add_fullscreen_command(title="Content Preview & Edit", editable=True)
+        content_menu.add_fullscreen_command(title=t("summarizer.frame.content_preview"), editable=True)
         content_menu.bind()
         
         # Response display (right)
         response_frame = ttk.LabelFrame(
             content_frame,
-            text="Response",
+            text=t("summarizer.frame.response"),
             padding="5"
         )
         response_frame.grid(row=0, column=1, sticky="nsew", padx=2, pady=0)
@@ -713,20 +714,20 @@ class SummarizerTab(BaseTab):
         # Single consolidated context menu for the response: copy/clear + TTS + fullscreen
         from views.context_menu import AppContextMenu
         menu = AppContextMenu(self.response_text)
-        menu.add_command("Copy All", self._copy_all_response)
-        menu.add_command("Clear", self._clear_response)
+        menu.add_command(t("summarizer.menu.copy_all"), self._copy_all_response)
+        menu.add_command(t("summarizer.menu.clear"), self._clear_response)
         menu.add_separator()
-        menu.add_command("Send to Translation tab", self._send_to_translation)
+        menu.add_command(t("summarizer.menu.send_to_translation"), self._send_to_translation)
         menu.add_separator()
         menu.add_tts_read_command(lambda: self._selection_or_all(self.response_text))
         menu.add_tts_stop_command()
         menu.add_separator()
-        menu.add_fullscreen_command(title="Response", editable=False)
+        menu.add_fullscreen_command(title=t("summarizer.frame.response"), editable=False)
         menu.bind()
         
         # Initial response content
         self._set_readonly_text(self.response_text,
-            "Select a file or enter a YouTube URL and click Summarize to get started…"
+            t("summarizer.text.get_started")
         )
     
     def _setup_action_bar(self):
@@ -737,7 +738,7 @@ class SummarizerTab(BaseTab):
         # Summarize button
         self.send_btn = ttk.Button(
             action_frame,
-            text="✨ Summarize",
+            text=t("summarizer.btn.summarize"),
             command=self._send_clicked
         )
         self.send_btn.grid(row=0, column=0, padx=5)
@@ -750,24 +751,24 @@ class SummarizerTab(BaseTab):
         # Export preferences
         ttk.Checkbutton(
             export_controls_frame,
-            text="Use original location",
+            text=t("summarizer.chk.use_original_location"),
             variable=self.use_original_location_var
         ).pack(side=tk.LEFT, padx=5)
         
         ttk.Checkbutton(
             export_controls_frame,
-            text="Auto .txt",
+            text=t("summarizer.chk.auto_txt"),
             variable=self.auto_export_txt_var
         ).pack(side=tk.LEFT, padx=5)
         
         ttk.Checkbutton(
             export_controls_frame,
-            text="Auto .docx",
+            text=t("summarizer.chk.auto_docx"),
             variable=self.auto_export_docx_var
         ).pack(side=tk.LEFT, padx=5)
         
         # Export buttons
-        ttk.Label(export_controls_frame, text="Export:").pack(side=tk.LEFT, padx=5)
+        ttk.Label(export_controls_frame, text=t("summarizer.lbl.export")).pack(side=tk.LEFT, padx=5)
         
         self.export_txt_btn = ttk.Button(
             export_controls_frame,
@@ -787,7 +788,7 @@ class SummarizerTab(BaseTab):
         
         self.copy_btn = ttk.Button(
             export_controls_frame,
-            text="📋 Copy",
+            text=t("summarizer.btn.copy"),
             command=self._copy_clicked,
             state="disabled"
         )
@@ -796,7 +797,7 @@ class SummarizerTab(BaseTab):
         # Clear button
         self.clear_btn = ttk.Button(
             action_frame,
-            text="Clear All",
+            text=t("summarizer.btn.clear_all"),
             command=self._clear_clicked
         )
         self.clear_btn.grid(row=0, column=2, padx=5)
@@ -815,45 +816,45 @@ class SummarizerTab(BaseTab):
             self.clipboard_clear()
             self.clipboard_append(content)
             self.update()
-            self.set_status(f"Copied {len(content)} characters to clipboard")
+            self.set_status(t("summarizer.status.copied").format(n=len(content)))
     
     def _clear_response(self):
         """Clear response text."""
-        self._set_readonly_text(self.response_text, "Response cleared")
-        self.set_status("Response cleared")
+        self._set_readonly_text(self.response_text, t("summarizer.text.response_cleared"))
+        self.set_status(t("summarizer.text.response_cleared"))
 
     def _send_to_translation(self):
         """Send the response text to the Translation tab's Source box and switch to it."""
         text = self.response_text.get("1.0", tk.END).strip()
         if not text:
             messagebox.showinfo(
-                "Nothing to send", "The response is empty — summarize something first."
+                t("summarizer.msg.nothing_send_title"), t("summarizer.msg.nothing_send_body")
             )
             return
 
         if callable(self.on_send_to_translation):
             self.on_send_to_translation(text)
-            self.set_status(f"Sent {len(text)} characters to the Translation tab")
+            self.set_status(t("summarizer.status.sent_to_translation").format(n=len(text)))
         else:
             logger.warning("on_send_to_translation not wired; cannot forward to Translation tab")
             messagebox.showwarning(
-                "Unavailable",
-                "The Translation tab isn't available to receive this text.",
+                t("summarizer.msg.unavailable_title"),
+                t("summarizer.msg.unavailable_body"),
             )
     
     # Button handlers
     def _browse_file(self):
         """Browse for file."""
         filetypes = [
-            ("All Files", ".*"),  # Make this first and default
-            ("Text Files", ".txt"),
-            ("Subtitle Files", ".srt .vtt"),
-            ("JSON Files", ".json"),
-            ("Word Documents", ".docx")
+            (t("summarizer.filetype.all"), ".*"),  # Make this first and default
+            (t("summarizer.filetype.text"), ".txt"),
+            (t("summarizer.filetype.subtitle"), ".srt .vtt"),
+            (t("summarizer.filetype.json"), ".json"),
+            (t("summarizer.filetype.word"), ".docx")
         ]
         
         file_path = filedialog.askopenfilename(
-            title="Select file to summarize",
+            title=t("summarizer.dialog.select_file"),
             filetypes=filetypes
         )
         
@@ -897,7 +898,7 @@ class SummarizerTab(BaseTab):
     def get_file_path(self) -> Optional[str]:
         """Get selected file path."""
         path = self.file_path_var.get()
-        return path if path and path != "No file selected" else None
+        return path if path and path != t("summarizer.no_file") else None
     
     def get_youtube_url(self) -> str:
         """Get YouTube URL."""
@@ -1012,7 +1013,7 @@ class SummarizerTab(BaseTab):
             self.current_file_directory = os.path.dirname(path)
             self.current_file_basename = os.path.basename(path)
         else:
-            self.file_path_var.set("No file selected")
+            self.file_path_var.set(t("summarizer.no_file"))
             self.current_file_directory = None
             self.current_file_basename = None
     
@@ -1030,14 +1031,14 @@ class SummarizerTab(BaseTab):
         
         if info:
             lines = [
-                f"Name: {info.get('name', 'Unknown')}",
-                f"Size: {info.get('size_kb', 0):.2f} KB",
-                f"Lines: {info.get('lines', 0)}",
-                f"Type: {info.get('type', 'Unknown')}"
+                t("summarizer.info.name").format(name=info.get('name', t("summarizer.info.unknown"))),
+                t("summarizer.info.size").format(size=info.get('size_kb', 0)),
+                t("summarizer.info.lines").format(lines=info.get('lines', 0)),
+                t("summarizer.info.type").format(type=info.get('type', t("summarizer.info.unknown"))),
             ]
             self.info_text.insert("1.0", "\n".join(lines))
         else:
-            self.info_text.insert("1.0", "No file selected")
+            self.info_text.insert("1.0", t("summarizer.no_file"))
         
         self.info_text.config(state="disabled")
     
@@ -1074,7 +1075,7 @@ class SummarizerTab(BaseTab):
         """Reset all UI elements to initial state."""
         # Reset input mode and file state
         self.input_mode_var.set("file")
-        self.file_path_var.set("No file selected")
+        self.file_path_var.set(t("summarizer.no_file"))
         self.current_file_directory = None
         self.current_file_basename = None
         
@@ -1085,12 +1086,12 @@ class SummarizerTab(BaseTab):
         self.content_text.delete("1.0", tk.END)
         self.info_text.config(state="normal")
         self.info_text.delete("1.0", tk.END)
-        self.info_text.insert("1.0", "No file selected")
+        self.info_text.insert("1.0", t("summarizer.no_file"))
         self.info_text.config(state="disabled")
         
         # Reset response
         self._set_readonly_text(self.response_text,
-            "Select a file or enter a YouTube URL and click Summarize to get started…")
+            t("summarizer.text.get_started"))
         
         # Reset export buttons
         self.set_export_buttons_enabled(False)
@@ -1098,4 +1099,4 @@ class SummarizerTab(BaseTab):
         # Restore frame visibility for current mode
         self._on_mode_changed()
         
-        self.set_status("Cleared all")
+        self.set_status(t("summarizer.status.cleared_all"))

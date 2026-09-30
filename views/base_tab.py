@@ -21,6 +21,7 @@ from abc import ABC, abstractmethod
 import tkinter as tk
 from tkinter import ttk
 from utils.logger import logger
+from utils.i18n import t
 
 
 class BaseTab(ttk.Frame, ABC):
@@ -140,7 +141,7 @@ class BaseTab(ttk.Frame, ABC):
             self.on_clear_clicked()
         else:
             self.clear_all()
-            self.set_status("Cleared")
+            self.set_status(t("common.cleared"))
 
     def get_main_window(self):
         """
@@ -181,16 +182,16 @@ class BaseTab(ttk.Frame, ABC):
             if "separator" in item:
                 menu.add_separator()
             elif item.get("copy"):
-                menu.add_copy_command(item["label"] if item.get("label") else "Copy")
+                menu.add_copy_command(item.get("label"))
             elif item.get("paste"):
-                menu.add_paste_command(item["label"] if item.get("label") else "Paste")
+                menu.add_paste_command(item.get("label"))
             elif item.get("tts_read"):
                 menu.add_tts_read_command(item["tts_read"])
             elif item.get("tts_stop"):
                 menu.add_tts_stop_command()
             elif item.get("fullscreen"):
                 menu.add_fullscreen_command(
-                    title=item.get("title", "Fullscreen"),
+                    title=item.get("title"),
                     editable=item.get("editable", False),
                 )
             else:

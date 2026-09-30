@@ -23,6 +23,7 @@ from typing import Optional
 
 from models.video_downloader import VideoDownloader
 from utils.logger import logger
+from utils.i18n import t
 
 
 class DownloaderController:
@@ -297,7 +298,7 @@ Views: {views_str}
             
         # Check if download path is set
         download_path = self.view.get_download_path()
-        if not download_path or download_path == "[No folder selected]":
+        if not download_path or download_path == t("downloader.status.no_folder"):
             self.view.show_error("Please select a download folder")
             self.view.update_status("Error: No download folder selected")
             return

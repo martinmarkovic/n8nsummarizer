@@ -18,6 +18,7 @@ Version: 2.4
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from views.base_tab import BaseTab
+from utils.i18n import t
 
 
 class TranscriberTab(BaseTab):
@@ -114,13 +115,13 @@ class TranscriberTab(BaseTab):
     
     def _setup_mode_section(self):
         """Setup mode selection (Local File / YouTube URL)"""
-        mode_frame = ttk.LabelFrame(self, text="Mode Selection", padding="10")
+        mode_frame = ttk.LabelFrame(self, text=t("transcriber.frame.mode"), padding="10")
         mode_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=10, pady=(10, 0))
         mode_frame.columnconfigure(1, weight=1)
         
         ttk.Radiobutton(
             mode_frame,
-            text="Local File",
+            text=t("transcriber.radio.local_file"),
             variable=self.mode_var,
             value="local",
             command=self._toggle_input_mode
@@ -136,7 +137,7 @@ class TranscriberTab(BaseTab):
     
     def _setup_input_section(self):
         """Setup input section (file browser or URL input)"""
-        input_frame = ttk.LabelFrame(self, text="Input", padding="10")
+        input_frame = ttk.LabelFrame(self, text=t("transcriber.frame.input"), padding="10")
         # NO pady between Mode and Input (they're grouped)
         input_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), padx=10, pady=(0, 0))
         input_frame.columnconfigure(1, weight=1)
@@ -146,14 +147,14 @@ class TranscriberTab(BaseTab):
         self.local_frame.grid(row=0, column=0, columnspan=3, sticky=(tk.W, tk.E))
         self.local_frame.columnconfigure(1, weight=1)
         
-        ttk.Label(self.local_frame, text="File:").grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(self.local_frame, text=t("transcriber.lbl.file")).grid(row=0, column=0, sticky=tk.W)
         self.file_entry = ttk.Entry(self.local_frame, textvariable=self.file_path_var)
         self.file_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
         self._register_entry_context_menu(self.file_entry)
         
         self.browse_btn = ttk.Button(
             self.local_frame,
-            text="Browse",
+            text=t("transcriber.btn.browse"),
             command=self._browse_file
         )
         self.browse_btn.grid(row=0, column=2, padx=5)
@@ -168,7 +169,7 @@ class TranscriberTab(BaseTab):
     
     def _setup_device_section(self):
         """Setup device selection (reduced padding)"""
-        device_frame = ttk.LabelFrame(self, text="Device", padding="10")
+        device_frame = ttk.LabelFrame(self, text=t("transcriber.frame.device"), padding="10")
         # Reduced pady below input
         device_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), padx=10, pady=(5, 0))
         device_frame.columnconfigure(1, weight=1)
@@ -190,13 +191,13 @@ class TranscriberTab(BaseTab):
     
     def _setup_output_location_section(self):
         """Setup output location selection"""
-        output_loc_frame = ttk.LabelFrame(self, text="Output Location", padding="10")
+        output_loc_frame = ttk.LabelFrame(self, text=t("transcriber.frame.output_location"), padding="10")
         output_loc_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), padx=10, pady=(5, 0))
         output_loc_frame.columnconfigure(1, weight=1)
         
         ttk.Radiobutton(
             output_loc_frame,
-            text="Original Location",
+            text=t("transcriber.radio.original_location"),
             variable=self.output_location_var,
             value="original",
             command=self._toggle_output_location
@@ -204,7 +205,7 @@ class TranscriberTab(BaseTab):
         
         ttk.Radiobutton(
             output_loc_frame,
-            text="Custom Destination",
+            text=t("transcriber.radio.custom_destination"),
             variable=self.output_location_var,
             value="custom",
             command=self._toggle_output_location
@@ -215,14 +216,14 @@ class TranscriberTab(BaseTab):
         self.custom_path_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0))
         self.custom_path_frame.columnconfigure(1, weight=1)
         
-        ttk.Label(self.custom_path_frame, text="Path:").grid(row=0, column=0, sticky=tk.W, padx=10)
+        ttk.Label(self.custom_path_frame, text=t("transcriber.lbl.path")).grid(row=0, column=0, sticky=tk.W, padx=10)
         self.custom_path_entry = ttk.Entry(self.custom_path_frame, textvariable=self.output_custom_path_var)
         self.custom_path_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
         self._register_entry_context_menu(self.custom_path_entry)
         
         self.browse_output_btn = ttk.Button(
             self.custom_path_frame,
-            text="Browse",
+            text=t("transcriber.btn.browse"),
             command=self._browse_output_folder
         )
         self.browse_output_btn.grid(row=0, column=2, padx=5)
@@ -230,7 +231,7 @@ class TranscriberTab(BaseTab):
     
     def _setup_format_selection_section(self):
         """Setup file format selection checkboxes"""
-        format_frame = ttk.LabelFrame(self, text="Output Formats", padding="10")
+        format_frame = ttk.LabelFrame(self, text=t("transcriber.frame.output_formats"), padding="10")
         format_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=10, pady=(5, 0))
         format_frame.columnconfigure(2, weight=1)
         
@@ -266,7 +267,7 @@ class TranscriberTab(BaseTab):
     
     def _setup_output_section(self):
         """Setup output SRT display (expandable)"""
-        output_frame = ttk.LabelFrame(self, text="Transcript (SRT)", padding="10")
+        output_frame = ttk.LabelFrame(self, text=t("transcriber.frame.transcript"), padding="10")
         # This frame should expand with window
         output_frame.grid(row=5, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=(5, 0))
         output_frame.columnconfigure(0, weight=1)
@@ -279,21 +280,21 @@ class TranscriberTab(BaseTab):
         
         self.copy_btn = ttk.Button(
             button_frame,
-            text="📋 Copy to Clipboard",
+            text=t("transcriber.btn.copy"),
             command=self._copy_transcript
         )
         self.copy_btn.pack(side=tk.LEFT, padx=5)
         
         self.export_txt_btn = ttk.Button(
             button_frame,
-            text="💾 Export .txt",
+            text=t("transcriber.btn.export_txt"),
             command=self._export_txt
         )
         self.export_txt_btn.pack(side=tk.LEFT, padx=5)
         
         self.export_srt_btn = ttk.Button(
             button_frame,
-            text="💾 Export .srt",
+            text=t("transcriber.btn.export_srt"),
             command=self._export_srt
         )
         self.export_srt_btn.pack(side=tk.LEFT, padx=5)
@@ -330,7 +331,7 @@ class TranscriberTab(BaseTab):
                 {"tts_read": lambda: self._selection_or_all(self.transcript_text)},
                 {"tts_stop": True},
                 {"separator": True},
-                {"fullscreen": True, "title": "Transcript", "editable": True},
+                {"fullscreen": True, "title": t("transcriber.fullscreen.transcript"), "editable": True},
             ],
         )
     
@@ -342,20 +343,20 @@ class TranscriberTab(BaseTab):
         
         self.transcribe_btn = ttk.Button(
             action_frame,
-            text="🎬 Transcribe",
+            text=t("transcriber.btn.transcribe"),
             command=self._transcribe_clicked
         )
         self.transcribe_btn.pack(side=tk.LEFT, padx=5)
         
         self.clear_btn = ttk.Button(
             action_frame,
-            text="🗑️ Clear",
+            text=t("transcriber.btn.clear"),
             command=self._clear_clicked
         )
         self.clear_btn.pack(side=tk.LEFT, padx=5)
         
         # Status indicator
-        self.status_label = ttk.Label(action_frame, text="Ready", relief=tk.SUNKEN)
+        self.status_label = ttk.Label(action_frame, text=t("transcriber.status.ready"), relief=tk.SUNKEN)
         self.status_label.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
         
         # Loading indicator
@@ -386,11 +387,11 @@ class TranscriberTab(BaseTab):
     def _browse_file(self):
         """Browse for local file"""
         supported_formats = [
-            ("Media Files", "*.mp4 *.avi *.mov *.mkv *.mp3 *.wav *.flac *.m4a"),
-            ("All Files", "*.*")
+            (t("transcriber.filetype.media"), "*.mp4 *.avi *.mov *.mkv *.mp3 *.wav *.flac *.m4a"),
+            (t("transcriber.filetype.all"), "*.*")
         ]
         file_path = filedialog.askopenfilename(
-            title="Select media file",
+            title=t("transcriber.dialog.select_media"),
             filetypes=supported_formats
         )
         if file_path:
@@ -400,7 +401,7 @@ class TranscriberTab(BaseTab):
     
     def _browse_output_folder(self):
         """Browse for custom output folder and save preference"""
-        folder = filedialog.askdirectory(title="Select output folder")
+        folder = filedialog.askdirectory(title=t("transcriber.dialog.select_output_folder"))
         if folder:
             self.output_custom_path_var.set(folder)
             # Save custom path preference
@@ -489,7 +490,7 @@ class TranscriberTab(BaseTab):
     def show_loading(self, show: bool = True):
         """Show/hide loading indicator"""
         if show:
-            self.loading_label.configure(text="⏳ Transcribing...")
+            self.loading_label.configure(text=t("transcriber.status.transcribing"))
             self.transcribe_btn.configure(state="disabled")
         else:
             self.loading_label.configure(text="")
@@ -500,7 +501,7 @@ class TranscriberTab(BaseTab):
         self.file_path_var.set("")
         self.url_var.set("")
         self.transcript_text.delete('1.0', tk.END)
-        self.set_status("Cleared")
+        self.set_status(t("transcriber.status.cleared"))
         self.copy_status.configure(text="")
     
     def copy_to_clipboard(self) -> bool:
@@ -508,17 +509,17 @@ class TranscriberTab(BaseTab):
         try:
             content = self.get_transcript()
             if not content.strip():
-                self.show_error("No transcript to copy")
+                self.show_error(t("transcriber.msg.no_transcript_copy"))
                 return False
             
             self.clipboard_clear()
             self.clipboard_append(content)
             self.update()
             
-            self.copy_status.configure(text="✓ Copied!")
+            self.copy_status.configure(text=t("transcriber.status.copied"))
             return True
         except Exception as e:
-            self.show_error(f"Failed to copy: {str(e)}")
+            self.show_error(t("transcriber.msg.copy_failed").format(error=str(e)))
             return False
     
     def get_content(self) -> str:
