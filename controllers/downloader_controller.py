@@ -350,6 +350,51 @@ Views: {views_str}
         self.download_thread.start()
         logger.info(f"Download started: {url}")
         
+    def list_items(self, url: str, on_done) -> None:
+        """Enumerate the downloadable items for a URL in a background thread.
+
+        Args:
+            url: The media URL (e.g. an Instagram carousel post).
+            on_done: Callback(success: bool, result) invoked on the UI thread with
+                     either the list of entries (success) or an error string.
+        """
+        is_valid, msg = self.validate_url(url)
+        if not is_valid:
+            self.view.after(0, lambda: on_done(False, msg))
+            return
+
+        def work():
+            ok, res = self.model.list_entries(url)
+            self.view.after(0, lambda: on_done(ok, res))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def start_download_selected(self, url: str, indices: list) -> None:
+        """Download only the given 1-based item indices in a background thread."""
+        download_path = self.view.get_download_path()
+        if not download_path or download_path == t("downloader.status.no_folder"):
+            self.view.show_error("Please select a download folder")
+            self.view.update_status("Error: No download folder selected")
+            return
+
+        if self.download_thread and self.download_thread.is_alive():
+            self.view.show_error("Download already in progress")
+            return
+
+        self.view.set_download_button_state(False)
+        self.view.log_message(f"Downloading {len(indices)} selected item(s) from: {url}")
+        self.view.log_message(f"Resolution preset: {self.model.selected_resolution}")
+        self.view.log_message(f"Destination: {download_path}")
+        self.view.update_status("Download in progress...")
+
+        def download():
+            success, message = self.model.download_items(url, indices)
+            self.view.after_download(success, message)
+
+        self.download_thread = threading.Thread(target=download, daemon=True)
+        self.download_thread.start()
+        logger.info(f"Selected-items download started: {url} items={indices}")
+
     def _on_progress(self, progress_info: dict) -> None:
         """Handle progress updates from model.
         

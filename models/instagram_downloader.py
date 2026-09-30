@@ -189,40 +189,122 @@ class InstagramDownloader(BaseDownloader):
             logger.error(f"[Instagram] Error extracting video info: {exc}")
             return None
 
-    def download_video(self, url: str) -> Tuple[bool, str]:
-        """Download an Instagram video using current settings."""
-        # Check if this is a story URL and handle with specialized method
-        if self.is_instagram_story(url):
-            logger.info("[Instagram] Story URL detected — using story-specific download")
-            return self.download_story(url)
+    def _cookie_opts(self) -> Dict[str, Any]:
+        """Return yt-dlp options carrying the configured cookie source."""
+        opts: Dict[str, Any] = {}
+        if self.cookie_file:
+            opts["cookies"] = self.cookie_file
+        elif self.cookie_browser:
+            opts["cookies_from_browser"] = self.cookie_browser
+        return opts
 
+    @staticmethod
+    def _classify_entry(entry: Dict[str, Any]) -> str:
+        """Best-effort classification of a carousel entry as video/image/unknown."""
+        if not entry:
+            return "unknown"
+        vcodec = entry.get("vcodec")
+        ext = (entry.get("ext") or "").lower()
+        if entry.get("duration") or (vcodec and vcodec != "none") or ext in (
+            "mp4", "webm", "mkv", "mov", "avi"
+        ):
+            return "video"
+        if ext in ("jpg", "jpeg", "png", "webp", "heic", "gif"):
+            return "image"
+        return "unknown"
+
+    def list_entries(self, url: str) -> Tuple[bool, Any]:
+        """Enumerate the downloadable items behind an Instagram URL.
+
+        A carousel ('/p/…') can hold multiple images and/or videos. This returns
+        the list yt-dlp sees so the UI can let the user pick which to download.
+
+        Returns:
+            (True, [entry_dict, ...]) on success, or (False, error_message).
+            Each entry dict: index (1-based), title, ext, kind, width, height,
+            duration, id.
+        """
+        try:
+            opts: Dict[str, Any] = {
+                "quiet": True,
+                "no_warnings": True,
+                "extract_flat": False,
+                "ignoreerrors": True,  # keep going even if one item can't be read
+            }
+            opts.update(self._cookie_opts())
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                self._apply_cookies(ydl)
+                info = ydl.extract_info(url, download=False)
+
+            if not info:
+                return False, "No information could be extracted from this URL."
+
+            raw_entries = info.get("entries")
+            if raw_entries is None:
+                raw_entries = [info]  # single (non-carousel) item
+
+            entries = []
+            for i, e in enumerate(raw_entries, start=1):
+                if not e:
+                    entries.append({
+                        "index": i, "title": f"Item {i} (unavailable)", "ext": "",
+                        "kind": "unknown", "width": 0, "height": 0,
+                        "duration": 0, "id": "",
+                    })
+                    continue
+                entries.append({
+                    "index": i,
+                    "title": e.get("title") or e.get("description") or e.get("id") or f"Item {i}",
+                    "ext": (e.get("ext") or "").lower(),
+                    "kind": self._classify_entry(e),
+                    "width": e.get("width") or 0,
+                    "height": e.get("height") or 0,
+                    "duration": e.get("duration") or 0,
+                    "id": e.get("id") or "",
+                })
+            return True, entries
+        except Exception as exc:
+            logger.error(f"[Instagram] Failed to list entries for {url}: {exc}")
+            return False, str(exc)
+
+    def download_items(self, url: str, indices=None) -> Tuple[bool, str]:
+        """Download all items (indices=None) or specific 1-based item indices.
+
+        Carousel-aware: uses ``ignoreerrors`` so an item with no downloadable
+        media (e.g. a still image on an older yt-dlp) is skipped instead of
+        aborting the whole post, and appends a permissive format fallback so
+        image items can be fetched too.
+        """
         if self.is_downloading:
             return False, "Download already in progress"
 
-        # Validate download path using base class utility
         path_ok, path_error = self._ensure_download_path_exists()
         if not path_ok:
             return False, path_error
 
-        # Map resolution preset to yt-dlp format string from YouTubeDownloader
         format_string = YouTubeDownloader.RESOLUTION_FORMATS[self.selected_resolution]
+        is_audio_only = self.selected_resolution.startswith("Audio Only")
+        # Append a bare "best" fallback so single-format image items can be
+        # selected too (does not affect video/audio selection above it).
+        if not is_audio_only:
+            format_string = f"{format_string}/b"
 
         ydl_opts: Dict[str, Any] = {
             "format": format_string,
-            "outtmpl": str(self.download_path / "%(title)s [%(id)s].%(ext)s"),
+            # playlist_index keeps carousel items from overwriting each other
+            "outtmpl": str(self.download_path / "%(title).70s [%(id)s].%(ext)s"),
             "progress_hooks": [self._progress_hook],
             "quiet": False,
             "no_warnings": False,
+            "ignoreerrors": True,
+            "noplaylist": False,  # a carousel is a playlist to yt-dlp
         }
+        ydl_opts.update(self._cookie_opts())
 
-        # Add cookie authentication (required for login-gated reels/posts as of mid-2026)
-        if self.cookie_file:
-            ydl_opts["cookies"] = self.cookie_file
-        elif self.cookie_browser:
-            ydl_opts["cookies_from_browser"] = self.cookie_browser
+        if indices:
+            ydl_opts["playlist_items"] = ",".join(str(int(i)) for i in indices)
 
-        # If audio-only preset is selected, extract MP3
-        if self.selected_resolution.startswith("Audio Only"):
+        if is_audio_only:
             ydl_opts["postprocessors"] = [
                 {
                     "key": "FFmpegExtractAudio",
@@ -238,17 +320,34 @@ class InstagramDownloader(BaseDownloader):
                 logger.info(f"[Instagram] Starting download: {url}")
                 logger.info(f"[Instagram] Resolution preset: {self.selected_resolution}")
                 logger.info(f"[Instagram] Format string: {format_string}")
+                logger.info(f"[Instagram] Items: {ydl_opts.get('playlist_items', 'all')}")
                 logger.info(f"[Instagram] Destination: {self.download_path}")
                 logger.info(f"[Instagram] Cookie source: {self.get_cookie_source()}")
 
                 ydl.download([url])
 
             self.is_downloading = False
-            return True, f"Instagram download completed at {self.selected_resolution} quality."
+            scope = f"{len(indices)} selected item(s)" if indices else "all items"
+            return True, f"Instagram download completed ({scope}) at {self.selected_resolution} quality."
         except Exception as exc:
             self.is_downloading = False
             error_msg = f"Instagram download failed: {exc}"
             logger.error(error_msg)
             return False, error_msg
+
+    def download_video(self, url: str) -> Tuple[bool, str]:
+        """Download an Instagram post/reel using current settings.
+
+        Stories use the dedicated cookie-based path. Everything else is routed
+        through the carousel-aware downloader so multi-image/video posts work.
+        """
+        if self.is_instagram_story(url):
+            logger.info("[Instagram] Story URL detected — using story-specific download")
+            return self.download_story(url)
+
+        # Posts and reels may be carousels (multiple images/videos). Download
+        # every item; items with no downloadable media are skipped rather than
+        # failing the whole post.
+        return self.download_items(url, indices=None)
 
     # cancel_download() is inherited from BaseDownloader

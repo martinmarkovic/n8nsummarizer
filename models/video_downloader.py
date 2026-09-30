@@ -207,6 +207,36 @@ class VideoDownloader:
         logger.info(f"Source detected for download: {source}")
         return model.download_video(url)
 
+    def list_entries(self, url: str):
+        """List the individual downloadable items behind a URL (e.g. an
+        Instagram carousel with multiple images/videos).
+
+        Returns (True, [entries]) or (False, error_message). Only backends that
+        implement ``list_entries`` are supported (currently Instagram).
+        """
+        model, source = self._active_model_for_url(url)
+        if model is None:
+            return False, "Unsupported URL. Only YouTube, Twitter, Instagram, and Facebook are supported."
+        if hasattr(model, "list_entries"):
+            logger.info(f"Listing items for source: {source}")
+            return model.list_entries(url)
+        return False, f"Listing individual items isn't supported for {source} yet."
+
+    def download_items(self, url: str, indices=None) -> Tuple[bool, str]:
+        """Download all or specific 1-based item indices from a multi-item URL.
+
+        Falls back to a normal single download for backends that don't support
+        item selection.
+        """
+        model, source = self._active_model_for_url(url)
+        if model is None:
+            return False, "Unsupported URL. Only YouTube, Twitter, Instagram, and Facebook are supported."
+        if hasattr(model, "download_items"):
+            logger.info(f"Downloading selected items for source: {source} (items={indices or 'all'})")
+            return model.download_items(url, indices)
+        # Backend without selective support — just download normally
+        return model.download_video(url)
+
     def cancel_download(self) -> None:
         """Cancel download on all backends (best-effort)."""
         self.youtube.cancel_download()

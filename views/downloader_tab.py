@@ -110,6 +110,16 @@ class DownloaderTab(BaseTab):
             command=self._fetch_video_info
         )
         info_btn.grid(row=0, column=2, padx=(5, 0), pady=5)
+
+        # List Items button — enumerate a multi-item post (e.g. Instagram
+        # carousel) so the user can pick which images/videos to download.
+        list_btn = ttk.Button(
+            controls_frame,
+            text="List Items",
+            width=10,
+            command=self._list_items
+        )
+        list_btn.grid(row=0, column=3, padx=(5, 0), pady=5)
         
         # Destination Folder
         ttk.Label(controls_frame, text=t("downloader.lbl.save_to")).grid(
@@ -444,6 +454,111 @@ class DownloaderTab(BaseTab):
         """Initiate download process."""
         if self.controller:
             self.controller.start_download()
+
+    def _list_items(self):
+        """List the individual items behind the URL and open a pick dialog."""
+        url = self.url_var.get().strip()
+        if not url or url == "https://":
+            self.show_error("Please enter a URL first.")
+            return
+        if not self.controller:
+            return
+        self.log_message(f"Listing items for: {url} …")
+        # Disable the download button while we query
+        self.set_download_button_state(False)
+        self.controller.list_items(url, lambda ok, res, u=url: self._on_items_listed(u, ok, res))
+
+    def _on_items_listed(self, url, success, result):
+        """Handle the result of a list_items request (runs on UI thread)."""
+        self.set_download_button_state(True)
+        if not success:
+            self.log_message(f"✗ Could not list items: {result}")
+            self.show_error(f"Could not list items:\n{result}")
+            return
+
+        entries = result or []
+        if not entries:
+            self.show_error("No downloadable items were found for this URL.")
+            return
+
+        self.log_message(f"Found {len(entries)} item(s).")
+        if len(entries) == 1:
+            # Nothing to choose — just download it
+            self.log_message("Only one item — downloading it directly.")
+            self.controller.start_download_selected(url, [1])
+            return
+
+        self._open_selection_dialog(url, entries)
+
+    def _open_selection_dialog(self, url, entries):
+        """Show a checkbox list of items with a Download Selected action."""
+        dialog = tk.Toplevel(self)
+        dialog.title("Select items to download")
+        dialog.geometry("520x420")
+        dialog.transient(self.winfo_toplevel())
+        dialog.grab_set()
+
+        ttk.Label(
+            dialog,
+            text=f"{len(entries)} items found. Choose which to download:",
+            font=("Segoe UI", 10, "bold"),
+        ).pack(anchor=tk.W, padx=12, pady=(12, 6))
+
+        # Scrollable checkbox area
+        outer = ttk.Frame(dialog)
+        outer.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 8))
+        canvas = tk.Canvas(outer, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(outer, orient=tk.VERTICAL, command=canvas.yview)
+        inner = ttk.Frame(canvas)
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        item_vars = []
+        for e in entries:
+            var = tk.BooleanVar(value=True)  # default: download everything
+            item_vars.append((e["index"], var))
+
+            kind = e.get("kind", "unknown")
+            icon = {"video": "🎬", "image": "🖼", "unknown": "❔"}.get(kind, "❔")
+            dims = ""
+            if e.get("width") and e.get("height"):
+                dims = f" {e['width']}x{e['height']}"
+            dur = ""
+            if e.get("duration"):
+                dur = f" {int(e['duration'])}s"
+            ext = f" .{e['ext']}" if e.get("ext") else ""
+            label = f"#{e['index']}  {icon} {kind}{dims}{dur}{ext}"
+
+            ttk.Checkbutton(inner, text=label, variable=var).pack(anchor=tk.W, pady=1)
+
+        # Select all / none helpers
+        btns_top = ttk.Frame(dialog)
+        btns_top.pack(fill=tk.X, padx=12)
+
+        def _set_all(value):
+            for _, v in item_vars:
+                v.set(value)
+
+        ttk.Button(btns_top, text="Select All", command=lambda: _set_all(True)).pack(side=tk.LEFT)
+        ttk.Button(btns_top, text="Select None", command=lambda: _set_all(False)).pack(side=tk.LEFT, padx=(6, 0))
+
+        # Action buttons
+        actions = ttk.Frame(dialog)
+        actions.pack(fill=tk.X, padx=12, pady=10)
+
+        def _download_selected():
+            chosen = [idx for idx, v in item_vars if v.get()]
+            if not chosen:
+                messagebox.showinfo("Nothing selected", "Select at least one item.", parent=dialog)
+                return
+            dialog.destroy()
+            self.controller.start_download_selected(url, chosen)
+
+        ttk.Button(actions, text="Download Selected", command=_download_selected).pack(side=tk.RIGHT)
+        ttk.Button(actions, text="Cancel", command=dialog.destroy).pack(side=tk.RIGHT, padx=(0, 6))
             
     # === View Helper Methods (called by controller) ===
     
