@@ -103,66 +103,17 @@ class InstagramDownloader(BaseDownloader):
     # --------------------------- Public API ---------------------------
 
     def download_story(self, url: str) -> Tuple[bool, str]:
-        """Download an Instagram story using cookie authentication."""
-        if self.is_downloading:
-            return False, "Download already in progress"
+        """Download an Instagram story or highlight (cookie authentication required).
 
-        # Validate download path using base class utility
-        path_ok, path_error = self._ensure_download_path_exists()
-        if not path_ok:
-            return False, path_error
-
-        # Map resolution preset to yt-dlp format string from YouTubeDownloader
-        format_string = YouTubeDownloader.RESOLUTION_FORMATS[self.selected_resolution]
-
-        ydl_opts: Dict[str, Any] = {
-            "format": format_string,
-            "outtmpl": str(self.download_path / "%(title)s [%(id)s].%(ext)s"),
-            "progress_hooks": [self._progress_hook],
-            "quiet": False,
-            "no_warnings": False,
-            # Story-specific options
-            "ignoreerrors": True,  # Stories playlist may have expired items
-            "extract_flat": False,
-            "noplaylist": False,  # Stories are treated as playlists by yt-dlp
-        }
-
-        # Add cookie authentication
-        if self.cookie_file:
-            ydl_opts["cookies"] = self.cookie_file
-        elif self.cookie_browser:
-            ydl_opts["cookies_from_browser"] = self.cookie_browser
-
-        # If audio-only preset is selected, extract MP3
-        if self.selected_resolution.startswith("Audio Only"):
-            ydl_opts["postprocessors"] = [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "192",
-                }
-            ]
-
-        self.is_downloading = True
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                self._apply_cookies(ydl)
-                logger.info(f"[Instagram] Starting story download: {url}")
-                logger.info(f"[Instagram] Resolution preset: {self.selected_resolution}")
-                logger.info(f"[Instagram] Format string: {format_string}")
-                logger.info(f"[Instagram] Destination: {self.download_path}")
-                logger.info(f"[Instagram] Cookie source: {self.get_cookie_source()}")
-                logger.debug(f"[Instagram] Story download opts: {ydl_opts}")
-
-                ydl.download([url])
-
-            self.is_downloading = False
-            return True, f"Instagram story download completed at {self.selected_resolution} quality."
-        except Exception as exc:
-            self.is_downloading = False
-            error_msg = f"Instagram story download failed: {exc}"
-            logger.error(error_msg)
-            return False, error_msg
+        A story tray contains multiple items that may be images and/or videos,
+        so it's routed through the same mixed-media engine as carousels:
+        videos via yt-dlp, images via direct fetch. Cookies are applied there.
+        """
+        logger.info(f"[Instagram] Story/highlight download: {url}")
+        logger.info(f"[Instagram] Cookie source: {self.get_cookie_source()}")
+        if not (self.cookie_file or self.cookie_browser):
+            logger.warning("[Instagram] No cookies configured — story download will likely fail")
+        return self.download_items(url, indices=None)
 
     def get_video_info(self, url: str) -> Optional[Dict[str, Any]]:
         """Extract Instagram video information without downloading."""
@@ -213,6 +164,74 @@ class InstagramDownloader(BaseDownloader):
             return "image"
         return "unknown"
 
+    def _extract_entries_info(self, url: str):
+        """Run a single extract_info and return the list of raw entry dicts.
+
+        For a carousel this is ``info['entries']``; for a single post it's
+        ``[info]``. Returns None if nothing could be extracted.
+        """
+        opts: Dict[str, Any] = {
+            "quiet": True,
+            "no_warnings": True,
+            "extract_flat": False,
+            "ignoreerrors": True,
+        }
+        opts.update(self._cookie_opts())
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            self._apply_cookies(ydl)
+            info = ydl.extract_info(url, download=False)
+        if not info:
+            return None
+        entries = info.get("entries")
+        if entries is None:
+            entries = [info]
+        return entries
+
+    @staticmethod
+    def _best_image_url(entry: Dict[str, Any]) -> Optional[str]:
+        """Pick the highest-resolution still-image URL from an entry."""
+        best_url = None
+        best_area = -1
+        for f in (entry.get("formats") or []):
+            u = f.get("url")
+            if not u:
+                continue
+            area = (f.get("width") or 0) * (f.get("height") or 0)
+            if area >= best_area:
+                best_area = area
+                best_url = u
+        return best_url or entry.get("url") or entry.get("thumbnail")
+
+    def _download_image(self, img_url: str, entry: Dict[str, Any], index: int) -> None:
+        """Download a still image directly (bypasses yt-dlp format selection).
+
+        Instagram images have no audio/video stream, so yt-dlp's best/b
+        selectors skip them; fetching the media URL directly is reliable.
+        """
+        import urllib.request
+
+        raw_title = str(entry.get("title") or entry.get("id") or f"image_{index}")
+        safe = "".join(c for c in raw_title if c.isalnum() or c in " ._-").strip()
+        safe = (safe[:70] or f"image_{index}")
+        ext = (entry.get("ext") or "jpg").lower()
+        if ext not in ("jpg", "jpeg", "png", "webp"):
+            ext = "jpg"
+        item_id = entry.get("id") or ""
+        dest = self.download_path / f"{safe} [{item_id}_{index}].{ext}"
+
+        req = urllib.request.Request(img_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = resp.read()
+        with open(dest, "wb") as fh:
+            fh.write(data)
+        logger.info(f"[Instagram] Saved image: {dest}")
+        # Nudge the UI so it registers activity for instant image saves
+        if self.progress_callback:
+            try:
+                self.progress_callback({"status": "finished", "filename": str(dest)})
+            except Exception:
+                pass
+
     def list_entries(self, url: str) -> Tuple[bool, Any]:
         """Enumerate the downloadable items behind an Instagram URL.
 
@@ -225,23 +244,9 @@ class InstagramDownloader(BaseDownloader):
             duration, id.
         """
         try:
-            opts: Dict[str, Any] = {
-                "quiet": True,
-                "no_warnings": True,
-                "extract_flat": False,
-                "ignoreerrors": True,  # keep going even if one item can't be read
-            }
-            opts.update(self._cookie_opts())
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                self._apply_cookies(ydl)
-                info = ydl.extract_info(url, download=False)
-
-            if not info:
-                return False, "No information could be extracted from this URL."
-
-            raw_entries = info.get("entries")
+            raw_entries = self._extract_entries_info(url)
             if raw_entries is None:
-                raw_entries = [info]  # single (non-carousel) item
+                return False, "No information could be extracted from this URL."
 
             entries = []
             for i, e in enumerate(raw_entries, start=1):
@@ -270,10 +275,10 @@ class InstagramDownloader(BaseDownloader):
     def download_items(self, url: str, indices=None) -> Tuple[bool, str]:
         """Download all items (indices=None) or specific 1-based item indices.
 
-        Carousel-aware: uses ``ignoreerrors`` so an item with no downloadable
-        media (e.g. a still image on an older yt-dlp) is skipped instead of
-        aborting the whole post, and appends a permissive format fallback so
-        image items can be fetched too.
+        Carousel-aware and mixed-media aware:
+        - Video items are downloaded with yt-dlp using the selected resolution.
+        - Image items are downloaded directly by URL (yt-dlp's best/b selectors
+          skip audio/video-less formats, so images need a direct fetch).
         """
         if self.is_downloading:
             return False, "Download already in progress"
@@ -282,53 +287,100 @@ class InstagramDownloader(BaseDownloader):
         if not path_ok:
             return False, path_error
 
-        format_string = YouTubeDownloader.RESOLUTION_FORMATS[self.selected_resolution]
         is_audio_only = self.selected_resolution.startswith("Audio Only")
-        # Append a bare "best" fallback so single-format image items can be
-        # selected too (does not affect video/audio selection above it).
-        if not is_audio_only:
-            format_string = f"{format_string}/b"
-
-        ydl_opts: Dict[str, Any] = {
-            "format": format_string,
-            # playlist_index keeps carousel items from overwriting each other
-            "outtmpl": str(self.download_path / "%(title).70s [%(id)s].%(ext)s"),
-            "progress_hooks": [self._progress_hook],
-            "quiet": False,
-            "no_warnings": False,
-            "ignoreerrors": True,
-            "noplaylist": False,  # a carousel is a playlist to yt-dlp
-        }
-        ydl_opts.update(self._cookie_opts())
-
-        if indices:
-            ydl_opts["playlist_items"] = ",".join(str(int(i)) for i in indices)
-
-        if is_audio_only:
-            ydl_opts["postprocessors"] = [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "192",
-                }
-            ]
 
         self.is_downloading = True
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                self._apply_cookies(ydl)
-                logger.info(f"[Instagram] Starting download: {url}")
-                logger.info(f"[Instagram] Resolution preset: {self.selected_resolution}")
-                logger.info(f"[Instagram] Format string: {format_string}")
-                logger.info(f"[Instagram] Items: {ydl_opts.get('playlist_items', 'all')}")
-                logger.info(f"[Instagram] Destination: {self.download_path}")
-                logger.info(f"[Instagram] Cookie source: {self.get_cookie_source()}")
+            entries = self._extract_entries_info(url)
+            if not entries:
+                self.is_downloading = False
+                return False, "Could not extract any items from this URL."
 
-                ydl.download([url])
+            # Map 1-based index -> entry (skip None entries from ignoreerrors)
+            indexed = {i: e for i, e in enumerate(entries, start=1) if e}
+            wanted = indices if indices else list(indexed.keys())
+
+            video_indices = []
+            image_targets = []  # (index, entry)
+            for i in wanted:
+                e = indexed.get(i)
+                if not e:
+                    continue
+                if self._classify_entry(e) == "image":
+                    image_targets.append((i, e))
+                else:
+                    video_indices.append(i)
+
+            successes = 0
+            failures = 0
+
+            logger.info(
+                f"[Instagram] Download plan for {url}: "
+                f"{len(video_indices)} video(s), {len(image_targets)} image(s), "
+                f"resolution={self.selected_resolution}"
+            )
+
+            # --- 1) Videos (and audio-only) via yt-dlp ---
+            if video_indices:
+                fmt = YouTubeDownloader.RESOLUTION_FORMATS[self.selected_resolution]
+                if not is_audio_only:
+                    fmt = f"{fmt}/b"  # permissive fallback
+                vopts: Dict[str, Any] = {
+                    "format": fmt,
+                    "outtmpl": str(self.download_path / "%(title).70s [%(id)s].%(ext)s"),
+                    "progress_hooks": [self._progress_hook],
+                    "quiet": False,
+                    "no_warnings": False,
+                    "ignoreerrors": True,
+                    "noplaylist": False,
+                    "playlist_items": ",".join(str(i) for i in video_indices),
+                }
+                vopts.update(self._cookie_opts())
+                if is_audio_only:
+                    vopts["postprocessors"] = [
+                        {
+                            "key": "FFmpegExtractAudio",
+                            "preferredcodec": "mp3",
+                            "preferredquality": "192",
+                        }
+                    ]
+                try:
+                    with yt_dlp.YoutubeDL(vopts) as ydl:
+                        self._apply_cookies(ydl)
+                        ydl.download([url])
+                    successes += len(video_indices)
+                except Exception as exc:
+                    logger.error(f"[Instagram] Video download failed: {exc}")
+                    failures += len(video_indices)
+
+            # --- 2) Images via direct download (not in audio-only mode) ---
+            if image_targets:
+                if is_audio_only:
+                    logger.info(
+                        "[Instagram] Skipping %d image(s) in Audio Only mode",
+                        len(image_targets),
+                    )
+                else:
+                    for i, e in image_targets:
+                        img_url = self._best_image_url(e)
+                        if not img_url:
+                            logger.warning(f"[Instagram] No image URL for item {i}")
+                            failures += 1
+                            continue
+                        try:
+                            self._download_image(img_url, e, i)
+                            successes += 1
+                        except Exception as exc:
+                            logger.error(f"[Instagram] Image item {i} failed: {exc}")
+                            failures += 1
 
             self.is_downloading = False
-            scope = f"{len(indices)} selected item(s)" if indices else "all items"
-            return True, f"Instagram download completed ({scope}) at {self.selected_resolution} quality."
+
+            if successes and not failures:
+                return True, f"Downloaded {successes} item(s) from Instagram."
+            if successes and failures:
+                return True, f"Downloaded {successes} item(s); {failures} failed or skipped."
+            return False, "No items could be downloaded from this URL."
         except Exception as exc:
             self.is_downloading = False
             error_msg = f"Instagram download failed: {exc}"

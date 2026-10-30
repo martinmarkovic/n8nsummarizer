@@ -56,6 +56,13 @@ def open_fullscreen(source_widget, title=None, editable=False, font=None):
     """
     if title is None:
         title = t("fullscreen.title")
+
+    # A CTkTextbox is a frame wrapping a real tk.Text; this function needs the
+    # inner widget for get/insert/delete and for cget("bg")/cget("fg") below,
+    # which raise ValueError on the CustomTkinter wrapper.
+    from views.ctk_compat import unwrap_text
+    source_widget = unwrap_text(source_widget)
+
     top = tk.Toplevel(source_widget.winfo_toplevel())
     top.title(title)
     top.geometry("1100x750")

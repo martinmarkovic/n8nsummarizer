@@ -13,7 +13,7 @@ Version: 1.0.0 - Phase 4 Architectural Improvements
 """
 
 from pathlib import Path
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable, Dict, Any, Tuple
 import logging
 
 logger = logging.getLogger(__name__)

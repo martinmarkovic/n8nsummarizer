@@ -40,6 +40,8 @@ import os
 import subprocess
 import threading
 
+import customtkinter as ctk
+
 from config import (
     APP_TITLE,
     APP_WIDTH,
@@ -61,6 +63,7 @@ from views.bulk_transcriber_tab import BulkTranscriberTab
 from views.translation_tab import TranslationTab
 from views.downloader_tab import DownloaderTab
 from views.video_subtitler_tab import VideoSubtitlerTab
+from views.ctk_compat import CTkNotebook, owned_by_ctk
 
 # Load environment variables
 load_dotenv()
@@ -289,9 +292,10 @@ class MainWindow:
         - Tab notebook with all tabs (7 total)
         - Status bar
         """
-        # Main frame
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # Main frame. CTkFrame has no `padding` option, so the 10px inset is
+        # applied via the grid call instead.
+        main_frame = ctk.CTkFrame(self.root, fg_color="transparent")
+        main_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(0, weight=1)
@@ -313,66 +317,83 @@ class MainWindow:
         Args:
             parent: Parent frame
         """
-        header_frame = ttk.Frame(parent)
-        header_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 15))
+        header_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 15))
         header_frame.columnconfigure(0, weight=1)
 
-        self.title_label = ttk.Label(
-            header_frame, text=self.app_title_display, font=("Segoe UI", 14, "bold")
+        self.title_label = ctk.CTkLabel(
+            header_frame,
+            text=self.app_title_display,
+            font=ctk.CTkFont(size=18, weight="bold"),
+            anchor="w",
         )
-        self.title_label.grid(row=0, column=0, sticky=tk.W)
+        self.title_label.grid(row=0, column=0, sticky="w")
 
         # Controls on the right side
-        controls_frame = ttk.Frame(header_frame)
-        controls_frame.grid(row=0, column=1, sticky=tk.E, padx=(10, 0))
+        controls_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        controls_frame.grid(row=0, column=1, sticky="e", padx=(10, 0))
 
-        ttk.Label(controls_frame, text=t("header.font")).pack(side=tk.LEFT, padx=(0, 4))
+        col = 0
+        ctk.CTkLabel(controls_frame, text=t("header.font")).grid(
+            row=0, column=col, padx=(0, 4)
+        )
+        col += 1
 
         # Decrease button — steps by 2 (original behaviour)
-        self.font_decrease_btn = ttk.Button(
-            controls_frame, text="🔍-", width=3, command=self._decrease_font_size
+        self.font_decrease_btn = ctk.CTkButton(
+            controls_frame, text="🔍-", width=36, command=self._decrease_font_size
         )
-        self.font_decrease_btn.pack(side=tk.LEFT, padx=(0, 2))
+        self.font_decrease_btn.grid(row=0, column=col, padx=(0, 2))
+        col += 1
 
         # Font size entry — type any integer in [FONT_MIN, FONT_MAX] for precise
-        # control (not restricted to the +2/-2 steps of the buttons). A plain Entry
-        # is used (not a Spinbox) so there are no redundant arrow controls.
-        vcmd = (self.root.register(self._validate_font_entry), "%P")
+        # control (not restricted to the +2/-2 steps of the buttons).
+        # CTkEntry has no validatecommand, so digits are filtered with a trace on
+        # the variable instead of a key-validation callback.
         self.font_size_var = tk.StringVar(value=str(self.current_font_size))
-        self.font_entry = ttk.Entry(
+        self.font_size_var.trace_add("write", self._sanitize_font_entry)
+        self.font_entry = ctk.CTkEntry(
             controls_frame,
             textvariable=self.font_size_var,
-            width=4,
-            justify=tk.CENTER,
-            validate="key",
-            validatecommand=vcmd,
+            width=48,
+            justify="center",
         )
-        self.font_entry.pack(side=tk.LEFT, padx=(0, 2))
+        self.font_entry.grid(row=0, column=col, padx=(0, 2))
+        col += 1
         # Commit typed value on Enter or focus-out
         self.font_entry.bind("<Return>",   lambda _e: self._on_font_entry_commit())
         self.font_entry.bind("<FocusOut>", lambda _e: self._on_font_entry_commit())
 
-        ttk.Label(controls_frame, text=t("header.px")).pack(side=tk.LEFT, padx=(0, 2))
+        ctk.CTkLabel(controls_frame, text=t("header.px")).grid(
+            row=0, column=col, padx=(0, 2)
+        )
+        col += 1
 
         # Increase button — steps by 2 (original behaviour)
-        self.font_increase_btn = ttk.Button(
-            controls_frame, text="🔍+", width=3, command=self._increase_font_size
+        self.font_increase_btn = ctk.CTkButton(
+            controls_frame, text="🔍+", width=36, command=self._increase_font_size
         )
-        self.font_increase_btn.pack(side=tk.LEFT, padx=(2, 12))
+        self.font_increase_btn.grid(row=0, column=col, padx=(2, 12))
+        col += 1
 
         # Theme toggle button
-        self.theme_btn = ttk.Button(
+        self.theme_btn = ctk.CTkButton(
             controls_frame,
             text=t("header.dark_mode") if self.current_theme == "light" else t("header.light_mode"),
             command=self._toggle_theme,
+            width=110,
         )
-        self.theme_btn.pack(side=tk.LEFT, padx=(0, 8))
+        self.theme_btn.grid(row=0, column=col, padx=(0, 8))
+        col += 1
 
         # Settings button (replaces old cogwheel → deps manager direct link)
-        self.settings_btn = ttk.Button(
-            controls_frame, text=t("header.settings"), command=self._open_settings
+        self.settings_btn = ctk.CTkButton(
+            controls_frame,
+            text=t("header.settings"),
+            command=self._open_settings,
+            width=100,
         )
-        self.settings_btn.pack(side=tk.LEFT)
+        self.settings_btn.grid(row=0, column=col)
 
     def _setup_tabs(self, parent):
         """
@@ -391,11 +412,12 @@ class MainWindow:
         Args:
             parent: Parent frame
         """
-        # Create notebook (tab container)
-        self.notebook = ttk.Notebook(parent)
-        self.notebook.grid(
-            row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10)
-        )
+        # Create notebook (tab container).
+        # CTkNotebook mimics the slice of the ttk.Notebook API this app uses, so
+        # tabs that are still ttk-based keep working unchanged while the shell
+        # gets the CustomTkinter look.
+        self.notebook = CTkNotebook(parent)
+        self.notebook.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
 
         # Initialize PromptManager
         self.prompt_manager = PromptManager()
@@ -437,20 +459,31 @@ class MainWindow:
         Args:
             parent: Parent frame
         """
-        status_frame = ttk.Frame(parent)
-        status_frame.grid(row=2, column=0, sticky=(tk.W, tk.E))
+        status_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        status_frame.grid(row=2, column=0, sticky="ew")
         status_frame.columnconfigure(0, weight=1)
 
         self.status_var = tk.StringVar(value=t("status.ready"))
-        self.status_label = ttk.Label(
-            status_frame, textvariable=self.status_var, relief=tk.SUNKEN
+        # CTkLabel has no `relief`; a filled rounded label reads as a status bar.
+        self.status_label = ctk.CTkLabel(
+            status_frame,
+            textvariable=self.status_var,
+            anchor="w",
+            height=26,
+            corner_radius=6,
+            fg_color=("gray85", "gray20"),
         )
-        self.status_label.grid(row=0, column=0, sticky=(tk.W, tk.E))
+        self.status_label.grid(row=0, column=0, sticky="ew")
 
     def _apply_theme(self):
         """
         Apply current theme colors to all widgets.
         """
+        # Drive CustomTkinter's own light/dark mode. Migrated widgets theme
+        # themselves from this; the ttk styling below still covers the tabs that
+        # have not been migrated yet.
+        ctk.set_appearance_mode("dark" if self.current_theme == "dark" else "light")
+
         style = ttk.Style()
         style.theme_use("clam")
 
@@ -535,22 +568,21 @@ class MainWindow:
         style.configure("TSpinbox", fieldbackground=colors["bg_secondary"], foreground=colors["text_primary"])
         style.configure("Horizontal.TScale", background=colors["bg_primary"])
 
-        # Apply to root
-        self.root.configure(bg=colors["bg_primary"])
+        # Apply to root. A CTk root takes `fg_color`, not the classic `bg`.
+        try:
+            self.root.configure(fg_color=colors["bg_primary"])
+        except (ValueError, tk.TclError):
+            logger.debug("Could not set root fg_color", exc_info=True)
 
         # Update text widget colors in tabs
         text_bg = colors["bg_secondary"]
         text_fg = colors["text_primary"]
 
-        # Summarizer tab
+        # Summarizer tab (migrated to CustomTkinter).
+        # CTk widgets reject bg/fg/insertbackground, so the tab applies the
+        # colors itself through its own themed options.
         if hasattr(self, "summarizer_tab"):
-            self.summarizer_tab.content_text.configure(
-                bg=text_bg, fg=text_fg, insertbackground=text_fg
-            )
-            self.summarizer_tab.response_text.configure(
-                bg=text_bg, fg=text_fg, insertbackground=text_fg
-            )
-            self.summarizer_tab.info_text.configure(bg=text_bg, fg=text_fg)
+            self.summarizer_tab.apply_theme_colors(text_bg, text_fg)
 
         # Transcriber tab
         if hasattr(self, "transcriber_tab"):
@@ -603,9 +635,9 @@ class MainWindow:
         if hasattr(self, "notebook"):
             self._recolor_text_widgets(self.notebook, text_bg, text_fg)
 
-        # Title label
+        # Title label (CTkLabel uses `text_color`, not `foreground`)
         if hasattr(self, "title_label"):
-            self.title_label.configure(foreground=colors["text_primary"])
+            self.title_label.configure(text_color=colors["text_primary"])
 
         # Reassert font sizes — _apply_theme sets some hardcoded fonts, so re-run
         # the font sizing to keep the user's chosen size after a theme toggle.
@@ -624,7 +656,11 @@ class MainWindow:
         for child in parent.winfo_children():
             try:
                 if isinstance(child, tk.Text):  # ScrolledText subclasses tk.Text
-                    child.configure(bg=bg, fg=fg, insertbackground=fg)
+                    # A CTkTextbox wraps a real tk.Text. Recoloring that inner
+                    # widget directly would override CustomTkinter's own
+                    # theming, so leave CTk-owned text widgets alone.
+                    if not owned_by_ctk(child):
+                        child.configure(bg=bg, fg=fg, insertbackground=fg)
             except tk.TclError:
                 pass
             # Recurse into containers
@@ -1397,6 +1433,26 @@ class MainWindow:
         """Validate the font entry: allow empty (mid-typing) or 1-2 digits."""
         return new_value == "" or (new_value.isdigit() and len(new_value) <= 2)
 
+    def _sanitize_font_entry(self, *_args):
+        """
+        Keep the font entry to at most two digits.
+
+        CTkEntry offers no ``validatecommand``, so instead of rejecting
+        keystrokes we strip anything invalid right after it is written to the
+        variable. The guard flag prevents the trace from recursing when this
+        method writes the corrected value back.
+        """
+        if getattr(self, "_sanitizing_font_entry", False):
+            return
+        raw = self.font_size_var.get()
+        cleaned = "".join(ch for ch in raw if ch.isdigit())[:2]
+        if cleaned != raw:
+            self._sanitizing_font_entry = True
+            try:
+                self.font_size_var.set(cleaned)
+            finally:
+                self._sanitizing_font_entry = False
+
     def _on_font_entry_commit(self):
         """Apply the font size currently typed in the entry, clamping to [FONT_MIN, FONT_MAX]."""
         try:
@@ -1449,13 +1505,17 @@ class MainWindow:
 
         # Title label stays bold and slightly larger than the chosen size
         if hasattr(self, "title_label"):
-            self.title_label.configure(font=("Segoe UI", max(fs + 2, 12), "bold"))
+            self.title_label.configure(
+                font=ctk.CTkFont(size=max(fs + 6, 14), weight="bold")
+            )
 
-        # Apply to Summarizer tab
+        # Tab strip buttons (CTkNotebook is not styled by ttk.Style)
+        if hasattr(self, "notebook") and hasattr(self.notebook, "set_tab_font"):
+            self.notebook.set_tab_font(ctk.CTkFont(size=fs))
+
+        # Apply to Summarizer tab (migrated to CustomTkinter - it owns its fonts)
         if hasattr(self, "summarizer_tab"):
-            self.summarizer_tab.content_text.configure(font=("Segoe UI", fs))
-            self.summarizer_tab.response_text.configure(font=("Segoe UI", fs))
-            self.summarizer_tab.info_text.configure(font=("Segoe UI", max(fs - 1, 8)))
+            self.summarizer_tab.apply_font_size(fs)
 
         # Apply to Transcriber tab
         if hasattr(self, "transcriber_tab"):

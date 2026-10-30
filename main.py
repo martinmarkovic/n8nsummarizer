@@ -20,6 +20,7 @@ Updated: 2026-04-26 - Video Subtitler feature
 """
 
 import tkinter as tk
+import customtkinter as ctk
 from views.main_window import MainWindow
 from controllers.file_controller import FileController
 from controllers.youtube_summarizer_controller import YouTubeSummarizerController
@@ -70,8 +71,12 @@ def main():
         settings = SettingsManager()
         logger.info("SettingsManager initialized")
 
-        # Create Tkinter root window
-        root = tk.Tk()
+        # Create the root window. ctk.CTk subclasses tk.Tk, so the tabs that are
+        # still ttk-based keep working while the shell uses CustomTkinter.
+        # MainWindow._apply_theme() sets the appearance mode from the saved
+        # theme preference right after construction.
+        ctk.set_default_color_theme("blue")
+        root = ctk.CTk()
 
         # Initialize main window (creates all tabs including Translation and Downloader)
         # Pass settings manager to main window

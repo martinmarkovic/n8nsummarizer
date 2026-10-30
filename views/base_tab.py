@@ -1,5 +1,5 @@
 """
-Base Tab - Abstract base class for all application tabs
+Base Tab - Abstract base classes for all application tabs
 
 Provides:
     - Standardized interface for all tabs
@@ -7,40 +7,52 @@ Provides:
     - Standard methods (clear, export, etc.)
     - Template structure for consistency
 
+Two base classes are available, both sharing the same behaviour via TabMixin:
+
+    BaseTab     - ttk.Frame based (legacy tabs, unchanged behaviour)
+    CTkBaseTab  - customtkinter.CTkFrame based (migrated tabs)
+
+This split exists so the ttk -> CustomTkinter migration can proceed one tab at
+a time: a tab only needs to swap its base class and its widgets, while all the
+shared helpers (context menus, status/error reporting, root lookup) stay in one
+place.
+
 Convention:
-    Every tab should inherit from BaseTab and implement:
+    Every tab should inherit from BaseTab or CTkBaseTab and implement:
     - _setup_ui() - Create tab-specific UI
     - get_content() - Return current content
     - clear_all() - Clear all tab data
     - Optional: custom methods for tab-specific features
-
-Future tabs can be added following this pattern.
 """
 
 from abc import ABC, abstractmethod
 import tkinter as tk
 from tkinter import ttk
+
+import customtkinter as ctk
+
 from utils.logger import logger
 from utils.i18n import t
 
 
-class BaseTab(ttk.Frame, ABC):
+class TabMixin:
     """
-    Abstract base class for application tabs.
+    Shared tab behaviour, independent of the widget toolkit.
 
-    All tabs should inherit from this class and implement required methods.
+    Holds everything that does not depend on whether the tab is a ttk.Frame or
+    a CTkFrame, so both base classes expose an identical interface to
+    controllers.
     """
 
-    def __init__(self, parent, tab_name: str):
+    def _init_tab(self, parent, tab_name: str):
         """
-        Initialize base tab.
+        Common initialization. Called by the concrete base class __init__ after
+        the underlying frame has been constructed.
 
         Args:
-            parent: Parent widget (usually ttk.Notebook)
-            tab_name: Display name for tab (e.g., 'File Summarizer')
+            parent: Parent widget (the notebook)
+            tab_name: Display name for the tab (e.g. 'File Summarizer')
         """
-        super().__init__(parent, padding="10")
-
         self.tab_name = tab_name
         self.root = self._get_root(parent)
 
@@ -53,51 +65,18 @@ class BaseTab(ttk.Frame, ABC):
         self._setup_ui()
 
     def _get_root(self, widget):
-        """Get root window from any widget"""
+        """
+        Get root window from any widget.
+
+        Works for both tk.Tk and customtkinter.CTk roots, since CTk subclasses
+        tk.Tk.
+        """
         current = widget
         while current is not None:
             if isinstance(current, tk.Tk):
                 return current
             current = current.master
         return None
-
-    @abstractmethod
-    def _setup_ui(self):
-        """
-        Setup tab UI components.
-        Must be implemented by subclass.
-
-        Example:
-            def _setup_ui(self):
-                # Create your UI components here
-                frame = ttk.LabelFrame(self, text="My Section")
-                frame.grid(row=0, column=0, sticky=(tk.W, tk.E))
-        """
-        pass
-
-    @abstractmethod
-    def get_content(self) -> str:
-        """
-        Get current tab content.
-        Must be implemented by subclass.
-
-        Returns:
-            str: Current content or empty string
-        """
-        pass
-
-    @abstractmethod
-    def clear_all(self):
-        """
-        Clear all tab data.
-        Must be implemented by subclass.
-
-        Example:
-            def clear_all(self):
-                self.content_text.delete('1.0', tk.END)
-                self.response_text.delete('1.0', tk.END)
-        """
-        pass
 
     # Standard methods - implement in subclass if needed
 
@@ -150,20 +129,23 @@ class BaseTab(ttk.Frame, ABC):
         Returns:
             MainWindow instance or None if not found
         """
-        # Navigate up the widget hierarchy to find MainWindow
+        # Navigate up the widget hierarchy to find MainWindow.
+        # MainWindow is not a widget, so look for a known tab attribute on the
+        # objects in the master chain.
         current = self
         while current is not None:
-            if hasattr(current, "youtube_summarizer_tab"):
+            if hasattr(current, "summarizer_tab"):
                 return current
-            current = current.master
+            current = getattr(current, "master", None)
         return None
 
-    def _register_context_menu(self, widget: tk.Text, items: list) -> "AppContextMenu":
+    def _register_context_menu(self, widget, items: list) -> "AppContextMenu":
         """
         Register a right-click context menu on a Text widget.
 
         Args:
-            widget: The tk.Text widget to attach the menu to.
+            widget: The text widget to attach the menu to (tk.Text,
+                    ScrolledText or CTkTextbox).
             items: List of dicts, each with:
                    {"label": str, "command": callable}
                    or {"separator": True}
@@ -205,10 +187,10 @@ class BaseTab(ttk.Frame, ABC):
     def _register_entry_context_menu(self, entry, allow_paste: bool = True) -> "AppContextMenu":
         """
         Attach a simple right-click context menu (Copy + optional Paste) to a
-        small single-line widget such as an (ttk.)Entry used for URLs or paths.
+        small single-line widget such as an Entry used for URLs or paths.
 
         Args:
-            entry: The Entry widget to attach the menu to.
+            entry: The Entry widget to attach the menu to (ttk.Entry or CTkEntry).
             allow_paste: Include a Paste item (skip for read-only fields).
 
         Returns:
@@ -228,6 +210,9 @@ class BaseTab(ttk.Frame, ABC):
         Return the current text selection in `widget`, or its full text if
         nothing is selected. Used by TTS "Read in Voice".
         """
+        from views.ctk_compat import unwrap_text
+
+        widget = unwrap_text(widget)
         try:
             if widget.tag_ranges("sel"):
                 selected = widget.get("sel.first", "sel.last")
@@ -250,3 +235,90 @@ class BaseTab(ttk.Frame, ABC):
         """Clear any forwarded text."""
         if hasattr(self, "_forwarded_text"):
             del self._forwarded_text
+
+
+class BaseTab(TabMixin, ttk.Frame, ABC):
+    """
+    Abstract base class for ttk-based application tabs.
+
+    Used by all tabs that have not yet been migrated to CustomTkinter.
+    """
+
+    def __init__(self, parent, tab_name: str):
+        """
+        Initialize base tab.
+
+        Args:
+            parent: Parent widget (the notebook)
+            tab_name: Display name for tab (e.g., 'File Summarizer')
+        """
+        ttk.Frame.__init__(self, parent, padding="10")
+        self._init_tab(parent, tab_name)
+
+    @abstractmethod
+    def _setup_ui(self):
+        """
+        Setup tab UI components.
+        Must be implemented by subclass.
+
+        Example:
+            def _setup_ui(self):
+                frame = ttk.LabelFrame(self, text="My Section")
+                frame.grid(row=0, column=0, sticky=(tk.W, tk.E))
+        """
+        pass
+
+    @abstractmethod
+    def get_content(self) -> str:
+        """
+        Get current tab content.
+        Must be implemented by subclass.
+
+        Returns:
+            str: Current content or empty string
+        """
+        pass
+
+    @abstractmethod
+    def clear_all(self):
+        """
+        Clear all tab data.
+        Must be implemented by subclass.
+        """
+        pass
+
+
+class CTkBaseTab(TabMixin, ctk.CTkFrame, ABC):
+    """
+    Abstract base class for CustomTkinter-based application tabs.
+
+    Behaves identically to BaseTab from a controller's point of view. The frame
+    is transparent so it picks up the window background, and padding is applied
+    by children via padx/pady (CTkFrame has no ``padding`` option).
+    """
+
+    def __init__(self, parent, tab_name: str):
+        """
+        Initialize CTk base tab.
+
+        Args:
+            parent: Parent widget (the notebook)
+            tab_name: Display name for tab
+        """
+        ctk.CTkFrame.__init__(self, parent, fg_color="transparent")
+        self._init_tab(parent, tab_name)
+
+    @abstractmethod
+    def _setup_ui(self):
+        """Setup tab UI components. Must be implemented by subclass."""
+        pass
+
+    @abstractmethod
+    def get_content(self) -> str:
+        """Get current tab content. Must be implemented by subclass."""
+        pass
+
+    @abstractmethod
+    def clear_all(self):
+        """Clear all tab data. Must be implemented by subclass."""
+        pass

@@ -22,15 +22,25 @@ class AppContextMenu:
         menu.bind()  # attaches <Button-3> to widget
     """
 
-    def __init__(self, widget: tk.Text):
+    def __init__(self, widget):
         """
-        Initialize context menu for a Text widget.
+        Initialize context menu for a text or entry widget.
 
         Args:
-            widget: The tk.Text widget to attach the menu to
+            widget: The widget to attach the menu to. Accepts tk.Text,
+                ScrolledText, (ttk.)Entry, and CustomTkinter CTkTextbox /
+                CTkEntry.
+
+        CustomTkinter widgets are unwrapped to the classic Tk widget they wrap.
+        CTkTextbox is a frame around a real tk.Text and raises ValueError for
+        classic options (``cget("state")``, ``cget("bg")``), which the copy and
+        paste handlers below rely on. Binding and menu posting also need the
+        inner widget so right-click lands on the text area itself.
         """
-        self.widget = widget
-        self._menu = tk.Menu(widget, tearoff=0)
+        from views.ctk_compat import unwrap_input
+
+        self.widget = unwrap_input(widget)
+        self._menu = tk.Menu(self.widget, tearoff=0)
         self._items = []  # List of item definitions
 
     def add_command(self, label: str, command):

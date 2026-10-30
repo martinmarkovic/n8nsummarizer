@@ -15,8 +15,9 @@ This model follows the same pattern as other models in the project
 
 import os
 import json
+import srt
 from pathlib import Path
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict
 from config import (
     TRANSLATION_DEFAULT_URL,
     TRANSLATION_MAX_TOKENS,
