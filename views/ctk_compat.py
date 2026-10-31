@@ -182,6 +182,139 @@ def render_gradient_photoimage(width: int, height: int, spec: dict):
     return ImageTk.PhotoImage(image)
 
 
+class CTkGradientFrame(ctk.CTkFrame):
+    """A solid CTk surface that can visibly render the selected gradient.
+
+    CTk's ``transparent`` colour resolves to a flat inherited background, not
+    alpha. This frame instead places a Pillow image above its own flat drawing
+    canvas while its normal native child widgets stay on top. It also paints
+    aligned crops into transparent CTk layout frames beneath it, avoiding the
+    flat rectangles that would otherwise cover the image.
+    """
+
+    def __init__(self, master, *, flat_palette_key: str = "bg", **kwargs):
+        kwargs.setdefault("corner_radius", 0)
+        kwargs.setdefault("fg_color", "transparent")
+        super().__init__(master, **kwargs)
+        self._flat_palette_key = flat_palette_key
+        self._theme_skip = True
+        self._gradient_spec = None
+        self._gradient_rgb = None
+        self._gradient_image = None
+        self._gradient_size = None
+        self._gradient_overlay_frames = []
+        self.bind("<Configure>", self._on_gradient_resize, add="+")
+
+    def _on_gradient_resize(self, _event=None):
+        self.after_idle(self._render_gradient)
+
+    def apply_palette(self, palette: dict):
+        """Apply the fallback surface and render/clear the chrome gradient."""
+        self._flat_color = palette[self._flat_palette_key]
+        self._gradient_spec = palette.get("gradient")
+        self.configure(fg_color=self._flat_color, bg_color=self._flat_color)
+        if self._gradient_spec:
+            self._render_gradient(force=True)
+        else:
+            self._clear_gradient()
+
+    def _gradient_overlay_candidates(self, parent=None):
+        parent = self if parent is None else parent
+        if parent is self or (
+            isinstance(parent, ctk.CTkFrame)
+            and str(parent.cget("fg_color")) == "transparent"
+        ):
+            yield parent
+        try:
+            children = parent.winfo_children()
+        except tk.TclError:
+            return
+        for child in children:
+            # A solid child is deliberately a card/control surface. Its own
+            # transparent descendants inherit that solid surface, not chrome.
+            if isinstance(child, ctk.CTkFrame) and str(child.cget("fg_color")) != "transparent":
+                continue
+            yield from self._gradient_overlay_candidates(child)
+
+    def _track_overlay_frame(self, frame):
+        """Refresh the host once a transparent child receives its real size."""
+        if getattr(frame, "_chrome_gradient_resize_owner", None) is self:
+            return
+
+        def refresh_after_layout(_event, owner=self):
+            owner.after_idle(owner._render_gradient)
+
+        frame.bind("<Configure>", refresh_after_layout, add="+")
+        frame._chrome_gradient_resize_owner = self
+
+    def _paint_overlay(self, frame):
+        if self._gradient_rgb is None:
+            return
+        canvas = getattr(frame, "_canvas", None)
+        if canvas is None:
+            return
+        try:
+            width, height = canvas.winfo_width(), canvas.winfo_height()
+            if width <= 1 or height <= 1:
+                return
+            offset_x = round(frame.winfo_rootx() - self.winfo_rootx())
+            offset_y = round(frame.winfo_rooty() - self.winfo_rooty())
+            image = self._gradient_rgb.crop(
+                (offset_x, offset_y, offset_x + width, offset_y + height)
+            )
+            from PIL import ImageTk
+            photo = ImageTk.PhotoImage(image)
+            canvas.delete("chrome_gradient_backdrop")
+            canvas.create_image(
+                0, 0, anchor="nw", image=photo, tags="chrome_gradient_backdrop"
+            )
+            canvas.tag_raise("chrome_gradient_backdrop")
+            frame._chrome_gradient_image = photo
+        except (ImportError, tk.TclError):
+            pass
+
+    def _clear_gradient(self):
+        for frame in self._gradient_overlay_frames:
+            try:
+                frame._canvas.delete("chrome_gradient_backdrop")
+                frame._chrome_gradient_image = None
+            except (AttributeError, tk.TclError):
+                pass
+        self._gradient_overlay_frames = []
+        self._gradient_rgb = None
+        self._gradient_image = None
+        self._gradient_size = None
+
+    def _render_gradient(self, force: bool = False):
+        if not self._gradient_spec or not self.winfo_exists():
+            return
+        try:
+            width, height = self._canvas.winfo_width(), self._canvas.winfo_height()
+        except tk.TclError:
+            return
+        if width <= 1 or height <= 1:
+            return
+        key = (
+            width, height, self._gradient_spec["start"],
+            self._gradient_spec["end"], self._gradient_spec["mode"],
+        )
+        if force or key != self._gradient_size:
+            image = render_gradient_image(width, height, self._gradient_spec)
+            if image is None:
+                self._clear_gradient()
+                return
+            self._gradient_rgb = image
+            self._gradient_size = key
+
+        self._gradient_overlay_frames = list(self._gradient_overlay_candidates())
+        for frame in self._gradient_overlay_frames:
+            self._track_overlay_frame(frame)
+            self._paint_overlay(frame)
+
+
+# ---------------------------------------------------------------------------
+# Text widget helpers
+# ---------------------------------------------------------------------------
 def owned_by_ctk(widget) -> bool:
     """
     True if *widget* is a classic Tk widget that belongs to a CTk widget.
@@ -325,8 +458,10 @@ class CTkNotebook(ctk.CTkFrame):
         # The strip is a rounded surface holding the tab "pills".
         # Marked self-styling: this widget and its pills are painted by
         # apply_palette(), so the generic theme walker must not touch them.
-        self._tab_bar = ctk.CTkFrame(
-            self, corner_radius=10, fg_color=("gray90", "gray14")
+        # Square host: the visible gradient image is rectangular, while the
+        # rounded tab pills remain solid controls above this background.
+        self._tab_bar = CTkGradientFrame(
+            self, flat_palette_key="subtle", corner_radius=0
         )
         self._tab_bar.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         self._tab_bar.grid_columnconfigure(1, weight=1)
@@ -689,7 +824,7 @@ class CTkNotebook(ctk.CTkFrame):
     def apply_palette(self, p: dict):
         """Theme the pill bar, pager arrows, and tab pills from the palette."""
         self._palette = p
-        self._tab_bar.configure(fg_color=p["subtle"])
+        self._tab_bar.apply_palette(p)
         self._style_navigation_buttons()
         self._refresh_tab_buttons()
 

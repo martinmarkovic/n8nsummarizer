@@ -63,7 +63,9 @@ from views.bulk_transcriber_tab import BulkTranscriberTab
 from views.translation_tab import TranslationTab
 from views.downloader_tab import DownloaderTab
 from views.video_subtitler_tab import VideoSubtitlerTab
-from views.ctk_compat import CTkNotebook, owned_by_ctk, normalize_gradient_spec
+from views.ctk_compat import (
+    CTkGradientFrame, CTkNotebook, owned_by_ctk, normalize_gradient_spec,
+)
 from views.ctk_theme import build_palette, apply_palette, apply_font_scale, font_sizes
 
 # Load environment variables
@@ -462,7 +464,7 @@ class MainWindow:
         Args:
             parent: Parent frame
         """
-        header_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        header_frame = CTkGradientFrame(parent, flat_palette_key="bg")
         header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 15))
         header_frame.columnconfigure(0, weight=1)
 
