@@ -4,9 +4,14 @@ Handles download via yt-dlp and transcription via Whisper.
 Fixed temp paths: temp_subtitler/video.mp4 and temp_subtitler/video.srt
 """
 from pathlib import Path
+import hashlib
+import shutil
 import yt_dlp
 
+from utils.logger import logger
+
 TEMP_DIR = Path("temp_subtitler")
+CACHE_DIR = TEMP_DIR / "cache"
 VIDEO_PATH = TEMP_DIR / "video.mp4"
 SRT_PATH = TEMP_DIR / "video.srt"
 TRANSCRIBE_OUT_DIR = TEMP_DIR / "out"
@@ -18,6 +23,7 @@ _whisper_import_error = None
 class VideoSubtitlerModel:
     def __init__(self):
         TEMP_DIR.mkdir(exist_ok=True)
+        CACHE_DIR.mkdir(exist_ok=True)
 
     def download_video(self, url: str, progress_cb=None) -> Path:
         """Download video to VIDEO_PATH using yt-dlp. Overwrites existing."""
@@ -76,17 +82,59 @@ class VideoSubtitlerModel:
             return candidates[0]
         raise FileNotFoundError("yt-dlp did not produce a video file in temp_subtitler/")
 
-    def download_and_process_video(self, url: str, progress_cb=None) -> Path:
-        """Complete video download and processing pipeline for URL input."""
-        try:
-            # Clean temp folder before starting
-            self.clean_temp_folder()
-            
-            # Download the video
-            video_path = self.download_video(url, progress_cb)
-            
+    @staticmethod
+    def _download_cache_key(url: str) -> str:
+        """Stable cache name for this exact URL without storing it on disk."""
+        return hashlib.sha256(url.strip().encode("utf-8")).hexdigest()
+
+    def _find_cached_video(self, url: str):
+        """Return a completed cached media file for *url*, if one exists."""
+        key = self._download_cache_key(url)
+        allowed = {".mp4", ".webm", ".mkv", ".avi", ".mov"}
+        candidates = sorted(
+            path for path in CACHE_DIR.glob(f"{key}.*")
+            if path.suffix.lower() in allowed and path.is_file() and path.stat().st_size > 0
+        )
+        return candidates[0] if candidates else None
+
+    def _activate_cached_video(self, cached_path: Path) -> Path:
+        """Copy a cached file into the disposable active workspace."""
+        active_path = TEMP_DIR / f"video{cached_path.suffix.lower()}"
+        shutil.copy2(cached_path, active_path)
+        return active_path
+
+    def _store_cached_video(self, url: str, video_path: Path) -> Path:
+        """Atomically save a completed active download for future reuse."""
+        suffix = video_path.suffix.lower()
+        if suffix not in {".mp4", ".webm", ".mkv", ".avi", ".mov"}:
             return video_path
-            
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        destination = CACHE_DIR / f"{self._download_cache_key(url)}{suffix}"
+        temporary = destination.with_suffix(destination.suffix + ".part")
+        shutil.copy2(video_path, temporary)
+        temporary.replace(destination)
+        logger.info("Cached completed video download: %s", destination.name)
+        return destination
+
+    def download_and_process_video(self, url: str, progress_cb=None) -> Path:
+        """Download once per exact URL, then reuse the persistent local cache."""
+        try:
+            # The active workspace stays disposable, while cache/ is preserved.
+            self.clean_temp_folder()
+            cached_path = self._find_cached_video(url)
+            if cached_path:
+                active_path = self._activate_cached_video(cached_path)
+                logger.info("Using cached video download: %s", cached_path.name)
+                if progress_cb:
+                    try:
+                        progress_cb(100, 0, 0)
+                    except TypeError:
+                        progress_cb({"status": "finished"})
+                return active_path
+
+            video_path = self.download_video(url, progress_cb)
+            self._store_cached_video(url, video_path)
+            return video_path
         except Exception as e:
             raise Exception(f"Failed to download and process video: {str(e)}")
 
@@ -213,5 +261,5 @@ class VideoSubtitlerModel:
                 if file.suffix.lower() in {".srt", ".mp4", ".webm", ".mkv", ".avi", ".mov"}:
                     try:
                         file.unlink()
-                    except Exception as e:
+                    except Exception:
                         pass  # Silent cleanup

@@ -52,6 +52,18 @@ class VideoSubtitlerTab(CTkBaseTab):
         ("Top", "Left"): 7,    ("Top", "Center"): 8,    ("Top", "Right"): 9,
     }
 
+    # libass renders subtitles in a small reference canvas before scaling to
+    # the video. These limits keep the Advanced panel expressive while
+    # preventing a single oversized glyph from consuming the whole frame.
+    _STYLE_LIMITS = {
+        "font_size": (10, 32, 16),
+        "outline_width": (0, 4, 1),
+        "shadow": (0, 4, 0),
+        "margin_v": (0, 80, 20),
+        "scale_x": (75, 125, 100),
+        "scale_y": (75, 125, 100),
+    }
+
     def __init__(self, notebook):
         self.notebook = notebook
 
@@ -93,6 +105,20 @@ class VideoSubtitlerTab(CTkBaseTab):
             return int(var.get())
         except (tk.TclError, ValueError, TypeError):
             return default
+
+    @staticmethod
+    def _clamp_int(value, default: int, minimum: int, maximum: int) -> int:
+        """Convert *value* to a safe integer within an inclusive range."""
+        try:
+            value = int(value)
+        except (tk.TclError, ValueError, TypeError):
+            value = default
+        return max(minimum, min(maximum, value))
+
+    def _style_int(self, name: str, var) -> int:
+        """Read one Advanced setting with the same limits shown in the UI."""
+        minimum, maximum, default = self._STYLE_LIMITS[name]
+        return self._clamp_int(self._safe_int(var, default), default, minimum, maximum)
 
     def _int_stepper(self, parent, var, from_, to, width=52):
         """
@@ -387,10 +413,13 @@ class VideoSubtitlerTab(CTkBaseTab):
         mode_row = ctk.CTkFrame(body, fg_color="transparent")
         mode_row.grid(row=row, column=0, sticky="ew", pady=(10, 0))
 
-        self._muted(mode_row, "Burn mode:").grid(row=0, column=0, padx=(0, 8))
+        self._muted(mode_row, t("video_subtitler.lbl.rendering")).grid(row=0, column=0, padx=(0, 8))
 
         self.burn_mode_var = tk.StringVar(value="simple")
-        self._burn_mode_labels = {"Simple": "simple", "Advanced": "advanced"}
+        self._burn_mode_labels = {
+            t("video_subtitler.mode.simple"): "simple",
+            t("video_subtitler.mode.advanced"): "advanced",
+        }
         self._burn_mode_values = {v: k for k, v in self._burn_mode_labels.items()}
 
         self.burn_mode_selector = ctk.CTkSegmentedButton(
@@ -399,7 +428,7 @@ class VideoSubtitlerTab(CTkBaseTab):
             font=ctk.CTkFont(size=12),
         )
         self.burn_mode_selector.grid(row=0, column=1)
-        self.burn_mode_selector.set("Simple")
+        self.burn_mode_selector.set(self._burn_mode_values["simple"])
         self.burn_mode_var.trace("w", self._on_burn_mode_change)
 
         # Subtitle source
@@ -508,7 +537,7 @@ class VideoSubtitlerTab(CTkBaseTab):
             row=0, column=0, sticky="w", pady=2
         )
         self.font_size_var = tk.IntVar(value=16)
-        self._int_stepper(body, self.font_size_var, 8, 96).grid(
+        self._int_stepper(body, self.font_size_var, 10, 32).grid(
             row=0, column=1, sticky="w", pady=2
         )
 
@@ -548,7 +577,7 @@ class VideoSubtitlerTab(CTkBaseTab):
             row=2, column=0, sticky="w", pady=2
         )
         self.outline_width_var = tk.IntVar(value=1)
-        self._int_stepper(body, self.outline_width_var, 0, 8).grid(
+        self._int_stepper(body, self.outline_width_var, 0, 4).grid(
             row=2, column=1, sticky="w", pady=2
         )
 
@@ -557,7 +586,7 @@ class VideoSubtitlerTab(CTkBaseTab):
             row=2, column=2, sticky="w", pady=2
         )
         self.shadow_var = tk.IntVar(value=0)
-        self._int_stepper(body, self.shadow_var, 0, 8).grid(
+        self._int_stepper(body, self.shadow_var, 0, 4).grid(
             row=2, column=3, sticky="w", pady=2
         )
 
@@ -581,7 +610,7 @@ class VideoSubtitlerTab(CTkBaseTab):
             row=4, column=0, sticky="w", pady=2
         )
         self.margin_v_var = tk.IntVar(value=20)
-        self._int_stepper(body, self.margin_v_var, 0, 400, width=60).grid(
+        self._int_stepper(body, self.margin_v_var, 0, 80, width=60).grid(
             row=4, column=1, sticky="w", pady=2
         )
 
@@ -590,16 +619,21 @@ class VideoSubtitlerTab(CTkBaseTab):
             row=5, column=0, sticky="w", pady=2
         )
         self.scale_x_var = tk.IntVar(value=100)
-        self._int_stepper(body, self.scale_x_var, 50, 200, width=60).grid(
+        self._int_stepper(body, self.scale_x_var, 75, 125, width=60).grid(
             row=5, column=1, sticky="w", pady=2
         )
         self._muted(body, t("video_subtitler.lbl.vertical_scale")).grid(
             row=5, column=2, sticky="w", pady=2
         )
         self.scale_y_var = tk.IntVar(value=100)
-        self._int_stepper(body, self.scale_y_var, 50, 200, width=60).grid(
+        self._int_stepper(body, self.scale_y_var, 75, 125, width=60).grid(
             row=5, column=3, sticky="w", pady=2
         )
+
+        self._muted(
+            body, t("video_subtitler.hint.advanced_style"), wraplength=460,
+            justify="left",
+        ).grid(row=6, column=0, columnspan=4, sticky="ew", pady=(8, 0))
 
     # --------------------------- progress -----------------------------
 
@@ -807,7 +841,7 @@ class VideoSubtitlerTab(CTkBaseTab):
     def get_subtitle_style(self) -> dict:
         """Return the current subtitle style options as a dict for the controller."""
         return {
-            "font_size": self._safe_int(self.font_size_var, 16),
+            "font_size": self._style_int("font_size", self.font_size_var),
             "bold": self.bold_var.get(),
             "italic": self.italic_var.get(),
             "primary_colour": self.SUBTITLE_COLORS.get(
@@ -816,14 +850,14 @@ class VideoSubtitlerTab(CTkBaseTab):
             "outline_colour": self.SUBTITLE_COLORS.get(
                 self.outline_color_var.get(), "&H00000000"
             ),
-            "outline": self._safe_int(self.outline_width_var, 1),
-            "shadow": self._safe_int(self.shadow_var, 0),
+            "outline": self._style_int("outline_width", self.outline_width_var),
+            "shadow": self._style_int("shadow", self.shadow_var),
             "alignment": self._ALIGN_MAP.get(
                 (self.v_align_var.get(), self.h_align_var.get()), 2
             ),
-            "margin_v": self._safe_int(self.margin_v_var, 20),
-            "scale_x": self._safe_int(self.scale_x_var, 100),
-            "scale_y": self._safe_int(self.scale_y_var, 100),
+            "margin_v": self._style_int("margin_v", self.margin_v_var),
+            "scale_x": self._style_int("scale_x", self.scale_x_var),
+            "scale_y": self._style_int("scale_y", self.scale_y_var),
         }
 
     def get_burn_prefs(self) -> dict:
@@ -832,18 +866,18 @@ class VideoSubtitlerTab(CTkBaseTab):
         ASS codes, so they can be restored into the dropdowns).
         """
         return {
-            "font_size": self._safe_int(self.font_size_var, 16),
+            "font_size": self._style_int("font_size", self.font_size_var),
             "bold": self.bold_var.get(),
             "italic": self.italic_var.get(),
             "text_color": self.text_color_var.get(),
             "outline_color": self.outline_color_var.get(),
-            "outline_width": self._safe_int(self.outline_width_var, 1),
-            "shadow": self._safe_int(self.shadow_var, 0),
+            "outline_width": self._style_int("outline_width", self.outline_width_var),
+            "shadow": self._style_int("shadow", self.shadow_var),
             "v_align": self.v_align_var.get(),
             "h_align": self.h_align_var.get(),
-            "margin_v": self._safe_int(self.margin_v_var, 20),
-            "scale_x": self._safe_int(self.scale_x_var, 100),
-            "scale_y": self._safe_int(self.scale_y_var, 100),
+            "margin_v": self._style_int("margin_v", self.margin_v_var),
+            "scale_x": self._style_int("scale_x", self.scale_x_var),
+            "scale_y": self._style_int("scale_y", self.scale_y_var),
             "dark_bg": self.dark_bg_var.get(),
             "bg_opacity": round(self.bg_opacity_var.get(), 2),
             "burn_mode": self.burn_mode_var.get(),
@@ -873,7 +907,11 @@ class VideoSubtitlerTab(CTkBaseTab):
         for key, setter in setters.items():
             if key in prefs and prefs[key] is not None:
                 try:
-                    setter(prefs[key])
+                    value = prefs[key]
+                    if key in self._STYLE_LIMITS:
+                        minimum, maximum, default = self._STYLE_LIMITS[key]
+                        value = self._clamp_int(value, default, minimum, maximum)
+                    setter(value)
                 except Exception:
                     logger.debug(f"Could not restore burn pref {key!r}", exc_info=True)
         # Reflect a restored mode in the style panel's visibility

@@ -5,7 +5,6 @@ Runs download + transcription in a single daemon thread.
 """
 import threading
 import shutil
-import yt_dlp
 import tkinter as tk
 import re
 from pathlib import Path
@@ -14,10 +13,8 @@ from models.transcribe_model import TranscribeModel
 from models.translation_model import TranslationModel
 from models.transcription.youtube import get_youtube_title
 from models.video_subtitler_model import VideoSubtitlerModel, TEMP_DIR, TRANSCRIBE_OUT_DIR
-from utils.settings_manager import SettingsManager
 from utils.logger import logger
 from utils.video_utils import (
-    download_progress_hook,
     model_progress_callback,
     create_download_progress_wrapper,
     run_translation_sync
@@ -387,6 +384,110 @@ class VideoSubtitlerController:
             # Re-enable translate button
             self.tab.after(0, lambda: self.tab.translate_btn.configure(state=tk.NORMAL))
     
+    @staticmethod
+    def _ass_timestamp(delta) -> str:
+        """Render an SRT timedelta in ASS's H:MM:SS.CC timestamp format."""
+        total_centiseconds = max(0, round(delta.total_seconds() * 100))
+        hours, remainder = divmod(total_centiseconds, 360000)
+        minutes, remainder = divmod(remainder, 6000)
+        seconds, centiseconds = divmod(remainder, 100)
+        return f"{hours}:{minutes:02}:{seconds:02}.{centiseconds:02}"
+
+    @staticmethod
+    def _ass_text(text: str) -> str:
+        """Escape SRT content for an ASS dialogue line."""
+        return (
+            (text or "").replace("\\", "\\\\").replace("{", "\\{")
+            .replace("}", "\\}").replace("\r\n", "\n")
+            .replace("\r", "\n").replace("\n", "\\N")
+        )
+
+    def _probe_video_dimensions(self, ffprobe_exe: str, input_video: Path, flags: int):
+        """Return input video dimensions, or a sensible HD fallback."""
+        import subprocess
+        try:
+            result = subprocess.run(
+                [
+                    ffprobe_exe, "-v", "error", "-select_streams", "v:0",
+                    "-show_entries", "stream=width,height",
+                    "-of", "csv=p=0:s=x", str(input_video),
+                ],
+                capture_output=True, text=True, timeout=30, creationflags=flags,
+            )
+            if result.returncode == 0:
+                width, height = (int(part) for part in result.stdout.strip().split("x", 1))
+                if width > 0 and height > 0:
+                    return width, height
+        except (subprocess.TimeoutExpired, ValueError, FileNotFoundError):
+            logger.warning("Could not inspect video dimensions; using HD subtitle layout")
+        return 1280, 720
+
+    def _write_advanced_ass(self, srt_path: Path, style: dict, dimensions: tuple, dark_bg: bool, opacity: float) -> Path:
+        """Convert the chosen SRT into an explicit, video-sized ASS script.
+
+        SRT does not declare a layout resolution. Writing ASS ourselves avoids
+        FFmpeg's build-dependent implicit conversion and makes Advanced font
+        size predictable relative to the actual video height.
+        """
+        import srt
+
+        width, height = dimensions
+        # Font value 16 is the documented normal setting: 3% of video height.
+        # The UI range remains 10..32, and ScaleX/Y are only shape adjustments.
+        ui_font_size = int(style.get("font_size", 16))
+        font_size = max(18, round(height * 0.03 * ui_font_size / 16))
+        border_style = 4 if dark_bg else 1
+        back_colour = (
+            f"&H{format(int((1.0 - opacity) * 255), '02X')}000000"
+            if dark_bg else "&HFF000000"
+        )
+        ass_path = srt_path.with_name("video_advanced.ass")
+        style_line = (
+            "Style: Default,Arial,{font_size},{primary},&H000000FF,{outline},{back},"
+            "{bold},{italic},0,0,{scale_x},{scale_y},0,0,{border_style},{outline_size},"
+            "{shadow},{alignment},20,20,{margin},1"
+        ).format(
+            font_size=font_size,
+            primary=style.get("primary_colour", "&H00FFFFFF"),
+            outline=style.get("outline_colour", "&H00000000"),
+            back=back_colour,
+            bold=-1 if style.get("bold") else 0,
+            italic=-1 if style.get("italic") else 0,
+            scale_x=int(style.get("scale_x", 100)),
+            scale_y=int(style.get("scale_y", 100)),
+            border_style=border_style,
+            outline_size=int(style.get("outline", 1)),
+            shadow=int(style.get("shadow", 0)),
+            alignment=int(style.get("alignment", 2)),
+            margin=int(style.get("margin_v", 20)),
+        )
+        try:
+            subtitles = list(srt.parse(srt_path.read_text(encoding="utf-8")))
+        except Exception as exc:
+            raise ValueError(f"Advanced burn needs valid SRT timing: {exc}") from exc
+        if not subtitles:
+            raise ValueError("Advanced burn needs at least one SRT subtitle entry.")
+
+        lines = [
+            "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {width}",
+            f"PlayResY: {height}", "ScaledBorderAndShadow: yes", "WrapStyle: 0", "",
+            "[V4+ Styles]",
+            "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding",
+            style_line, "", "[Events]",
+            "Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text",
+        ]
+        for subtitle in subtitles:
+            lines.append(
+                "Dialogue: 0,{start},{end},Default,,0,0,0,,{text}".format(
+                    start=self._ass_timestamp(subtitle.start),
+                    end=self._ass_timestamp(subtitle.end),
+                    text=self._ass_text(subtitle.content),
+                )
+            )
+        ass_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        logger.info("Generated Advanced ASS layout %sx%s with font size %s", width, height, font_size)
+        return ass_path
+
     def on_burn(self):
         """Handle burn request from view."""
         # Disable burn button during processing
@@ -484,6 +585,23 @@ class VideoSubtitlerController:
             # Also escape the drive-letter colon so the subtitles filtergraph parser
             # doesn't treat it as an option separator (e.g. C:/x -> C\:/x).
             srt_path_fixed = str(srt_file).replace("\\", "/").replace(":", "\\:")
+
+            subtitle_filter = f"subtitles={srt_path_fixed}"
+
+            import subprocess
+            import os
+
+            # Resolve FFmpeg / ffprobe from Settings or the process PATH.
+            ffmpeg_exe = os.getenv("FFMPEG_PATH", "").strip()
+            if not (ffmpeg_exe and os.path.isfile(ffmpeg_exe)):
+                ffmpeg_exe = "ffmpeg"
+            if ffmpeg_exe != "ffmpeg":
+                probe_name = "ffprobe.exe" if os.name == "nt" else "ffprobe"
+                candidate = os.path.join(os.path.dirname(ffmpeg_exe), probe_name)
+                ffprobe_exe = candidate if os.path.isfile(candidate) else "ffprobe"
+            else:
+                ffprobe_exe = "ffprobe"
+            _NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
             
             # Check if dark background is enabled
             use_dark_bg = self.tab.get_dark_bg()
@@ -500,40 +618,26 @@ class VideoSubtitlerController:
                 burn_mode = "simple"
 
             if burn_mode == "advanced":
-                # --- Advanced: build a full force_style from the style panel ---
+                # Advanced mode writes a complete ASS script with explicit
+                # PlayRes matching the source video. Unlike force_style on a
+                # raw SRT, this has deterministic font/layout behaviour across
+                # FFmpeg/libass builds and does not use original_size.
                 try:
                     style = self.tab.get_subtitle_style()
-                except AttributeError:
-                    style = {}
-
-                style_parts = [
-                    f"FontSize={style.get('font_size', 16)}",
-                    f"PrimaryColour={style.get('primary_colour', '&H00FFFFFF')}",
-                    f"OutlineColour={style.get('outline_colour', '&H00000000')}",
-                    f"Bold={-1 if style.get('bold') else 0}",
-                    f"Italic={-1 if style.get('italic') else 0}",
-                    f"Alignment={style.get('alignment', 2)}",
-                    f"MarginV={style.get('margin_v', 20)}",
-                    f"ScaleX={style.get('scale_x', 100)}",
-                    f"ScaleY={style.get('scale_y', 100)}",
-                    f"Shadow={style.get('shadow', 0)}",
-                ]
-
-                if use_dark_bg:
-                    # Opaque box behind text. BackColour is &HAABBGGRR — AA is alpha
-                    # (00 = fully opaque, FF = fully transparent).
-                    alpha_hex = format(int((1.0 - opacity) * 255), '02X')
-                    back_colour = f"&H{alpha_hex}000000"
-                    style_parts.append(f"BackColour={back_colour}")
-                    style_parts.append("BorderStyle=4")  # opaque box
-                    # For box style, Outline controls box padding
-                    style_parts.append(f"Outline={style.get('outline', 2)}")
-                else:
-                    style_parts.append("BorderStyle=1")  # outline + shadow
-                    style_parts.append(f"Outline={style.get('outline', 2)}")
-
-                force_style = ",".join(style_parts)
-                vf_filter = f"subtitles={srt_path_fixed}:force_style='{force_style}'"
+                    dimensions = self._probe_video_dimensions(
+                        ffprobe_exe, input_video, _NO_WINDOW
+                    )
+                    ass_path = self._write_advanced_ass(
+                        srt_file, style, dimensions, use_dark_bg, opacity
+                    )
+                    ass_path_fixed = str(ass_path).replace("\\", "/").replace(":", "\\:")
+                    vf_filter = f"subtitles={ass_path_fixed}"
+                except Exception as exc:
+                    logger.error("Could not prepare Advanced ASS subtitles: %s", exc)
+                    self.tab.after(0, lambda e=exc: self.tab.show_error(
+                        f"Advanced subtitle setup failed: {e}"
+                    ))
+                    return
             else:
                 # --- Simple (default): the original minimal command ---
                 # Lets libass use its own sensible defaults for font/size/colour.
@@ -545,27 +649,11 @@ class VideoSubtitlerController:
                         f"BackColour={back_colour},BorderStyle=4,"
                         f"Outline=0,Shadow=0,MarginV=20"
                     )
-                    vf_filter = f"subtitles={srt_path_fixed}:force_style='{force_style}'"
+                    vf_filter = f"{subtitle_filter}:force_style='{force_style}'"
                 else:
-                    vf_filter = f"subtitles={srt_path_fixed}"
+                    vf_filter = subtitle_filter
 
             logger.info("Burn mode: %s | vf: %s", burn_mode, vf_filter)
-            
-            import subprocess
-            import os
-
-            # Resolve the ffmpeg / ffprobe executables. Honour FFMPEG_PATH from
-            # Settings (.env) if set, otherwise fall back to PATH lookup.
-            ffmpeg_exe = os.getenv("FFMPEG_PATH", "").strip()
-            if not (ffmpeg_exe and os.path.isfile(ffmpeg_exe)):
-                ffmpeg_exe = "ffmpeg"
-            if ffmpeg_exe != "ffmpeg":
-                # Derive ffprobe sitting next to a fully-qualified ffmpeg
-                probe_name = "ffprobe.exe" if os.name == "nt" else "ffprobe"
-                cand = os.path.join(os.path.dirname(ffmpeg_exe), probe_name)
-                ffprobe_exe = cand if os.path.isfile(cand) else "ffprobe"
-            else:
-                ffprobe_exe = "ffprobe"
 
             # -nostdin: never read stdin (a common cause of "frozen" ffmpeg when
             #           launched from a GUI process).
@@ -580,8 +668,6 @@ class VideoSubtitlerController:
                 "-progress", "pipe:1", "-nostats",
                 str(output_path)
             ]
-
-            _NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
             logger.info("Burning subtitles. FFmpeg command: %s", " ".join(cmd))
 
@@ -627,21 +713,32 @@ class VideoSubtitlerController:
                 ))
                 return
 
-            # The first burn can pause here for a while: the libass subtitles filter
-            # builds a system font cache before it renders the first frame (heavy
-            # disk/CPU, progress stays at 0%). Tell the user so it doesn't look frozen.
+            # Do not claim a font-cache build without evidence. Some FFmpeg
+            # builds may initialize libass/fonts on first use, but others do
+            # not; stderr below reports a cache message only if FFmpeg emits it.
             self.tab.after(0, lambda: self.tab.update_ffmpeg_status(
-                "🔄 FFmpeg running… (first run may build a font cache — this can take a minute)"
+                "🔄 FFmpeg rendering subtitles…"
             ))
 
             # Drain stderr on a background thread so the pipe can never fill up and
-            # deadlock ffmpeg, and so we can report the real error on failure.
+            # deadlock ffmpeg. Keep successful libass/fontconfig diagnostics too:
+            # they are required to diagnose a provider repeatedly rebuilding cache.
             stderr_chunks = []
+            font_cache_reported = False
 
             def _drain_stderr():
+                nonlocal font_cache_reported
                 try:
                     for line in process.stderr:
                         stderr_chunks.append(line)
+                        lowered = line.lower()
+                        if "libass" in lowered or "fontconfig" in lowered:
+                            logger.info("FFmpeg subtitle diagnostic: %s", line.rstrip())
+                        if "cache" in lowered and not font_cache_reported:
+                            font_cache_reported = True
+                            self.tab.after(0, lambda: self.tab.update_ffmpeg_status(
+                                "🔄 FFmpeg is preparing its font cache…"
+                            ))
                 except Exception:
                     pass
 

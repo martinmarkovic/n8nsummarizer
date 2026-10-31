@@ -1453,14 +1453,18 @@ class MainWindow:
 
         # (display_name, pip_package)  — pip_package None means a system dependency
         DEPS = [
+            ("CustomTkinter",       "customtkinter"),
+            ("Pillow (gradients)",  "Pillow"),
             ("yt-dlp",              "yt-dlp"),
             ("transcribe-anything", "transcribe-anything"),
             ("openai-whisper",      "openai-whisper"),
+            ("srt",                 "srt"),
+            ("pyttsx3 (text-to-speech)", "pyttsx3"),
+            ("pywin32 (Windows TTS)", "pywin32"),
             ("requests",            "requests"),
             ("python-docx",         "python-docx"),
             ("python-dotenv",       "python-dotenv"),
-            ("openai",              "openai"),
-            ("ffmpeg",              None),  # system dep, no pip management
+            ("ffmpeg",              None),  # system executable, not a PyPI package
         ]
 
         _NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
