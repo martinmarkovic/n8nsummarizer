@@ -247,6 +247,11 @@ class CTkNotebook(ctk.CTkFrame):
 
     # Horizontal gap between tab pills, in pixels.
     _TAB_GAP = 6
+    # At this point the app's content has switched to its compact/responsive
+    # layout. Keep the navigation equally compact instead of growing a second
+    # row of tiny tab buttons.
+    _COMPACT_BREAKPOINT = 980
+    _MAX_VISIBLE_TABS = 3
 
     def __init__(self, master, **kwargs):
         kwargs.setdefault("fg_color", "transparent")
@@ -263,8 +268,25 @@ class CTkNotebook(ctk.CTkFrame):
             self, corner_radius=10, fg_color=("gray90", "gray14")
         )
         self._tab_bar.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        self._tab_bar.grid_columnconfigure(1, weight=1)
         self._tab_bar._theme_skip = True
         self._tab_bar._theme_skip_children = True
+
+        # All pills belong to this viewport. In a wide window it spans the
+        # whole strip; in compact mode it sits between previous/next buttons
+        # and shows no more than three pills at a time.
+        self._tab_viewport = ctk.CTkFrame(self._tab_bar, fg_color="transparent")
+        self._tab_viewport.grid(row=0, column=0, columnspan=3, sticky="ew")
+        for column in range(self._MAX_VISIBLE_TABS):
+            self._tab_viewport.grid_columnconfigure(column, weight=1)
+        self._previous_tab_button = ctk.CTkButton(
+            self._tab_bar, text="‹", width=30, height=34, corner_radius=8,
+            command=lambda: self._shift_tab_view(-1),
+        )
+        self._next_tab_button = ctk.CTkButton(
+            self._tab_bar, text="›", width=30, height=34, corner_radius=8,
+            command=lambda: self._shift_tab_view(1),
+        )
 
         self._palette = None  # set by apply_palette()
         self._tab_font = ctk.CTkFont(size=13)
@@ -272,9 +294,11 @@ class CTkNotebook(ctk.CTkFrame):
         self._current_index = None
         self._tab_changed_callbacks = []
         self._reflow_columns = None  # last layout used, to avoid redundant work
+        self._compact_tabs = False
+        self._visible_tab_start = 0
 
-        # Reflow the pills whenever the notebook is resized so they wrap onto
-        # extra rows instead of overflowing off the right edge.
+        # Reflow the pills whenever the notebook is resized. A compact strip
+        # replaces wrapping once the normal row would stop fitting.
         self.bind("<Configure>", self._on_resize)
 
     # -- responsive tab strip ----------------------------------------------
@@ -291,55 +315,140 @@ class CTkNotebook(ctk.CTkFrame):
         # Defer to idle so winfo_width() reports the post-resize value.
         self.after_idle(self._reflow_tabs)
 
-    def _reflow_tabs(self):
-        """
-        Lay the tab pills out in as many rows as the current width needs.
+    def _needs_compact_tabs(self, available: int) -> bool:
+        """Whether the tab strip should use its three-pill pager."""
+        if available < self._COMPACT_BREAKPOINT:
+            return True
+        try:
+            required = sum(
+                entry["button"].winfo_reqwidth() + self._TAB_GAP
+                for entry in self._tabs
+            )
+        except tk.TclError:
+            return False
+        return required > available
 
-        Without this, seven tabs on a narrow window simply run off the edge -
-        the classic fixed-layout failure. Buttons are re-gridded only when the
-        wrap actually changes, so this is cheap to call on every resize.
-        """
-        if not self._tabs:
+    def _ensure_selected_visible(self, index: int) -> bool:
+        """Move the compact viewport just enough to reveal *index*."""
+        if not self._compact_tabs:
+            return False
+        last_start = max(0, len(self._tabs) - self._MAX_VISIBLE_TABS)
+        start = self._visible_tab_start
+        if index < start:
+            start = index
+        elif index >= start + self._MAX_VISIBLE_TABS:
+            start = index - self._MAX_VISIBLE_TABS + 1
+        start = max(0, min(start, last_start))
+        changed = start != self._visible_tab_start
+        self._visible_tab_start = start
+        return changed
+
+    def _shift_tab_view(self, direction: int):
+        """Browse the compact tab pills without changing the active tab."""
+        if not self._compact_tabs:
             return
-        # after_idle() can fire once the notebook is already being torn down
-        # (window close), at which point every winfo_* call raises TclError.
-        if not self.winfo_exists():
+        last_start = max(0, len(self._tabs) - self._MAX_VISIBLE_TABS)
+        start = max(0, min(self._visible_tab_start + direction, last_start))
+        if start != self._visible_tab_start:
+            self._visible_tab_start = start
+            self._render_tab_strip(force=True)
+
+    def _style_navigation_buttons(self):
+        """Keep pager arrows consistent with the user-selected palette."""
+        p = self._palette
+        updates = {
+            "fg_color": "transparent",
+            "hover_color": p["subtle_hover"] if p else ("gray82", "gray25"),
+            "text_color": p["text"] if p else ("gray25", "gray85"),
+        }
+        for button in (self._previous_tab_button, self._next_tab_button):
+            button.configure(**updates)
+
+    def _render_tab_strip(self, force: bool = False):
+        """Render either the normal row or compact three-pill pager."""
+        if not self._tabs or not self.winfo_exists():
             return
-        available = self.winfo_width()
+        try:
+            available = self._tab_bar.winfo_width()
+        except tk.TclError:
+            return
         if available <= 1:
             return
 
-        row = col = 0
-        used = 0
-        layout = []
-        for entry in self._tabs:
-            try:
-                width = entry["button"].winfo_reqwidth() + self._TAB_GAP
-            except tk.TclError:
-                # A pill was destroyed mid-teardown; nothing left to lay out.
-                return
-            # Wrap, but never leave a row completely empty.
-            if col > 0 and used + width > available:
-                row += 1
-                col = 0
-                used = 0
-            layout.append((row, col))
-            used += width
-            col += 1
+        compact = self._needs_compact_tabs(available)
+        if compact != self._compact_tabs:
+            self._compact_tabs = compact
+            force = True
+            # Entering compact mode should keep the active tab visible, but
+            # subsequent arrow presses are allowed to browse elsewhere.
+            if compact:
+                self._ensure_selected_visible(self._current_index or 0)
+        if not compact:
+            self._visible_tab_start = 0
 
-        if layout == self._reflow_columns:
+        if compact:
+            visible = range(
+                self._visible_tab_start,
+                min(self._visible_tab_start + self._MAX_VISIBLE_TABS, len(self._tabs)),
+            )
+            layout = ("compact", self._visible_tab_start, len(self._tabs))
+        else:
+            visible = range(len(self._tabs))
+            layout = ("wide", len(self._tabs))
+
+        if not force and layout == self._reflow_columns:
             return
         self._reflow_columns = layout
 
-        for entry, (r, c) in zip(self._tabs, layout):
-            entry["button"].grid_configure(row=r, column=c)
+        # The viewport uses all three bar columns normally, or the centre
+        # column in compact mode so the arrows flank the visible tab pills.
+        self._tab_viewport.grid_configure(
+            column=1 if compact else 0,
+            columnspan=1 if compact else 3,
+        )
+        if compact:
+            self._previous_tab_button.grid(row=0, column=0, padx=(self._TAB_GAP, 2), pady=self._TAB_GAP)
+            self._next_tab_button.grid(row=0, column=2, padx=(2, self._TAB_GAP), pady=self._TAB_GAP)
+            last_start = max(0, len(self._tabs) - self._MAX_VISIBLE_TABS)
+            self._previous_tab_button.configure(
+                state="normal" if self._visible_tab_start > 0 else "disabled"
+            )
+            self._next_tab_button.configure(
+                state="normal" if self._visible_tab_start < last_start else "disabled"
+            )
+        else:
+            self._previous_tab_button.grid_remove()
+            self._next_tab_button.grid_remove()
+
+        visible = set(visible)
+        for i, entry in enumerate(self._tabs):
+            if i in visible:
+                entry["button"].grid(
+                    row=0,
+                    column=(i - self._visible_tab_start) if compact else i,
+                    padx=(self._TAB_GAP, 0),
+                    pady=self._TAB_GAP,
+                    sticky="ew" if compact else "w",
+                )
+            else:
+                entry["button"].grid_remove()
+
+        self._style_navigation_buttons()
+        self._refresh_tab_buttons()
+
+    def _reflow_tabs(self):
+        """Re-evaluate whether the strip needs its compact pager."""
+        try:
+            self._render_tab_strip()
+        except tk.TclError:
+            pass  # widget torn down mid-idle callback
 
     # -- ttk.Notebook API ---------------------------------------------------
 
     def add(self, child, text: str = "", **_ignored):
         """Append *child* as a new tab labelled *text*."""
         button = ctk.CTkButton(
-            self._tab_bar,
+            self._tab_viewport,
             text=text,
             corner_radius=8,
             height=34,
@@ -347,14 +456,6 @@ class CTkNotebook(ctk.CTkFrame):
             font=self._tab_font,
             command=lambda w=child: self.select(w),
         )
-        button.grid(
-            row=0,
-            column=len(self._tabs),
-            padx=(self._TAB_GAP, 0),
-            pady=self._TAB_GAP,
-            sticky="w",
-        )
-
         self._tabs.append({"widget": child, "text": text, "button": button})
         self._reflow_columns = None  # force a re-layout on the next resize
 
@@ -364,6 +465,7 @@ class CTkNotebook(ctk.CTkFrame):
         else:
             child.grid(row=1, column=0, sticky="nsew")
             child.grid_remove()
+        self.after_idle(self._reflow_tabs)
         return child
 
     def select(self, tab_id=None):
@@ -381,6 +483,10 @@ class CTkNotebook(ctk.CTkFrame):
         if index is None or not (0 <= index < len(self._tabs)):
             return None
         if index == self._current_index:
+            # A programmatic select (hotkey / cross-tab action) should reveal
+            # an already-active tab if the user browsed its pill off-screen.
+            if self._ensure_selected_visible(index):
+                self._render_tab_strip(force=True)
             return self._tabs[index]["widget"]
 
         # Hide the outgoing tab
@@ -391,6 +497,8 @@ class CTkNotebook(ctk.CTkFrame):
         entry = self._tabs[index]
         entry["widget"].grid(row=1, column=0, sticky="nsew")
 
+        self._ensure_selected_visible(index)
+        self._render_tab_strip()
         self._refresh_tab_buttons()
         self._fire_tab_changed()
         return entry["widget"]
@@ -518,15 +626,20 @@ class CTkNotebook(ctk.CTkFrame):
                 )
 
     def apply_palette(self, p: dict):
-        """Theme the pill bar and re-paint the pills from the palette."""
+        """Theme the pill bar, pager arrows, and tab pills from the palette."""
         self._palette = p
         self._tab_bar.configure(fg_color=p["subtle"])
+        self._style_navigation_buttons()
         self._refresh_tab_buttons()
 
     def _regrid_tab_buttons(self):
-        for i, entry in enumerate(self._tabs):
-            entry["button"].grid_configure(column=i)
-        self._refresh_tab_buttons()
+        """Re-render after tabs are removed without exposing hidden pills."""
+        self._visible_tab_start = min(
+            self._visible_tab_start,
+            max(0, len(self._tabs) - self._MAX_VISIBLE_TABS),
+        )
+        self._reflow_columns = None
+        self._render_tab_strip(force=True)
 
     def set_tab_font(self, font):
         """

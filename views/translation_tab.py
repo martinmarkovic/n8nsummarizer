@@ -80,6 +80,10 @@ class TranslationTab(CTkBaseTab):
         self.on_translate_clicked = None
         self.on_restore_default_webhook = None
         self.on_clear_clicked = None
+        # Emitted after any completed provider / URL / model change. The
+        # controller uses this to keep Video Subtitler in sync immediately.
+        self.on_llm_settings_changed = None
+        self._llm_settings_change_pending = False
 
         super().__init__(notebook, "🌐 Translation")
 
@@ -106,9 +110,27 @@ class TranslationTab(CTkBaseTab):
         self._setup_llm_settings_section()
         self._setup_panes_section()
         self._setup_action_bar()
+        self._watch_llm_settings()
 
         # Trigger automatic model discovery after UI is set up
         self.after(100, self._discover_models)
+
+    def _watch_llm_settings(self):
+        """Publish a settled LLM choice once Tk has applied related changes."""
+        for variable in (self.provider_var, self.webhook_var, self.model_var):
+            variable.trace_add("write", self._queue_llm_settings_changed)
+
+    def _queue_llm_settings_changed(self, *_args):
+        """Coalesce grouped provider changes and edits into one UI callback."""
+        if self._llm_settings_change_pending:
+            return
+        self._llm_settings_change_pending = True
+        self.after_idle(self._emit_llm_settings_changed)
+
+    def _emit_llm_settings_changed(self):
+        self._llm_settings_change_pending = False
+        if callable(self.on_llm_settings_changed):
+            self.on_llm_settings_changed()
 
     def _setup_input_section(self):
         """File picker and target language."""

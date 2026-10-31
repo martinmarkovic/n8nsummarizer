@@ -327,7 +327,7 @@ class VideoSubtitlerController:
     def on_translate(self):
         """Handle translation request from view."""
         # Disable translate button during translation
-        self.tab.translate_btn.config(state=tk.DISABLED)
+        self.tab.translate_btn.configure(state=tk.DISABLED)
         
         # Run translation in background thread
         translation_thread = threading.Thread(target=self._run_translation, daemon=True)
@@ -385,12 +385,12 @@ class VideoSubtitlerController:
             
         finally:
             # Re-enable translate button
-            self.tab.after(0, lambda: self.tab.translate_btn.config(state=tk.NORMAL))
+            self.tab.after(0, lambda: self.tab.translate_btn.configure(state=tk.NORMAL))
     
     def on_burn(self):
         """Handle burn request from view."""
         # Disable burn button during processing
-        self.tab.burn_btn.config(state=tk.DISABLED)
+        self.tab.burn_btn.configure(state=tk.DISABLED)
         
         # Run FFmpeg in background thread
         ffmpeg_thread = threading.Thread(target=self._run_ffmpeg, daemon=True)
@@ -700,7 +700,7 @@ class VideoSubtitlerController:
             
         finally:
             # Re-enable burn button
-            self.tab.after(0, lambda: self.tab.burn_btn.config(state=tk.NORMAL))
+            self.tab.after(0, lambda: self.tab.burn_btn.configure(state=tk.NORMAL))
     
 
     
@@ -780,6 +780,14 @@ class VideoSubtitlerController:
             model: Model name to use
             url: Base URL for the LLM provider
         """
+        provider, model, url = (provider or "").strip(), (model or "").strip(), (url or "").strip()
+        if not (provider and model and url):
+            logger.debug(
+                "Ignoring incomplete Translation LLM configuration for Video "
+                "Subtitler: provider=%r, model=%r, url=%r", provider, model, url
+            )
+            return
+
         self._translation_provider = provider
         self._translation_model_name = model
         self._translation_webhook_url = url

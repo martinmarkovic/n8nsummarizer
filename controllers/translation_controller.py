@@ -48,6 +48,7 @@ class TranslationController:
         self.view.on_translate_clicked = self.handle_translate_clicked
         self.view.on_restore_default_webhook = self.handle_restore_default_webhook
         self.view.on_clear_clicked = self.handle_clear_clicked
+        self.view.on_llm_settings_changed = self.handle_llm_settings_changed
 
         # Initialize LLM settings from view defaults
         self._update_llm_client_from_view()
@@ -221,42 +222,64 @@ class TranslationController:
             if self.view.get_translating_state():
                 self.view.root.after(100, self._check_translation_result)
 
-    def _update_llm_client_from_view(self):
-        """Update LLM client configuration from view settings."""
+    def _sync_llm_settings_from_view(
+        self, *, allow_defaults: bool, persist: bool
+    ) -> bool:
+        """Apply a complete view configuration and notify dependent tools.
+
+        Provider switching deliberately clears the model while discovery is in
+        flight. Those partial values must not replace Video Subtitler's last
+        known-good configuration, so live synchronization only publishes a
+        fully specified triple.
+        """
         try:
-            provider = self.view.get_provider()
-            webhook_url = self.view.get_webhook_url()
-            model_name = self.view.get_model_name()
-            
-            if not webhook_url:
-                webhook_url = "http://127.0.0.1:1234/v1"  # Fallback to default
-                self.view.webhook_var.set(webhook_url)
-            
-            if not model_name:
-                model_name = "local-model"  # Fallback to default
-                self.view.model_var.set(model_name)
-            
-            # Update LLM client configuration
+            provider = self.view.get_provider().strip()
+            webhook_url = self.view.get_webhook_url().strip()
+            model_name = self.view.get_model_name().strip()
+
+            if allow_defaults:
+                if not webhook_url:
+                    webhook_url = "http://127.0.0.1:1234/v1"
+                    self.view.webhook_var.set(webhook_url)
+                if not model_name:
+                    model_name = "local-model"
+                    self.view.model_var.set(model_name)
+
+            if not (provider and webhook_url and model_name):
+                logger.debug(
+                    "Skipping incomplete live Translation LLM configuration: "
+                    "provider=%r, model=%r, url=%r",
+                    provider, model_name, webhook_url,
+                )
+                return False
+
+            # Keep both the direct client and TranslationModel in lockstep so
+            # the observer and the next Translation run see identical values.
             self.llm_client.config.webhook_url = webhook_url
             self.llm_client.config.model_name = model_name
             self.llm_client.config.provider = provider
-            
-            # Save to .env if requested
-            if self.view.get_save_settings():
+            self.model.set_llm_settings(provider, webhook_url, model_name)
+
+            if persist and self.view.get_save_settings():
                 self.llm_client.save_settings_to_env(webhook_url, model_name, provider)
-            
+
             logger.info(
-                f"Translation LLM client configured: provider={provider}, "
-                f"model={model_name}, url={webhook_url}"
+                "Translation LLM client configured: provider=%s, model=%s, url=%s",
+                provider, model_name, webhook_url,
             )
-            
-            # Notify registered callbacks about the settings change
             self._notify_llm_settings_changed()
-            
             return True
         except Exception as e:
             logger.error(f"Failed to update translation LLM client: {str(e)}")
             return False
+
+    def handle_llm_settings_changed(self):
+        """Immediately propagate a valid Translation tab selection."""
+        self._sync_llm_settings_from_view(allow_defaults=False, persist=False)
+
+    def _update_llm_client_from_view(self):
+        """Initialize or persist Translation LLM settings from the view."""
+        return self._sync_llm_settings_from_view(allow_defaults=True, persist=True)
 
     def handle_restore_default_webhook(self):
         """Handle Restore Default Webhook button click"""
