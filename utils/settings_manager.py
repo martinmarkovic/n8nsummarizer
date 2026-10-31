@@ -236,6 +236,16 @@ class SettingsManager:
         """Set the UI language code (persisted to .env as APP_LANGUAGE)."""
         self.set("APP_LANGUAGE", language)
 
+    def get_summarizer_input_mode(self) -> str:
+        """Get the last-used Summarizer input mode ('file' or 'youtube')."""
+        mode = self.get("SUMMARIZER_INPUT_MODE", "file")
+        return mode if mode in ("file", "youtube") else "file"
+
+    def set_summarizer_input_mode(self, mode: str) -> None:
+        """Persist the Summarizer input mode ('file' or 'youtube')."""
+        if mode in ("file", "youtube"):
+            self.set("SUMMARIZER_INPUT_MODE", mode)
+
     def get_transcriber_output_location(self) -> str:
         """Get transcriber output location preference."""
         return self.get("TRANSCRIBER_OUTPUT_LOCATION", "original")

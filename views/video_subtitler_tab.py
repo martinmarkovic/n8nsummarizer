@@ -1,442 +1,39 @@
 """
-Video Subtitler Tab - Phase 1: Download video + transcribe to SRT
+Video Subtitler Tab - download/pick a video, transcribe to SRT, translate, burn in.
 
-Follows the same pattern as DownloaderTab with BaseTab subclass.
+Migrated to CustomTkinter (2026-10-30) with the card-based responsive layout
+used by the Summarizer tab. The public interface consumed by
+VideoSubtitlerController is unchanged.
+
+Notes for this tab specifically:
+- CustomTkinter has no Spinbox, so the six numeric style fields use a compact
+  ``_int_stepper`` (minus / entry / plus) built here. The underlying variables
+  are still ``tk.IntVar``, so ``get_subtitle_style()`` keeps its contract - but
+  the values are now read through ``_safe_int`` because a user can type
+  anything into an entry, and ``IntVar.get()`` raises TclError on garbage.
+- Buttons live next to the content they act on (transcript toolbar, translation
+  toolbar, burn card) rather than in one distant action bar.
 """
 
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
 import os
 from pathlib import Path
+import tkinter as tk
+from tkinter import filedialog, messagebox
 
-from views.base_tab import BaseTab
+import customtkinter as ctk
+
+from views.base_tab import CTkBaseTab
+from views.ctk_compat import CTkSection, CTkCollapsibleSection, CTkSplitter
 from utils.i18n import t
+from utils.logger import logger
 
-class VideoSubtitlerTab(BaseTab):
+
+class VideoSubtitlerTab(CTkBaseTab):
     """Video Subtitler tab with download + transcription UI."""
 
-    def __init__(self, notebook):
-        self.notebook = notebook
-        
-        # State variables
-        self.url_var = tk.StringVar()
-        self.input_mode = tk.StringVar(value="url")  # "url" or "local"
-        self.local_file_path = tk.StringVar()
-        self.model_var = tk.StringVar(value="base")
-        self.language_var = tk.StringVar(value="auto")
-        self.progress_var = tk.StringVar(value=t("video_subtitler.status.ready"))
-        self.progress_pct_var = tk.StringVar(value="0%")
-        self.output_dir_var = tk.StringVar(value="")
-        self.translate_lang_var = tk.StringVar(value="Croatian")
-        
-        # Translation LLM info (for display)
-        self.translation_llm_label_var = tk.StringVar(value=t("video_subtitler.llm.not_configured"))
-        
-        # Controller will be initialized after UI setup
-        self.controller = None
-        
-        super().__init__(notebook, "🎞 Video Subtitler")
-        
-    def _setup_ui(self):
-        """Build Video Subtitler UI with input controls and progress display."""
-        # Configure grid - make all content scrollable
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)  # Main area expands
-        
-        # Create a canvas with scrollbar for the entire tab
-        canvas = tk.Canvas(self)
-        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
-        # Add mouse wheel scrolling
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        
-        canvas.bind("<MouseWheel>", _on_mousewheel)
-        scrollable_frame.bind("<MouseWheel>", _on_mousewheel)
-        
-        canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        
-        def _on_canvas_configure(event):
-            canvas.itemconfig(canvas_window, width=event.width)
-        
-        canvas.bind("<Configure>", _on_canvas_configure)
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.E, tk.W))
-        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
-        
-        # Configure scrollable frame grid
-        scrollable_frame.columnconfigure(0, weight=2)  # More weight for left column
-        scrollable_frame.columnconfigure(1, weight=1)  # Less weight for right column
-        
-        # === Row 0: Download & Transcribe Settings ===
-        settings_frame = ttk.LabelFrame(scrollable_frame, text=t("video_subtitler.frame.source_settings"), padding=15)
-        settings_frame.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=10)
-        settings_frame.columnconfigure(1, weight=1)
-        
-        # Mode selection (URL vs Local File)
-        mode_frame = ttk.Frame(settings_frame)
-        mode_frame.grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 10))
-        ttk.Radiobutton(mode_frame, text="URL", variable=self.input_mode, value="url").pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Radiobutton(mode_frame, text=t("video_subtitler.radio.local_file"), variable=self.input_mode, value="local").pack(side=tk.LEFT)
-        
-        # URL Input Frame
-        self.url_frame = ttk.Frame(settings_frame)
-        self.url_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
-        
-        ttk.Label(self.url_frame, text=t("video_subtitler.lbl.video_url")).pack(side=tk.LEFT, padx=(0, 5))
-        
-        url_entry = ttk.Entry(self.url_frame, textvariable=self.url_var)
-        url_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
-        self._register_entry_context_menu(url_entry)
-        
-        # Local File Input Frame (initially hidden)
-        self.local_frame = ttk.Frame(settings_frame)
-        self.local_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
-        self.local_frame.grid_remove()  # Hidden by default
-        
-        ttk.Label(self.local_frame, text=t("video_subtitler.lbl.local_file")).pack(side=tk.LEFT, padx=(0, 5))
-        
-        local_file_entry = ttk.Entry(self.local_frame, textvariable=self.local_file_path, state="readonly")
-        local_file_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
-        self._register_entry_context_menu(local_file_entry, allow_paste=False)
-        
-        ttk.Button(self.local_frame, text=t("video_subtitler.btn.browse"), command=self._browse_local_file, width=8).pack(side=tk.LEFT)
-        
-        # Start button
-        self.start_btn = ttk.Button(
-            settings_frame,
-            text=t("video_subtitler.btn.start"),
-            command=self._on_start,
-            width=8
-        )
-        self.start_btn.grid(row=2, column=2, sticky=tk.E, padx=(5, 0), pady=5)
-        
-        # Auto button
-        self.auto_btn = ttk.Button(
-            settings_frame,
-            text=t("video_subtitler.btn.auto"),
-            command=self._on_auto,
-            width=8
-        )
-        self.auto_btn.grid(row=2, column=3, sticky=tk.W, padx=(5, 0), pady=5)
-        
-        # Output folder selection
-        ttk.Label(settings_frame, text=t("video_subtitler.lbl.output_folder")).grid(
-            row=4, column=0, sticky=tk.W, padx=(0, 5), pady=(10, 5)
-        )
-        
-        output_entry = ttk.Entry(
-            settings_frame,
-            textvariable=self.output_dir_var,
-            state="readonly"
-        )
-        output_entry.grid(row=4, column=1, sticky=(tk.W, tk.E), padx=(0, 5), pady=(10, 5))
-        self._register_entry_context_menu(output_entry, allow_paste=False)
-        settings_frame.columnconfigure(1, weight=1)
-        
-        ttk.Button(
-            settings_frame,
-            text=t("video_subtitler.btn.change"),
-            command=self._on_change_output_folder,
-            width=8
-        ).grid(row=4, column=2, sticky=tk.W, padx=(5, 0), pady=(10, 5))
-        
-        # Mode change handler
-        self.input_mode.trace("w", self._on_mode_change)
-        
-        # Whisper Model
-        ttk.Label(settings_frame, text=t("video_subtitler.lbl.whisper_model")).grid(
-            row=3, column=0, sticky=tk.W, padx=(0, 10), pady=5
-        )
-        
-        model_combo = ttk.Combobox(
-            settings_frame,
-            textvariable=self.model_var,
-            values=["tiny", "base", "small", "medium", "large"],
-            state="readonly",
-            width=10
-        )
-        model_combo.grid(row=3, column=1, sticky=tk.W, pady=5)
-        
-        # Language
-        ttk.Label(settings_frame, text=t("video_subtitler.lbl.language")).grid(
-            row=3, column=2, sticky=tk.W, padx=(10, 10), pady=5
-        )
-        
-        language_combo = ttk.Combobox(
-            settings_frame,
-            textvariable=self.language_var,
-            values=["auto", "en", "hr", "de", "fr", "es", "it", "pt", "ru", "ja", "zh"],
-            state="readonly",
-            width=8
-        )
-        language_combo.grid(row=3, column=3, sticky=tk.W, padx=(0, 10), pady=5)
-        
-        # Translation language selection
-        ttk.Label(settings_frame, text=t("video_subtitler.lbl.translate_to")).grid(
-            row=5, column=0, sticky=tk.W, padx=(0, 5), pady=5
-        )
-        
-        lang_combo = ttk.Combobox(
-            settings_frame,
-            textvariable=self.translate_lang_var,
-            values=["English", "Croatian", "German", "French", "Spanish", "Italian", "Portuguese", "Russian", "Japanese", "Chinese"],
-            state="readonly",
-            width=12
-        )
-        lang_combo.grid(row=5, column=1, columnspan=2, sticky=tk.W, pady=5)
-        
-        # Translation LLM info label (read-only)
-        ttk.Label(settings_frame, textvariable=self.translation_llm_label_var, foreground="gray").grid(
-            row=6, column=0, columnspan=4, sticky=tk.W, pady=(5, 0)
-        )
-        
-        # === Row 1: Progress ===
-        progress_frame = ttk.LabelFrame(scrollable_frame, text=t("video_subtitler.frame.progress"), padding=10)
-        progress_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=10, pady=(0, 10))
-        progress_frame.columnconfigure(1, weight=1)
-        
-        # Progress bar
-        self.progress_bar = ttk.Progressbar(
-            progress_frame,
-            mode="determinate",
-            length=400
-        )
-        self.progress_bar.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 10), pady=5)
-        
-        # Progress percentage
-        ttk.Label(progress_frame, textvariable=self.progress_pct_var).grid(
-            row=0, column=1, sticky=tk.W, pady=5
-        )
-        
-        # Status label
-        status_label = ttk.Label(
-            progress_frame,
-            textvariable=self.progress_var,
-            foreground="blue"
-        )
-        status_label.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(0, 5))
-        
-        # === Row 2: Transcription (SRT) ===
-        srt_frame = ttk.LabelFrame(scrollable_frame, text=t("video_subtitler.frame.transcription"), padding=10)
-        srt_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
-        srt_frame.rowconfigure(0, weight=1)
-        srt_frame.columnconfigure(0, weight=1)
-        
-        # SRT text widget
-        self.srt_text = tk.Text(srt_frame, wrap=tk.WORD, height=15)
-        self.srt_text.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.E, tk.W))
-        
-        srt_scroll = ttk.Scrollbar(srt_frame, command=self.srt_text.yview)
-        srt_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
-        self.srt_text.configure(yscrollcommand=srt_scroll.set)
-        
-        # Enable burn button when SRT content is present
-        self.srt_text.bind("<<Modified>>", self._on_srt_text_modified)
+    # Below this width the source and burn cards stack vertically.
+    _STACK_BREAKPOINT = 1200
 
-        # Right-click context menu (copy/paste + TTS + fullscreen)
-        self._register_context_menu(
-            self.srt_text,
-            [
-                {"copy": True},
-                {"paste": True},
-                {"separator": True},
-                {"tts_read": lambda: self._selection_or_all(self.srt_text)},
-                {"tts_stop": True},
-                {"separator": True},
-                {"fullscreen": True, "title": t("video_subtitler.fullscreen.transcription_srt"), "editable": True},
-            ],
-        )
-        
-        # Button frame
-        button_frame = ttk.Frame(srt_frame)
-        button_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(5, 0))
-        
-        # Open temp folder button
-        open_btn = ttk.Button(
-            button_frame,
-            text=t("video_subtitler.btn.open_temp_folder"),
-            command=self._open_temp_folder,
-            width=15
-        )
-        open_btn.grid(row=0, column=0, padx=(0, 5))
-        
-        # Copy SRT path button
-        copy_btn = ttk.Button(
-            button_frame,
-            text=t("video_subtitler.btn.copy_srt_path"),
-            command=self._copy_srt_path,
-            width=15
-        )
-        copy_btn.grid(row=0, column=1)
-        
-        # === Row 3: Translation ===
-        translation_frame = ttk.LabelFrame(scrollable_frame, text=t("video_subtitler.frame.translation"), padding=10)
-        translation_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=(0, 10))
-        translation_frame.columnconfigure(1, weight=1)
-        
-        # Translate button
-        self.translate_btn = ttk.Button(
-            translation_frame,
-            text=t("video_subtitler.btn.translate_srt"),
-            command=self._on_translate_clicked,
-            state=tk.DISABLED,
-            width=15
-        )
-        self.translate_btn.grid(row=0, column=2, padx=(5, 0), pady=5)
-        
-        # Translated SRT text widget
-        self.translated_srt_text = tk.Text(translation_frame, wrap=tk.WORD, height=12)
-        self.translated_srt_text.grid(row=1, column=0, columnspan=3, sticky=(tk.N, tk.S, tk.E, tk.W), pady=(5, 5))
-        
-        translated_scroll = ttk.Scrollbar(translation_frame, command=self.translated_srt_text.yview)
-        translated_scroll.grid(row=1, column=3, sticky=(tk.N, tk.S))
-        self.translated_srt_text.configure(yscrollcommand=translated_scroll.set)
-        
-        # Enable burn button when translated SRT content is present
-        self.translated_srt_text.bind("<<Modified>>", self._on_translated_srt_text_modified)
-
-        # Right-click context menu (copy/paste + TTS + fullscreen)
-        self._register_context_menu(
-            self.translated_srt_text,
-            [
-                {"copy": True},
-                {"paste": True},
-                {"separator": True},
-                {"tts_read": lambda: self._selection_or_all(self.translated_srt_text)},
-                {"tts_stop": True},
-                {"separator": True},
-                {"fullscreen": True, "title": t("video_subtitler.fullscreen.translated_srt"), "editable": True},
-            ],
-        )
-        
-        # Save translated SRT button
-        ttk.Button(
-            translation_frame,
-            text=t("video_subtitler.btn.save_translated_srt"),
-            command=self._on_save_translated,
-            width=15
-        ).grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
-        
-        # Configure row weights for expansion
-        translation_frame.rowconfigure(1, weight=1)
-        
-        # === Row 0, Column 1: Burn Subtitles (FFmpeg) ===
-        burn_frame = ttk.LabelFrame(scrollable_frame, text=t("video_subtitler.frame.burn"), padding=10)
-        burn_frame.grid(row=0, column=1, sticky=(tk.N, tk.S, tk.E, tk.W), padx=10, pady=10)
-        # Configure burn frame columns to expand
-        burn_frame.columnconfigure(0, weight=0)  # Labels don't expand
-        burn_frame.columnconfigure(1, weight=2)  # Controls expand more
-        burn_frame.columnconfigure(2, weight=1)  # Value labels expand less
-        
-        # Use original name checkbox
-        self.use_original_name_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(
-            burn_frame,
-            text=t("video_subtitler.chk.name_after_original"),
-            variable=self.use_original_name_var
-        ).grid(row=0, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
-
-        # Burn mode: Simple (minimal, known-good command — default) vs Advanced
-        # (full subtitle style panel). Simple hides the style panel.
-        self.burn_mode_var = tk.StringVar(value="simple")
-        mode_frame = ttk.Frame(burn_frame)
-        mode_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
-        ttk.Label(mode_frame, text="Burn mode:").pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Radiobutton(
-            mode_frame, text="Simple", variable=self.burn_mode_var, value="simple"
-        ).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Radiobutton(
-            mode_frame, text="Advanced", variable=self.burn_mode_var, value="advanced"
-        ).pack(side=tk.LEFT)
-        self.burn_mode_var.trace("w", self._on_burn_mode_change)
-        
-        # Subtitle source selection
-        ttk.Label(burn_frame, text=t("video_subtitler.lbl.subtitle_source")).grid(
-            row=2, column=0, sticky=(tk.W, tk.E), padx=(0, 5), pady=5
-        )
-        
-        self.subtitle_source_var = tk.StringVar(value="translated")
-        source_frame = ttk.Frame(burn_frame)
-        source_frame.grid(row=2, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=5)
-        
-        ttk.Radiobutton(source_frame, text=t("video_subtitler.radio.translated_srt"), variable=self.subtitle_source_var, value="translated").pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Radiobutton(source_frame, text=t("video_subtitler.radio.original_srt"), variable=self.subtitle_source_var, value="original").pack(side=tk.LEFT)
-        
-        # Dark background checkbox
-        self.dark_bg_var = tk.BooleanVar(value=False)  # OFF by default (outlined text is more usable)
-        ttk.Checkbutton(
-            burn_frame,
-            text=t("video_subtitler.chk.dark_bg"),
-            variable=self.dark_bg_var
-        ).grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 5))
-        
-        # Opacity slider
-        ttk.Label(burn_frame, text=t("video_subtitler.lbl.background_opacity")).grid(
-            row=4, column=0, sticky=(tk.W, tk.E), padx=(0, 5), pady=(0, 5)
-        )
-        self.bg_opacity_var = tk.DoubleVar(value=0.6)
-        opacity_slider = ttk.Scale(
-            burn_frame,
-            from_=0.1, to=0.7,
-            orient=tk.HORIZONTAL,
-            variable=self.bg_opacity_var,
-            length=250
-        )
-        opacity_slider.grid(row=4, column=1, sticky=(tk.W, tk.E), pady=(0, 5))
-
-        # Show numeric value
-        self.opacity_label_var = tk.StringVar(value="0.60")
-        ttk.Label(burn_frame, textvariable=self.opacity_label_var).grid(
-            row=4, column=2, sticky=(tk.W, tk.E), padx=(5, 0), pady=(0, 5)
-        )
-        
-        # Update label when slider moves
-        def _update_opacity_label(*args):
-            self.opacity_label_var.set(f"{self.bg_opacity_var.get():.2f}")
-        self.bg_opacity_var.trace("w", _update_opacity_label)
-
-        # === Subtitle style options ===
-        self._build_subtitle_style_panel(burn_frame, start_row=5)
-        # Set initial visibility based on the default burn mode (Simple hides it)
-        self._on_burn_mode_change()
-
-        # Burn button
-        self.burn_btn = ttk.Button(
-            burn_frame,
-            text=t("video_subtitler.btn.burn"),
-            command=self._on_burn_clicked,
-            state=tk.DISABLED,
-            width=20
-        )
-        self.burn_btn.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 5))
-        
-        # FFmpeg status
-        self.ffmpeg_status_var = tk.StringVar(value="")
-        status_label = ttk.Label(
-            burn_frame,
-            textvariable=self.ffmpeg_status_var,
-            foreground="blue"
-        )
-        status_label.grid(row=7, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
-        
-        # Open output file button
-        self.open_output_btn = ttk.Button(
-            burn_frame,
-            text=t("video_subtitler.btn.open_output"),
-            command=self._open_output_file,
-            state=tk.DISABLED,
-            width=20
-        )
-        self.open_output_btn.grid(row=8, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
-        
     # ASS/libass colour codes in &HAABBGGRR (alpha 00 = opaque)
     SUBTITLE_COLORS = {
         "White": "&H00FFFFFF",
@@ -455,86 +52,711 @@ class VideoSubtitlerTab(BaseTab):
         ("Top", "Left"): 7,    ("Top", "Center"): 8,    ("Top", "Right"): 9,
     }
 
+    def __init__(self, notebook):
+        self.notebook = notebook
+
+        # State variables
+        self.url_var = tk.StringVar()
+        self.input_mode = tk.StringVar(value="url")  # "url" or "local"
+        self.local_file_path = tk.StringVar()
+        self.model_var = tk.StringVar(value="base")
+        self.language_var = tk.StringVar(value="auto")
+        self.progress_var = tk.StringVar(value=t("video_subtitler.status.ready"))
+        self.progress_pct_var = tk.StringVar(value="0%")
+        self.output_dir_var = tk.StringVar(value="")
+        self.translate_lang_var = tk.StringVar(value="Croatian")
+
+        # Translation LLM info (for display)
+        self.translation_llm_label_var = tk.StringVar(
+            value=t("video_subtitler.llm.not_configured")
+        )
+
+        # Controller will be initialized after UI setup
+        self.controller = None
+
+        super().__init__(notebook, "🎞 Video Subtitler")
+
+    # ------------------------------------------------------------------
+    # Small widget helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _safe_int(var, default=0):
+        """
+        Read an IntVar that is backed by a free-text entry.
+
+        ``IntVar.get()`` raises TclError when the entry holds anything
+        non-numeric, which is easy to do now that these are plain entries
+        rather than Spinboxes.
+        """
+        try:
+            return int(var.get())
+        except (tk.TclError, ValueError, TypeError):
+            return default
+
+    def _int_stepper(self, parent, var, from_, to, width=52):
+        """
+        Compact numeric field: [-] [value] [+].
+
+        Stands in for ttk.Spinbox, which CustomTkinter does not provide.
+        Returns the containing frame so the caller can grid it.
+        """
+        holder = ctk.CTkFrame(parent, fg_color="transparent")
+
+        def _nudge(delta):
+            value = self._safe_int(var, from_) + delta
+            var.set(max(from_, min(to, value)))
+
+        def _clamp_on_commit(_event=None):
+            var.set(max(from_, min(to, self._safe_int(var, from_))))
+
+        ctk.CTkButton(
+            holder, text="\u2212", width=26, height=26, corner_radius=6,
+            fg_color="transparent", text_color=("gray25", "gray85"),
+            hover_color=("gray82", "gray30"),
+            font=ctk.CTkFont(size=14, weight="bold"),
+            command=lambda: _nudge(-1),
+        ).grid(row=0, column=0)
+
+        entry = ctk.CTkEntry(
+            holder, textvariable=var, width=width, height=26,
+            justify="center", border_width=0, corner_radius=6,
+        )
+        entry.grid(row=0, column=1, padx=2)
+        entry.bind("<FocusOut>", _clamp_on_commit)
+        entry.bind("<Return>", _clamp_on_commit)
+
+        ctk.CTkButton(
+            holder, text="+", width=26, height=26, corner_radius=6,
+            fg_color="transparent", text_color=("gray25", "gray85"),
+            hover_color=("gray82", "gray30"),
+            font=ctk.CTkFont(size=14, weight="bold"),
+            command=lambda: _nudge(1),
+        ).grid(row=0, column=2)
+
+        return holder
+
+    @staticmethod
+    def _muted(parent, text, **kw):
+        """A secondary/explanatory label."""
+        kw.setdefault("anchor", "w")
+        kw.setdefault("text_color", ("gray40", "gray65"))
+        return ctk.CTkLabel(parent, text=text, **kw)
+
+    # ------------------------------------------------------------------
+    # UI construction
+    # ------------------------------------------------------------------
+
+    def _setup_ui(self):
+        """
+        Layout:
+            0  source card + burn card (stacking when narrow)
+            1  progress card
+            2  transcript / translation split   <- expanding region
+        """
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(2, weight=1)
+
+        self._stacked = False
+
+        self._setup_top_row()
+        self._setup_progress_section()
+        self._setup_text_split()
+
+        # Mode change handler (also keeps the segmented control in sync)
+        self.input_mode.trace("w", self._on_mode_change)
+        self._on_mode_change()
+
+        # Reflect the default burn mode in the style panel's visibility
+        self._on_burn_mode_change()
+
+        self.bind("<Configure>", self._on_resize)
+
+    def _on_resize(self, _event=None):
+        self.after_idle(self._apply_responsive_layout)
+
+    def _apply_responsive_layout(self):
+        """Stack the source and burn cards on narrow windows."""
+        width = self.winfo_width()
+        if width <= 1:
+            width = self.winfo_toplevel().winfo_width()
+        if width <= 1:
+            return
+        stacked = width < self._STACK_BREAKPOINT
+        if stacked == self._stacked:
+            return
+        self._stacked = stacked
+
+        if stacked:
+            self._top_row.grid_columnconfigure(1, weight=0)
+            self._burn_section.grid_configure(row=1, column=0, padx=0, pady=(10, 0))
+        else:
+            self._top_row.grid_columnconfigure(1, weight=1)
+            self._burn_section.grid_configure(row=0, column=1, padx=(10, 0), pady=0)
+
+    def _setup_top_row(self):
+        self._top_row = ctk.CTkFrame(self, fg_color="transparent")
+        self._top_row.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        self._top_row.grid_columnconfigure(0, weight=1)
+        self._top_row.grid_columnconfigure(1, weight=1)
+
+        self._setup_source_section()
+        self._setup_burn_section()
+
+    # ---------------------------- source ------------------------------
+
+    def _setup_source_section(self):
+        """Input source, whisper options and the start actions."""
+        section = CTkSection(
+            self._top_row, title=t("video_subtitler.frame.source_settings")
+        )
+        section.grid(row=0, column=0, sticky="new")
+        self._source_section = section
+        body = section.body
+        body.grid_columnconfigure(0, weight=1)
+
+        row = 0
+        # Mode selection (URL vs Local File)
+        self._mode_labels = {
+            "URL": "url",
+            t("video_subtitler.radio.local_file"): "local",
+        }
+        self._mode_values = {v: k for k, v in self._mode_labels.items()}
+
+        self.mode_selector = ctk.CTkSegmentedButton(
+            body,
+            values=list(self._mode_labels.keys()),
+            command=self._on_mode_selected,
+            height=32,
+            font=ctk.CTkFont(size=13),
+        )
+        self.mode_selector.grid(row=row, column=0, sticky="w", pady=(0, 10))
+        self.mode_selector.set(self._mode_values[self.input_mode.get()])
+
+        # --- URL input ---
+        row += 1
+        self.url_frame = ctk.CTkFrame(body, fg_color="transparent")
+        self.url_frame.grid(row=row, column=0, sticky="ew")
+        self.url_frame.grid_columnconfigure(0, weight=1)
+
+        url_entry = ctk.CTkEntry(
+            self.url_frame, textvariable=self.url_var, height=34,
+            placeholder_text=t("video_subtitler.lbl.video_url"),
+        )
+        url_entry.grid(row=0, column=0, sticky="ew")
+        self._register_entry_context_menu(url_entry)
+
+        # --- Local file input ---
+        self.local_frame = ctk.CTkFrame(body, fg_color="transparent")
+        self.local_frame.grid(row=row, column=0, sticky="ew")
+        self.local_frame.grid_columnconfigure(0, weight=1)
+
+        local_file_entry = ctk.CTkEntry(
+            self.local_frame, textvariable=self.local_file_path, height=34,
+            state="readonly", placeholder_text=t("video_subtitler.lbl.local_file"),
+        )
+        local_file_entry.grid(row=0, column=0, sticky="ew")
+        self._register_entry_context_menu(local_file_entry, allow_paste=False)
+
+        ctk.CTkButton(
+            self.local_frame, text=t("video_subtitler.btn.browse"),
+            command=self._browse_local_file, width=90, height=34,
+        ).grid(row=0, column=1, padx=(8, 0))
+
+        self.local_frame.grid_remove()  # URL mode is the default
+
+        # --- Whisper model + language ---
+        row += 1
+        opts = ctk.CTkFrame(body, fg_color="transparent")
+        opts.grid(row=row, column=0, sticky="ew", pady=(10, 0))
+
+        self._muted(opts, t("video_subtitler.lbl.whisper_model")).grid(
+            row=0, column=0, sticky="w", padx=(0, 6)
+        )
+        ctk.CTkOptionMenu(
+            opts, variable=self.model_var,
+            values=["tiny", "base", "small", "medium", "large"],
+            width=110, height=30,
+        ).grid(row=0, column=1, padx=(0, 14))
+
+        self._muted(opts, t("video_subtitler.lbl.language")).grid(
+            row=0, column=2, sticky="w", padx=(0, 6)
+        )
+        ctk.CTkOptionMenu(
+            opts, variable=self.language_var,
+            values=["auto", "en", "hr", "de", "fr", "es", "it", "pt", "ru", "ja", "zh"],
+            width=90, height=30,
+        ).grid(row=0, column=3)
+
+        # --- Output folder ---
+        row += 1
+        self._muted(body, t("video_subtitler.lbl.output_folder")).grid(
+            row=row, column=0, sticky="w", pady=(10, 2)
+        )
+
+        row += 1
+        out_row = ctk.CTkFrame(body, fg_color="transparent")
+        out_row.grid(row=row, column=0, sticky="ew")
+        out_row.grid_columnconfigure(0, weight=1)
+
+        output_entry = ctk.CTkEntry(
+            out_row, textvariable=self.output_dir_var, height=32, state="readonly"
+        )
+        output_entry.grid(row=0, column=0, sticky="ew")
+        self._register_entry_context_menu(output_entry, allow_paste=False)
+
+        ctk.CTkButton(
+            out_row, text=t("video_subtitler.btn.change"),
+            command=self._on_change_output_folder, width=90, height=32,
+        ).grid(row=0, column=1, padx=(8, 0))
+
+        # --- Translate target + LLM info ---
+        row += 1
+        tr_row = ctk.CTkFrame(body, fg_color="transparent")
+        tr_row.grid(row=row, column=0, sticky="ew", pady=(10, 0))
+
+        self._muted(tr_row, t("video_subtitler.lbl.translate_to")).grid(
+            row=0, column=0, sticky="w", padx=(0, 6)
+        )
+        ctk.CTkOptionMenu(
+            tr_row, variable=self.translate_lang_var,
+            values=["English", "Croatian", "German", "French", "Spanish",
+                    "Italian", "Portuguese", "Russian", "Japanese", "Chinese"],
+            width=140, height=30,
+        ).grid(row=0, column=1)
+
+        row += 1
+        ctk.CTkLabel(
+            body, textvariable=self.translation_llm_label_var, anchor="w",
+            justify="left", wraplength=460, text_color=("gray45", "gray60"),
+        ).grid(row=row, column=0, sticky="ew", pady=(6, 0))
+
+        # --- Start / Auto ---
+        row += 1
+        actions = ctk.CTkFrame(body, fg_color="transparent")
+        actions.grid(row=row, column=0, sticky="ew", pady=(12, 0))
+
+        self.start_btn = ctk.CTkButton(
+            actions, text=t("video_subtitler.btn.start"), command=self._on_start,
+            width=130, height=36, corner_radius=8,
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        self.start_btn.grid(row=0, column=0, padx=(0, 8))
+
+        self.auto_btn = ctk.CTkButton(
+            actions, text=t("video_subtitler.btn.auto"), command=self._on_auto,
+            width=120, height=36, corner_radius=8,
+            fg_color="transparent", border_width=1,
+            border_color=("gray70", "gray40"), text_color=("gray30", "gray80"),
+            hover_color=("gray85", "gray28"),
+        )
+        self.auto_btn.grid(row=0, column=1)
+
+    # ----------------------------- burn -------------------------------
+
+    def _setup_burn_section(self):
+        """Subtitle burn-in options."""
+        section = CTkSection(self._top_row, title=t("video_subtitler.frame.burn"))
+        section.grid(row=0, column=1, sticky="new", padx=(10, 0))
+        self._burn_section = section
+        body = section.body
+        body.grid_columnconfigure(0, weight=1)
+
+        row = 0
+        self.use_original_name_var = tk.BooleanVar(value=True)
+        ctk.CTkCheckBox(
+            body, text=t("video_subtitler.chk.name_after_original"),
+            variable=self.use_original_name_var,
+            checkbox_width=18, checkbox_height=18,
+        ).grid(row=row, column=0, sticky="w")
+
+        # Burn mode: Simple (minimal, known-good command - default) vs
+        # Advanced (full subtitle style panel).
+        row += 1
+        mode_row = ctk.CTkFrame(body, fg_color="transparent")
+        mode_row.grid(row=row, column=0, sticky="ew", pady=(10, 0))
+
+        self._muted(mode_row, "Burn mode:").grid(row=0, column=0, padx=(0, 8))
+
+        self.burn_mode_var = tk.StringVar(value="simple")
+        self._burn_mode_labels = {"Simple": "simple", "Advanced": "advanced"}
+        self._burn_mode_values = {v: k for k, v in self._burn_mode_labels.items()}
+
+        self.burn_mode_selector = ctk.CTkSegmentedButton(
+            mode_row, values=list(self._burn_mode_labels.keys()),
+            command=self._on_burn_mode_selected, height=30,
+            font=ctk.CTkFont(size=12),
+        )
+        self.burn_mode_selector.grid(row=0, column=1)
+        self.burn_mode_selector.set("Simple")
+        self.burn_mode_var.trace("w", self._on_burn_mode_change)
+
+        # Subtitle source
+        row += 1
+        self._muted(body, t("video_subtitler.lbl.subtitle_source")).grid(
+            row=row, column=0, sticky="w", pady=(10, 2)
+        )
+
+        row += 1
+        self.subtitle_source_var = tk.StringVar(value="translated")
+        self._source_labels = {
+            t("video_subtitler.radio.translated_srt"): "translated",
+            t("video_subtitler.radio.original_srt"): "original",
+        }
+        self._source_values = {v: k for k, v in self._source_labels.items()}
+
+        self.subtitle_source_selector = ctk.CTkSegmentedButton(
+            body, values=list(self._source_labels.keys()),
+            command=self._on_subtitle_source_selected, height=30,
+            font=ctk.CTkFont(size=12),
+        )
+        self.subtitle_source_selector.grid(row=row, column=0, sticky="ew")
+        self.subtitle_source_selector.set(self._source_values["translated"])
+
+        # Dark background + opacity
+        row += 1
+        self.dark_bg_var = tk.BooleanVar(value=False)  # outlined text is more usable
+        ctk.CTkCheckBox(
+            body, text=t("video_subtitler.chk.dark_bg"), variable=self.dark_bg_var,
+            checkbox_width=18, checkbox_height=18,
+        ).grid(row=row, column=0, sticky="w", pady=(10, 0))
+
+        row += 1
+        opacity_row = ctk.CTkFrame(body, fg_color="transparent")
+        opacity_row.grid(row=row, column=0, sticky="ew", pady=(8, 0))
+        opacity_row.grid_columnconfigure(1, weight=1)
+
+        self._muted(opacity_row, t("video_subtitler.lbl.background_opacity")).grid(
+            row=0, column=0, sticky="w", padx=(0, 8)
+        )
+
+        self.bg_opacity_var = tk.DoubleVar(value=0.6)
+        ctk.CTkSlider(
+            opacity_row, from_=0.1, to=0.7, variable=self.bg_opacity_var, height=16
+        ).grid(row=0, column=1, sticky="ew")
+
+        self.opacity_label_var = tk.StringVar(value="0.60")
+        ctk.CTkLabel(opacity_row, textvariable=self.opacity_label_var, width=40).grid(
+            row=0, column=2, padx=(8, 0)
+        )
+
+        def _update_opacity_label(*_args):
+            self.opacity_label_var.set(f"{self.bg_opacity_var.get():.2f}")
+        self.bg_opacity_var.trace("w", _update_opacity_label)
+
+        # Style panel (Advanced only)
+        row += 1
+        self._build_subtitle_style_panel(body, start_row=row)
+
+        # Burn action + status
+        row += 1
+        self.burn_btn = ctk.CTkButton(
+            body, text=t("video_subtitler.btn.burn"), command=self._on_burn_clicked,
+            state="disabled", height=36, corner_radius=8,
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        self.burn_btn.grid(row=row, column=0, sticky="ew", pady=(12, 0))
+
+        row += 1
+        self.ffmpeg_status_var = tk.StringVar(value="")
+        ctk.CTkLabel(
+            body, textvariable=self.ffmpeg_status_var, anchor="w", justify="left",
+            wraplength=460, text_color=("gray45", "gray60"),
+        ).grid(row=row, column=0, sticky="ew", pady=(6, 0))
+
+        row += 1
+        self.open_output_btn = ctk.CTkButton(
+            body, text=t("video_subtitler.btn.open_output"),
+            command=self._open_output_file, state="disabled", height=32,
+            corner_radius=8, fg_color="transparent", border_width=1,
+            border_color=("gray70", "gray40"), text_color=("gray30", "gray80"),
+            hover_color=("gray85", "gray28"),
+        )
+        self.open_output_btn.grid(row=row, column=0, sticky="ew", pady=(8, 0))
+
     def _build_subtitle_style_panel(self, parent, start_row):
-        """Build the subtitle appearance controls inside the burn frame."""
-        style_frame = ttk.LabelFrame(parent, text=t("video_subtitler.frame.subtitle_style"), padding=8)
-        style_frame.grid(row=start_row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(6, 6))
+        """Build the subtitle appearance controls (Advanced burn mode)."""
+        style_frame = CTkCollapsibleSection(
+            parent, title=t("video_subtitler.frame.subtitle_style"),
+            padding=10, expanded=True,
+        )
+        style_frame.grid(row=start_row, column=0, sticky="ew", pady=(12, 0))
         # Keep a reference so the Simple/Advanced toggle can show/hide it
         self.style_frame = style_frame
+        body = style_frame.body
         for c in range(4):
-            style_frame.columnconfigure(c, weight=1)
+            body.grid_columnconfigure(c, weight=1)
 
         color_names = list(self.SUBTITLE_COLORS.keys())
 
-        # Font size
+        # Font size.
         # NOTE: the subtitles filter renders in a 384x288 reference space and
-        # scales up to the video resolution, so a value of ~16 gives normal-
-        # looking captions on 720p/1080p. Higher values quickly get oversized.
-        ttk.Label(style_frame, text=t("video_subtitler.lbl.font_size")).grid(row=0, column=0, sticky=tk.W, pady=2)
+        # scales up to the video resolution, so ~16 gives normal-looking
+        # captions on 720p/1080p. Higher values quickly get oversized.
+        self._muted(body, t("video_subtitler.lbl.font_size")).grid(
+            row=0, column=0, sticky="w", pady=2
+        )
         self.font_size_var = tk.IntVar(value=16)
-        ttk.Spinbox(style_frame, from_=8, to=96, textvariable=self.font_size_var, width=6).grid(
-            row=0, column=1, sticky=tk.W, pady=2
+        self._int_stepper(body, self.font_size_var, 8, 96).grid(
+            row=0, column=1, sticky="w", pady=2
         )
 
         # Bold / Italic
         self.bold_var = tk.BooleanVar(value=False)
         self.italic_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(style_frame, text=t("video_subtitler.chk.bold"), variable=self.bold_var).grid(row=0, column=2, sticky=tk.W, pady=2)
-        ttk.Checkbutton(style_frame, text=t("video_subtitler.chk.italic"), variable=self.italic_var).grid(row=0, column=3, sticky=tk.W, pady=2)
+        ctk.CTkCheckBox(
+            body, text=t("video_subtitler.chk.bold"), variable=self.bold_var,
+            checkbox_width=18, checkbox_height=18, width=70,
+        ).grid(row=0, column=2, sticky="w", pady=2)
+        ctk.CTkCheckBox(
+            body, text=t("video_subtitler.chk.italic"), variable=self.italic_var,
+            checkbox_width=18, checkbox_height=18, width=70,
+        ).grid(row=0, column=3, sticky="w", pady=2)
 
         # Text colour
-        ttk.Label(style_frame, text=t("video_subtitler.lbl.text_colour")).grid(row=1, column=0, sticky=tk.W, pady=2)
+        self._muted(body, t("video_subtitler.lbl.text_colour")).grid(
+            row=1, column=0, sticky="w", pady=2
+        )
         self.text_color_var = tk.StringVar(value="White")
-        ttk.Combobox(style_frame, textvariable=self.text_color_var, values=color_names,
-                     state="readonly", width=8).grid(row=1, column=1, sticky=tk.W, pady=2)
+        ctk.CTkOptionMenu(
+            body, variable=self.text_color_var, values=color_names, width=100, height=28
+        ).grid(row=1, column=1, sticky="w", pady=2)
 
         # Outline colour
-        ttk.Label(style_frame, text=t("video_subtitler.lbl.outline_colour")).grid(row=1, column=2, sticky=tk.W, pady=2)
+        self._muted(body, t("video_subtitler.lbl.outline_colour")).grid(
+            row=1, column=2, sticky="w", pady=2
+        )
         self.outline_color_var = tk.StringVar(value="Black")
-        ttk.Combobox(style_frame, textvariable=self.outline_color_var, values=color_names,
-                     state="readonly", width=8).grid(row=1, column=3, sticky=tk.W, pady=2)
+        ctk.CTkOptionMenu(
+            body, variable=self.outline_color_var, values=color_names,
+            width=100, height=28,
+        ).grid(row=1, column=3, sticky="w", pady=2)
 
         # Outline width
-        ttk.Label(style_frame, text=t("video_subtitler.lbl.outline_width")).grid(row=2, column=0, sticky=tk.W, pady=2)
+        self._muted(body, t("video_subtitler.lbl.outline_width")).grid(
+            row=2, column=0, sticky="w", pady=2
+        )
         self.outline_width_var = tk.IntVar(value=1)
-        ttk.Spinbox(style_frame, from_=0, to=8, textvariable=self.outline_width_var, width=6).grid(
-            row=2, column=1, sticky=tk.W, pady=2
+        self._int_stepper(body, self.outline_width_var, 0, 8).grid(
+            row=2, column=1, sticky="w", pady=2
         )
 
         # Shadow depth
-        ttk.Label(style_frame, text=t("video_subtitler.lbl.shadow")).grid(row=2, column=2, sticky=tk.W, pady=2)
+        self._muted(body, t("video_subtitler.lbl.shadow")).grid(
+            row=2, column=2, sticky="w", pady=2
+        )
         self.shadow_var = tk.IntVar(value=0)
-        ttk.Spinbox(style_frame, from_=0, to=8, textvariable=self.shadow_var, width=6).grid(
-            row=2, column=3, sticky=tk.W, pady=2
+        self._int_stepper(body, self.shadow_var, 0, 8).grid(
+            row=2, column=3, sticky="w", pady=2
         )
 
         # Position: vertical + horizontal alignment
-        ttk.Label(style_frame, text=t("video_subtitler.lbl.position")).grid(row=3, column=0, sticky=tk.W, pady=2)
+        self._muted(body, t("video_subtitler.lbl.position")).grid(
+            row=3, column=0, sticky="w", pady=2
+        )
         self.v_align_var = tk.StringVar(value="Bottom")
-        ttk.Combobox(style_frame, textvariable=self.v_align_var, values=["Bottom", "Middle", "Top"],
-                     state="readonly", width=8).grid(row=3, column=1, sticky=tk.W, pady=2)
+        ctk.CTkOptionMenu(
+            body, variable=self.v_align_var, values=["Bottom", "Middle", "Top"],
+            width=100, height=28,
+        ).grid(row=3, column=1, sticky="w", pady=2)
         self.h_align_var = tk.StringVar(value="Center")
-        ttk.Combobox(style_frame, textvariable=self.h_align_var, values=["Left", "Center", "Right"],
-                     state="readonly", width=8).grid(row=3, column=2, sticky=tk.W, pady=2)
+        ctk.CTkOptionMenu(
+            body, variable=self.h_align_var, values=["Left", "Center", "Right"],
+            width=100, height=28,
+        ).grid(row=3, column=2, sticky="w", pady=2)
 
         # Vertical margin (distance from edge)
-        ttk.Label(style_frame, text=t("video_subtitler.lbl.vertical_margin")).grid(row=4, column=0, sticky=tk.W, pady=2)
+        self._muted(body, t("video_subtitler.lbl.vertical_margin")).grid(
+            row=4, column=0, sticky="w", pady=2
+        )
         self.margin_v_var = tk.IntVar(value=20)
-        ttk.Spinbox(style_frame, from_=0, to=400, textvariable=self.margin_v_var, width=6).grid(
-            row=4, column=1, sticky=tk.W, pady=2
+        self._int_stepper(body, self.margin_v_var, 0, 400, width=60).grid(
+            row=4, column=1, sticky="w", pady=2
         )
 
         # Horizontal / vertical scale (percent)
-        ttk.Label(style_frame, text=t("video_subtitler.lbl.horizontal_scale")).grid(row=5, column=0, sticky=tk.W, pady=2)
+        self._muted(body, t("video_subtitler.lbl.horizontal_scale")).grid(
+            row=5, column=0, sticky="w", pady=2
+        )
         self.scale_x_var = tk.IntVar(value=100)
-        ttk.Spinbox(style_frame, from_=50, to=200, textvariable=self.scale_x_var, width=6).grid(
-            row=5, column=1, sticky=tk.W, pady=2
+        self._int_stepper(body, self.scale_x_var, 50, 200, width=60).grid(
+            row=5, column=1, sticky="w", pady=2
         )
-        ttk.Label(style_frame, text=t("video_subtitler.lbl.vertical_scale")).grid(row=5, column=2, sticky=tk.W, pady=2)
+        self._muted(body, t("video_subtitler.lbl.vertical_scale")).grid(
+            row=5, column=2, sticky="w", pady=2
+        )
         self.scale_y_var = tk.IntVar(value=100)
-        ttk.Spinbox(style_frame, from_=50, to=200, textvariable=self.scale_y_var, width=6).grid(
-            row=5, column=3, sticky=tk.W, pady=2
+        self._int_stepper(body, self.scale_y_var, 50, 200, width=60).grid(
+            row=5, column=3, sticky="w", pady=2
         )
+
+    # --------------------------- progress -----------------------------
+
+    def _setup_progress_section(self):
+        section = CTkSection(self, title=t("video_subtitler.frame.progress"), padding=10)
+        section.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        self._progress_section = section
+        body = section.body
+        body.grid_columnconfigure(0, weight=1)
+
+        bar_row = ctk.CTkFrame(body, fg_color="transparent")
+        bar_row.grid(row=0, column=0, sticky="ew")
+        bar_row.grid_columnconfigure(0, weight=1)
+
+        self.progress_bar = ctk.CTkProgressBar(bar_row, mode="determinate", height=10)
+        self.progress_bar.set(0)
+        self.progress_bar.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+
+        ctk.CTkLabel(bar_row, textvariable=self.progress_pct_var, width=56).grid(
+            row=0, column=1
+        )
+
+        ctk.CTkLabel(
+            body, textvariable=self.progress_var, anchor="w", justify="left",
+            wraplength=1100, text_color=("gray35", "gray70"),
+        ).grid(row=1, column=0, sticky="ew", pady=(6, 0))
+
+    # ------------------------- text panes -----------------------------
+
+    def _setup_text_split(self):
+        """Transcript and translation side by side with a draggable divider."""
+        self._split = CTkSplitter(self, ratio=0.5)
+        self._split.grid(row=2, column=0, sticky="nsew")
+
+        # --- Transcription (left) ---
+        srt_section = CTkSection(
+            self._split.left, title=t("video_subtitler.frame.transcription"), padding=10
+        )
+        srt_section.grid(row=0, column=0, sticky="nsew")
+        self._split.left.grid_rowconfigure(0, weight=1)
+        self._split.left.grid_columnconfigure(0, weight=1)
+        self._srt_section = srt_section
+        body = srt_section.body
+        body.grid_columnconfigure(0, weight=1)
+        body.grid_rowconfigure(0, weight=1)
+
+        self.srt_text = ctk.CTkTextbox(
+            body, wrap="word", font=("Cascadia Mono", 12),
+            activate_scrollbars=True, corner_radius=8,
+        )
+        self.srt_text.grid(row=0, column=0, sticky="nsew")
+
+        # Enable burn button when SRT content is present
+        self.srt_text.bind("<<Modified>>", self._on_srt_text_modified)
+
+        self._register_context_menu(
+            self.srt_text,
+            [
+                {"copy": True},
+                {"paste": True},
+                {"separator": True},
+                {"tts_read": lambda: self._selection_or_all(self.srt_text)},
+                {"tts_stop": True},
+                {"separator": True},
+                {"fullscreen": True,
+                 "title": t("video_subtitler.fullscreen.transcription_srt"),
+                 "editable": True},
+            ],
+        )
+
+        srt_tools = ctk.CTkFrame(body, fg_color="transparent")
+        srt_tools.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+
+        ctk.CTkButton(
+            srt_tools, text=t("video_subtitler.btn.open_temp_folder"),
+            command=self._open_temp_folder, height=30,
+        ).grid(row=0, column=0, padx=(0, 6))
+
+        ctk.CTkButton(
+            srt_tools, text=t("video_subtitler.btn.copy_srt_path"),
+            command=self._copy_srt_path, height=30,
+            fg_color="transparent", border_width=1,
+            border_color=("gray70", "gray40"), text_color=("gray30", "gray80"),
+            hover_color=("gray85", "gray28"),
+        ).grid(row=0, column=1)
+
+        # --- Translation (right) ---
+        tr_section = CTkSection(
+            self._split.right, title=t("video_subtitler.frame.translation"), padding=10
+        )
+        tr_section.grid(row=0, column=0, sticky="nsew")
+        self._split.right.grid_rowconfigure(0, weight=1)
+        self._split.right.grid_columnconfigure(0, weight=1)
+        self._translation_section = tr_section
+        tbody = tr_section.body
+        tbody.grid_columnconfigure(0, weight=1)
+        tbody.grid_rowconfigure(0, weight=1)
+
+        self.translated_srt_text = ctk.CTkTextbox(
+            tbody, wrap="word", font=("Cascadia Mono", 12),
+            activate_scrollbars=True, corner_radius=8,
+        )
+        self.translated_srt_text.grid(row=0, column=0, sticky="nsew")
+
+        # Enable burn button when translated SRT content is present
+        self.translated_srt_text.bind(
+            "<<Modified>>", self._on_translated_srt_text_modified
+        )
+
+        self._register_context_menu(
+            self.translated_srt_text,
+            [
+                {"copy": True},
+                {"paste": True},
+                {"separator": True},
+                {"tts_read": lambda: self._selection_or_all(self.translated_srt_text)},
+                {"tts_stop": True},
+                {"separator": True},
+                {"fullscreen": True,
+                 "title": t("video_subtitler.fullscreen.translated_srt"),
+                 "editable": True},
+            ],
+        )
+
+        tr_tools = ctk.CTkFrame(tbody, fg_color="transparent")
+        tr_tools.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+
+        self.translate_btn = ctk.CTkButton(
+            tr_tools, text=t("video_subtitler.btn.translate_srt"),
+            command=self._on_translate_clicked, state="disabled", height=30,
+        )
+        self.translate_btn.grid(row=0, column=0, padx=(0, 6))
+
+        ctk.CTkButton(
+            tr_tools, text=t("video_subtitler.btn.save_translated_srt"),
+            command=self._on_save_translated, height=30,
+            fg_color="transparent", border_width=1,
+            border_color=("gray70", "gray40"), text_color=("gray30", "gray80"),
+            hover_color=("gray85", "gray28"),
+        ).grid(row=0, column=1)
+
+    # ------------------------------------------------------------------
+    # Mode / option handlers
+    # ------------------------------------------------------------------
+
+    def _on_mode_selected(self, label: str):
+        mode = self._mode_labels.get(label)
+        if mode and mode != self.input_mode.get():
+            self.input_mode.set(mode)  # trace triggers _on_mode_change
+
+    def _on_mode_change(self, *args):
+        """Handle input mode change (URL vs Local File)."""
+        if self.input_mode.get() == "url":
+            self.url_frame.grid()
+            self.local_frame.grid_remove()
+        else:
+            self.url_frame.grid_remove()
+            self.local_frame.grid()
+
+        if hasattr(self, "mode_selector"):
+            label = self._mode_values.get(self.input_mode.get())
+            if label and self.mode_selector.get() != label:
+                self.mode_selector.set(label)
+
+    def _on_burn_mode_selected(self, label: str):
+        mode = self._burn_mode_labels.get(label)
+        if mode and mode != self.burn_mode_var.get():
+            self.burn_mode_var.set(mode)  # trace triggers _on_burn_mode_change
 
     def _on_burn_mode_change(self, *args):
         """Show the Subtitle Style panel only in Advanced mode."""
@@ -548,6 +770,23 @@ class VideoSubtitlerTab(BaseTab):
         except tk.TclError:
             pass
 
+        if hasattr(self, "burn_mode_selector"):
+            label = self._burn_mode_values.get(self.burn_mode_var.get())
+            if label and self.burn_mode_selector.get() != label:
+                self.burn_mode_selector.set(label)
+
+    def _on_subtitle_source_selected(self, label: str):
+        value = self._source_labels.get(label)
+        if value:
+            self.subtitle_source_var.set(value)
+
+    def _sync_subtitle_source_selector(self):
+        """Keep the segmented control in step with subtitle_source_var."""
+        if hasattr(self, "subtitle_source_selector"):
+            label = self._source_values.get(self.subtitle_source_var.get())
+            if label and self.subtitle_source_selector.get() != label:
+                self.subtitle_source_selector.set(label)
+
     def get_burn_mode(self) -> str:
         """Return the current burn mode ('simple' or 'advanced')."""
         return self.burn_mode_var.get()
@@ -555,37 +794,43 @@ class VideoSubtitlerTab(BaseTab):
     def get_subtitle_style(self) -> dict:
         """Return the current subtitle style options as a dict for the controller."""
         return {
-            "font_size": self.font_size_var.get(),
+            "font_size": self._safe_int(self.font_size_var, 16),
             "bold": self.bold_var.get(),
             "italic": self.italic_var.get(),
-            "primary_colour": self.SUBTITLE_COLORS.get(self.text_color_var.get(), "&H00FFFFFF"),
-            "outline_colour": self.SUBTITLE_COLORS.get(self.outline_color_var.get(), "&H00000000"),
-            "outline": self.outline_width_var.get(),
-            "shadow": self.shadow_var.get(),
-            "alignment": self._ALIGN_MAP.get((self.v_align_var.get(), self.h_align_var.get()), 2),
-            "margin_v": self.margin_v_var.get(),
-            "scale_x": self.scale_x_var.get(),
-            "scale_y": self.scale_y_var.get(),
+            "primary_colour": self.SUBTITLE_COLORS.get(
+                self.text_color_var.get(), "&H00FFFFFF"
+            ),
+            "outline_colour": self.SUBTITLE_COLORS.get(
+                self.outline_color_var.get(), "&H00000000"
+            ),
+            "outline": self._safe_int(self.outline_width_var, 1),
+            "shadow": self._safe_int(self.shadow_var, 0),
+            "alignment": self._ALIGN_MAP.get(
+                (self.v_align_var.get(), self.h_align_var.get()), 2
+            ),
+            "margin_v": self._safe_int(self.margin_v_var, 20),
+            "scale_x": self._safe_int(self.scale_x_var, 100),
+            "scale_y": self._safe_int(self.scale_y_var, 100),
         }
 
     def get_burn_prefs(self) -> dict:
         """
         Return the raw burn/style selections for persistence (color names, not
-        ASS codes, so they can be restored into the comboboxes).
+        ASS codes, so they can be restored into the dropdowns).
         """
         return {
-            "font_size": self.font_size_var.get(),
+            "font_size": self._safe_int(self.font_size_var, 16),
             "bold": self.bold_var.get(),
             "italic": self.italic_var.get(),
             "text_color": self.text_color_var.get(),
             "outline_color": self.outline_color_var.get(),
-            "outline_width": self.outline_width_var.get(),
-            "shadow": self.shadow_var.get(),
+            "outline_width": self._safe_int(self.outline_width_var, 1),
+            "shadow": self._safe_int(self.shadow_var, 0),
             "v_align": self.v_align_var.get(),
             "h_align": self.h_align_var.get(),
-            "margin_v": self.margin_v_var.get(),
-            "scale_x": self.scale_x_var.get(),
-            "scale_y": self.scale_y_var.get(),
+            "margin_v": self._safe_int(self.margin_v_var, 20),
+            "scale_x": self._safe_int(self.scale_x_var, 100),
+            "scale_y": self._safe_int(self.scale_y_var, 100),
             "dark_bg": self.dark_bg_var.get(),
             "bg_opacity": round(self.bg_opacity_var.get(), 2),
             "burn_mode": self.burn_mode_var.get(),
@@ -617,43 +862,42 @@ class VideoSubtitlerTab(BaseTab):
                 try:
                     setter(prefs[key])
                 except Exception:
-                    pass
+                    logger.debug(f"Could not restore burn pref {key!r}", exc_info=True)
         # Reflect a restored mode in the style panel's visibility
         self._on_burn_mode_change()
 
     def set_controller(self, controller):
         """Set the controller for this view."""
         self.controller = controller
-    
-    # === UI Event Handlers ===
+
+    # ------------------------------------------------------------------
+    # UI Event Handlers
+    # ------------------------------------------------------------------
+
     def _on_start(self):
         """Handle start button click."""
         if self.controller:
             self.controller.on_start()
-    
-    def _on_mode_change(self, *args):
-        """Handle input mode change (URL vs Local File)."""
-        if self.input_mode.get() == "url":
-            self.url_frame.grid()
-            self.local_frame.grid_remove()
-        else:
-            self.url_frame.grid_remove()
-            self.local_frame.grid()
-    
+
+    def _on_auto(self):
+        """Handle auto button click."""
+        if self.controller:
+            self.controller.on_auto()
+
     def _browse_local_file(self):
         """Browse for local video file."""
         supported_formats = [
             (t("video_subtitler.filetype.video"), "*.mp4 *.avi *.mov *.mkv *.webm"),
             (t("video_subtitler.filetype.audio"), "*.mp3 *.wav *.flac *.m4a"),
-            (t("video_subtitler.filetype.all"), "*.*")
+            (t("video_subtitler.filetype.all"), "*.*"),
         ]
         file_path = filedialog.askopenfilename(
             title=t("video_subtitler.dialog.select_media"),
-            filetypes=supported_formats
+            filetypes=supported_formats,
         )
         if file_path:
             self.local_file_path.set(file_path)
-    
+
     def _open_temp_folder(self):
         """Open temp_subtitler folder."""
         try:
@@ -661,52 +905,24 @@ class VideoSubtitlerTab(BaseTab):
             if temp_dir.exists():
                 os.startfile(str(temp_dir))
             else:
-                messagebox.showinfo(t("video_subtitler.msg.info_title"), t("video_subtitler.msg.temp_not_exist"))
+                messagebox.showinfo(
+                    t("video_subtitler.msg.info_title"),
+                    t("video_subtitler.msg.temp_not_exist"),
+                )
         except Exception as e:
-            messagebox.showerror(t("video_subtitler.msg.error_title"), t("video_subtitler.msg.could_not_open_folder").format(error=e))
-    
+            messagebox.showerror(
+                t("video_subtitler.msg.error_title"),
+                t("video_subtitler.msg.could_not_open_folder").format(error=e),
+            )
+
     def _copy_srt_path(self):
         """Copy SRT path to clipboard."""
         srt_path = "temp_subtitler/video.srt"
         self.clipboard_clear()
         self.clipboard_append(srt_path)
-        self.log_message(t("video_subtitler.status.copied_clipboard").format(path=srt_path))
-    
-    # === View Helper Methods (called by controller) ===
-    def get_url(self) -> str:
-        """Get current URL from input field."""
-        return self.url_var.get().strip()
-    
-    def get_local_file_path(self) -> str:
-        """Get selected local file path."""
-        return self.local_file_path.get().strip()
-    
-    def get_input_mode(self) -> str:
-        """Get current input mode."""
-        return self.input_mode.get()
-    
-    def get_whisper_model(self) -> str:
-        """Get selected Whisper model."""
-        return self.model_var.get()
-    
-    def get_language(self) -> str:
-        """Get selected language."""
-        return self.language_var.get()
-    
-    def update_progress(self, pct: float, message: str):
-        """Update progress bar and status."""
-        self.progress_bar["value"] = pct
-        self.progress_pct_var.set(f"{pct:.1f}%")
-        self.progress_var.set(message)
-    
-    def update_status(self, message: str):
-        """Update status message."""
-        self.progress_var.set(message)
-    
-    def display_srt(self, text: str):
-        """Display SRT text in the text widget."""
-        self.srt_text.delete("1.0", tk.END)
-        self.srt_text.insert(tk.END, text)
+        self.log_message(
+            t("video_subtitler.status.copied_clipboard").format(path=srt_path)
+        )
 
     def _on_srt_text_modified(self, event=None):
         """Enable burn button (original source) when SRT content is present."""
@@ -714,27 +930,143 @@ class VideoSubtitlerTab(BaseTab):
         self.srt_text.edit_modified(False)
         has_content = bool(self.srt_text.get("1.0", tk.END).strip())
         if has_content:
-            self.burn_btn.config(state=tk.NORMAL)
-            # Switch the source radio to "original" when user edits this field
-            if self.subtitle_source_var.get() != "translated" or not self.translated_srt_text.get("1.0", tk.END).strip():
+            self.burn_btn.configure(state="normal")
+            # Switch the source to "original" unless a translation exists
+            if (self.subtitle_source_var.get() != "translated"
+                    or not self.translated_srt_text.get("1.0", tk.END).strip()):
                 self.subtitle_source_var.set("original")
+                self._sync_subtitle_source_selector()
 
     def _on_translated_srt_text_modified(self, event=None):
-        """Enable burn button (translated source) when translated SRT content is present."""
+        """Enable burn button (translated source) when translated SRT is present."""
         self.translated_srt_text.edit_modified(False)
         has_content = bool(self.translated_srt_text.get("1.0", tk.END).strip())
         if has_content:
-            self.burn_btn.config(state=tk.NORMAL)
+            self.burn_btn.configure(state="normal")
             self.subtitle_source_var.set("translated")
-    
+            self._sync_subtitle_source_selector()
+
+    def _on_translate_clicked(self):
+        """Handle translate button click."""
+        if self.controller and hasattr(self.controller, 'on_translate'):
+            self.controller.on_translate()
+
+    def _on_save_translated(self):
+        """Save translated SRT to file."""
+        translated_srt = self.get_translated_srt()
+        if not translated_srt:
+            messagebox.showinfo(
+                t("video_subtitler.msg.info_title"),
+                t("video_subtitler.msg.no_translated_to_save"),
+            )
+            return
+
+        file_path = filedialog.asksaveasfilename(
+            title=t("video_subtitler.dialog.save_translated"),
+            defaultextension=".srt",
+            filetypes=[
+                (t("video_subtitler.filetype.srt"), "*.srt"),
+                (t("video_subtitler.filetype.all"), "*.*"),
+            ],
+        )
+
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(translated_srt)
+                messagebox.showinfo(
+                    t("video_subtitler.msg.success_title"),
+                    t("video_subtitler.msg.translated_saved").format(path=file_path),
+                )
+            except Exception as e:
+                messagebox.showerror(
+                    t("video_subtitler.msg.error_title"),
+                    t("video_subtitler.msg.failed_save").format(error=e),
+                )
+
+    def _on_burn_clicked(self):
+        """Handle burn button click."""
+        if self.controller and hasattr(self.controller, 'on_burn'):
+            self.controller.on_burn()
+
+    def _open_output_file(self):
+        """Open output video file."""
+        if self.controller and hasattr(self.controller, 'output_video_path'):
+            try:
+                os.startfile(str(self.controller.output_video_path))
+            except Exception as e:
+                messagebox.showerror(
+                    t("video_subtitler.msg.error_title"),
+                    t("video_subtitler.msg.could_not_open_file").format(error=e),
+                )
+        else:
+            messagebox.showinfo(
+                t("video_subtitler.msg.info_title"),
+                t("video_subtitler.msg.no_output_file"),
+            )
+
+    def _on_change_output_folder(self):
+        """Handle change output folder button click."""
+        chosen = filedialog.askdirectory(
+            title=t("video_subtitler.dialog.select_output_folder")
+        )
+        if chosen:
+            self.output_dir_var.set(chosen)
+            if self.controller:
+                self.controller.set_output_dir(chosen)
+
+    # ------------------------------------------------------------------
+    # View Helper Methods (called by controller)
+    # ------------------------------------------------------------------
+
+    def get_url(self) -> str:
+        """Get current URL from input field."""
+        return self.url_var.get().strip()
+
+    def get_local_file_path(self) -> str:
+        """Get selected local file path."""
+        return self.local_file_path.get().strip()
+
+    def get_input_mode(self) -> str:
+        """Get current input mode."""
+        return self.input_mode.get()
+
+    def get_whisper_model(self) -> str:
+        """Get selected Whisper model."""
+        return self.model_var.get()
+
+    def get_language(self) -> str:
+        """Get selected language."""
+        return self.language_var.get()
+
+    def update_progress(self, pct: float, message: str):
+        """
+        Update progress bar and status.
+
+        The controller reports 0-100; CTkProgressBar wants a 0..1 fraction.
+        """
+        self.progress_bar.set(min(max(pct / 100.0, 0.0), 1.0))
+        self.progress_pct_var.set(f"{pct:.1f}%")
+        self.progress_var.set(message)
+
+    def update_status(self, message: str):
+        """Update status message."""
+        self.progress_var.set(message)
+
+    def display_srt(self, text: str):
+        """Display SRT text in the text widget."""
+        self.srt_text.delete("1.0", tk.END)
+        self.srt_text.insert(tk.END, text)
+
     def set_busy(self, is_busy: bool):
         """Enable or disable start button."""
-        self.start_btn.config(state=tk.DISABLED if is_busy else tk.NORMAL)
-    
+        self.start_btn.configure(state="disabled" if is_busy else "normal")
+
     def show_error(self, message: str):
         """Show error dialog."""
+        logger.error(f"[{self.tab_name}] {message}")
         messagebox.showerror(t("video_subtitler.msg.error_title"), message)
-    
+
     def log_message(self, message: str):
         """Add message to status (for simple logging)."""
         current = self.progress_var.get()
@@ -742,145 +1074,109 @@ class VideoSubtitlerTab(BaseTab):
             self.progress_var.set(f"{current} | {message}")
         else:
             self.progress_var.set(message)
-    
-    # === BaseTab Abstract Method Implementations ===
-    def get_content(self) -> str:
-        """Return current SRT content."""
-        return self.srt_text.get("1.0", tk.END)
-    
-    def clear_all(self):
-        """Clear all input fields and SRT text."""
-        self.url_var.set("")
-        self.model_var.set("base")
-        self.language_var.set("auto")
-        self.progress_bar["value"] = 0
-        self.progress_pct_var.set("0%")
-        self.progress_var.set(t("video_subtitler.status.ready"))
-        self.srt_text.delete("1.0", tk.END)
-        
-        # Clear translation section
-        if hasattr(self, "translated_srt_text"):
-            self.translated_srt_text.delete("1.0", tk.END)
-        if hasattr(self, "translate_btn"):
-            self.translate_btn.config(state=tk.DISABLED)
-        
-        # Clear FFmpeg section
-        if hasattr(self, "burn_btn"):
-            self.burn_btn.config(state=tk.DISABLED)
-        if hasattr(self, "open_output_btn"):
-            self.open_output_btn.config(state=tk.DISABLED)
-        if hasattr(self, "ffmpeg_status_var"):
-            self.ffmpeg_status_var.set("")
-    
-    # === Translation Methods ===
+
     def get_target_language(self) -> str:
         """Get target language for translation."""
         return self.translate_lang_var.get()
 
     def update_translation_llm_label(self, provider, model):
-        """Update the translation LLM info label.
-        
-        Args:
-            provider: LLM provider name
-            model: Model name
-        """
+        """Update the translation LLM info label."""
         if provider and model:
-            self.translation_llm_label_var.set(t("video_subtitler.llm.configured").format(provider=provider, model=model))
+            self.translation_llm_label_var.set(
+                t("video_subtitler.llm.configured").format(
+                    provider=provider, model=model
+                )
+            )
         else:
-            self.translation_llm_label_var.set(t("video_subtitler.llm.not_configured"))
-    
+            self.translation_llm_label_var.set(
+                t("video_subtitler.llm.not_configured")
+            )
+
     def display_translated_srt(self, text: str):
         """Display translated SRT text."""
         self.translated_srt_text.delete("1.0", tk.END)
         self.translated_srt_text.insert(tk.END, text)
-    
+
     def enable_translate_btn(self):
         """Enable translate button."""
-        self.translate_btn.config(state=tk.NORMAL)
-    
+        self.translate_btn.configure(state="normal")
+
     def get_translated_srt(self) -> str:
         """Get translated SRT content."""
         return self.translated_srt_text.get("1.0", tk.END).strip()
-    
-    def _on_translate_clicked(self):
-        """Handle translate button click."""
-        if self.controller and hasattr(self.controller, 'on_translate'):
-            self.controller.on_translate()
-    
-    def _on_save_translated(self):
-        """Save translated SRT to file."""
-        translated_srt = self.get_translated_srt()
-        if not translated_srt:
-            messagebox.showinfo(t("video_subtitler.msg.info_title"), t("video_subtitler.msg.no_translated_to_save"))
-            return
-        
-        file_path = filedialog.asksaveasfilename(
-            title=t("video_subtitler.dialog.save_translated"),
-            defaultextension=".srt",
-            filetypes=[(t("video_subtitler.filetype.srt"), "*.srt"), (t("video_subtitler.filetype.all"), "*.*")]
-        )
-        
-        if file_path:
-            try:
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(translated_srt)
-                messagebox.showinfo(t("video_subtitler.msg.success_title"), t("video_subtitler.msg.translated_saved").format(path=file_path))
-            except Exception as e:
-                messagebox.showerror(t("video_subtitler.msg.error_title"), t("video_subtitler.msg.failed_save").format(error=e))
-    
-    # === FFmpeg Methods ===
+
     def get_subtitle_source(self) -> str:
         """Get subtitle source selection."""
         return self.subtitle_source_var.get()
-    
+
     def enable_burn_btn(self):
         """Enable burn button."""
-        self.burn_btn.config(state=tk.NORMAL)
-    
+        self.burn_btn.configure(state="normal")
+
     def enable_open_btn(self):
         """Enable open output file button."""
-        self.open_output_btn.config(state=tk.NORMAL)
-    
+        self.open_output_btn.configure(state="normal")
+
     def update_ffmpeg_status(self, msg: str):
         """Update FFmpeg status message."""
         self.ffmpeg_status_var.set(msg)
-    
-    def _on_burn_clicked(self):
-        """Handle burn button click."""
-        if self.controller and hasattr(self.controller, 'on_burn'):
-            self.controller.on_burn()
-    
-    def _open_output_file(self):
-        """Open output video file."""
-        if self.controller and hasattr(self.controller, 'output_video_path'):
-            try:
-                os.startfile(str(self.controller.output_video_path))
-            except Exception as e:
-                messagebox.showerror(t("video_subtitler.msg.error_title"), t("video_subtitler.msg.could_not_open_file").format(error=e))
-        else:
-            messagebox.showinfo(t("video_subtitler.msg.info_title"), t("video_subtitler.msg.no_output_file"))
-    
-    def _on_change_output_folder(self):
-        """Handle change output folder button click."""
-        chosen = filedialog.askdirectory(title=t("video_subtitler.dialog.select_output_folder"))
-        if chosen:
-            self.output_dir_var.set(chosen)
-            if self.controller:
-                self.controller.set_output_dir(chosen)
-    
+
     def get_use_original_name(self) -> bool:
         """Get use original name setting."""
         return self.use_original_name_var.get()
-    
+
     def get_dark_bg(self) -> bool:
         """Get dark background setting."""
         return self.dark_bg_var.get()
-    
+
     def get_bg_opacity(self) -> float:
         """Get background opacity setting."""
         return round(self.bg_opacity_var.get(), 2)
-    
-    def _on_auto(self):
-        """Handle auto button click."""
-        if self.controller:
-            self.controller.on_auto()
+
+    # ------------------------------------------------------------------
+    # CTkBaseTab abstract method implementations
+    # ------------------------------------------------------------------
+
+    def get_content(self) -> str:
+        """Return current SRT content."""
+        return self.srt_text.get("1.0", tk.END)
+
+    def clear_all(self):
+        """Clear all input fields and SRT text."""
+        self.url_var.set("")
+        self.model_var.set("base")
+        self.language_var.set("auto")
+        self.progress_bar.set(0)
+        self.progress_pct_var.set("0%")
+        self.progress_var.set(t("video_subtitler.status.ready"))
+        self.srt_text.delete("1.0", tk.END)
+
+        # Clear translation section
+        if hasattr(self, "translated_srt_text"):
+            self.translated_srt_text.delete("1.0", tk.END)
+        if hasattr(self, "translate_btn"):
+            self.translate_btn.configure(state="disabled")
+
+        # Clear FFmpeg section
+        if hasattr(self, "burn_btn"):
+            self.burn_btn.configure(state="disabled")
+        if hasattr(self, "open_output_btn"):
+            self.open_output_btn.configure(state="disabled")
+        if hasattr(self, "ffmpeg_status_var"):
+            self.ffmpeg_status_var.set("")
+
+    # ------------------------------------------------------------------
+    # Theming hook used by MainWindow
+    # ------------------------------------------------------------------
+
+    def apply_font_size(self, size: int):
+        """Apply the app-wide font size to this tab's text areas."""
+        self.srt_text.configure(font=("Cascadia Mono", size + 1))
+        self.translated_srt_text.configure(font=("Cascadia Mono", size + 1))
+
+        section_font = ctk.CTkFont(size=max(size + 1, 11), weight="bold")
+        for attr in ("_source_section", "_burn_section", "_progress_section",
+                     "_srt_section", "_translation_section", "style_frame"):
+            section = getattr(self, attr, None)
+            if section is not None and hasattr(section, "set_title_font"):
+                section.set_title_font(section_font)

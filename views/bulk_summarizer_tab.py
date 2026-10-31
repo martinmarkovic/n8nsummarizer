@@ -1,5 +1,5 @@
 """
-Bulk Summarizer Tab - v5.1 (.opus support + scrollable left column)
+Bulk Summarizer Tab - v6.0 (CustomTkinter)
 
 Manages the bulk file summarization interface:
 - File type selection with multiple checkboxes (txt, srt, docx, pdf, opus)
@@ -9,44 +9,61 @@ Manages the bulk file summarization interface:
 - Progress tracking
 - Status logging
 - Remember last choice in .env
-- Scrollable left column for HiDPI / high Windows display scaling (NEW v5.1)
 
-Layout (v5.1):
-- Row 0: Browse section (100% width)
-- Row 1: Left scrollable column (controls) + Right column (status log)
+Layout (v6.0):
+- Row 0: source folder card (full width)
+- Row 1: draggable split - scrollable options (left) | status log (right)
+- Row 2: action bar (Start / Cancel / progress)
 
-Version: 5.1
+Version: 6.0
 Created: 2025-12-10
 Updated: 2026-01-06 (v4.7 - Added recursive subfolder support)
-Updated: 2026-01-06 (v5.0.1 - Two-column layout)
 Updated: 2026-03-15 (v5.1 - .opus support + scrollable left column)
+Updated: 2026-10-30 (v6.0 - Migrated from ttk to CustomTkinter with the
+    card-based responsive layout used by the Summarizer tab. The public
+    interface consumed by BulkSummarizerController is unchanged.)
+
+Preference storage fix folded into this migration:
+    ``_save_preferences`` used to rewrite .env itself, rebuilding the file from
+    parsed ``KEY=VALUE`` lines. Comment lines have no ``=``, so they were
+    dropped - every change to the file-type checkboxes silently deleted every
+    comment in .env. It also used a path relative to the current working
+    directory, so launching from elsewhere wrote a second .env. Preferences now
+    go through SettingsManager, which updates values in place and preserves
+    comments and layout.
 """
 
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-from pathlib import Path
 from datetime import datetime
-import os
-from views.base_tab import BaseTab
+from pathlib import Path
+import tkinter as tk
+from tkinter import filedialog
+
+import customtkinter as ctk
+
+from views.base_tab import CTkBaseTab
+from views.ctk_compat import CTkSection, CTkSplitter
 from utils.logger import logger
-from utils.prompt_manager import PromptManager
 from utils.i18n import t
 
 
-class BulkSummarizerTab(BaseTab):
-    """UI for bulk file summarization (v5.1 - .opus + scrollable left column)"""
+class BulkSummarizerTab(CTkBaseTab):
+    """UI for bulk file summarization (v6.0 - CustomTkinter)."""
 
-    def __init__(self, notebook, prompt_manager=None):
+    def __init__(self, notebook, prompt_manager=None, settings_manager=None):
         self.notebook = notebook
+        self.settings = settings_manager
+
         self.source_folder_var = tk.StringVar(value=t("bulk_summarizer.folder.none"))
-        self.output_folder_var = tk.StringVar(value=t("bulk_summarizer.folder.default_parent"))
+        self.output_folder_var = tk.StringVar(
+            value=t("bulk_summarizer.folder.default_parent")
+        )
 
         # File type selections
         self.file_type_txt = tk.BooleanVar(value=True)
         self.file_type_srt = tk.BooleanVar(value=False)
         self.file_type_docx = tk.BooleanVar(value=False)
         self.file_type_pdf = tk.BooleanVar(value=False)
-        self.file_type_opus = tk.BooleanVar(value=False)  # NEW v5.1
+        self.file_type_opus = tk.BooleanVar(value=False)
 
         # Output format options
         self.output_separate = tk.BooleanVar(value=True)
@@ -71,7 +88,7 @@ class BulkSummarizerTab(BaseTab):
 
         super().__init__(notebook, "📦 Bulk Summarizer")
         self._load_preferences()
-        logger.info("BulkSummarizerTab initialized (v5.1)")
+        logger.info("BulkSummarizerTab initialized (v6.0)")
 
     # ------------------------------------------------------------------
     # UI Setup
@@ -79,91 +96,361 @@ class BulkSummarizerTab(BaseTab):
 
     def _setup_ui(self):
         """
-        Two-column layout.
-        Column 0: scrollable left panel (all controls)
-        Column 1: status log (expands)
+        Layout:
+            0  source folder card (full width)
+            1  split: scrollable options | status log   <- expanding region
+            2  action bar
         """
-        self.columnconfigure(0, weight=0)
-        self.columnconfigure(1, weight=1)
-        self.rowconfigure(0, weight=0)  # browse row - fixed
-        self.rowconfigure(1, weight=1)  # main content row - expands
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
 
-        # Row 0: Browse (full width)
         self._setup_folder_selection()
-
-        # Row 1 Col 0: Scrollable left panel
-        self._setup_scrollable_left_panel()
-
-        # Row 1 Col 1: Status log
-        self._setup_status_log()
-
-    def _setup_scrollable_left_panel(self):
-        """
-        Wraps all left-column controls inside a Canvas so they can be
-        scrolled vertically when the window is too small (e.g. 150%+
-        Windows DPI scaling). Mousewheel also works.
-        """
-        # Outer frame that sits in the grid
-        outer = ttk.Frame(self)
-        outer.grid(row=1, column=0, sticky=(tk.N, tk.S, tk.W, tk.E), padx=0, pady=0)
-        outer.rowconfigure(0, weight=1)
-        outer.columnconfigure(0, weight=1)
-
-        # Canvas + vertical scrollbar
-        canvas = tk.Canvas(outer, borderwidth=0, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
-        canvas.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
-
-        # Inner frame that holds all control widgets
-        inner = ttk.Frame(canvas)
-        inner.columnconfigure(0, weight=1)
-        canvas_window = canvas.create_window((0, 0), window=inner, anchor="nw")
-
-        def _on_inner_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-
-        def _on_canvas_configure(event):
-            # Keep inner frame width = canvas width
-            canvas.itemconfig(canvas_window, width=event.width)
-
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        inner.bind("<Configure>", _on_inner_configure)
-        canvas.bind("<Configure>", _on_canvas_configure)
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
-
-        # Keep a reference so control setup methods can pack into it
-        self._left_inner = inner
-
-        # Build all left-column control sections inside inner frame
-        self._setup_llm_settings_info()  # NEW: LLM settings from Summarizer tab
-        self._setup_file_type()
-        self._setup_recursive_option()
-        self._setup_output_format()
-        self._setup_output_location()
-        self._setup_processing_section()
-        self._setup_progress_section()
+        self._setup_main_split()
+        self._setup_action_bar()
 
     def _setup_folder_selection(self):
-        """Folder selection - full width at top (row 0)"""
-        folder_frame = ttk.LabelFrame(self, text=t("bulk_summarizer.frame.select_source_folder"))
-        folder_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=10, pady=10)
-        folder_frame.columnconfigure(1, weight=1)
+        """Source folder card - full width at top."""
+        section = CTkSection(
+            self, title=t("bulk_summarizer.frame.select_source_folder")
+        )
+        section.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        self._folder_section = section
+        body = section.body
+        body.grid_columnconfigure(1, weight=1)
 
-        ttk.Button(
-            folder_frame,
+        ctk.CTkButton(
+            body,
             text=t("bulk_summarizer.btn.browse"),
-            command=self._browse_folder
-        ).pack(side=tk.LEFT, padx=5, pady=5)
+            command=self._browse_folder,
+            width=110,
+            height=34,
+        ).grid(row=0, column=0, padx=(0, 8))
 
-        ttk.Label(
-            folder_frame,
-            textvariable=self.source_folder_var
-        ).pack(side=tk.LEFT, padx=10, pady=5, fill=tk.X, expand=True)
+        ctk.CTkLabel(
+            body,
+            textvariable=self.source_folder_var,
+            anchor="w",
+            fg_color=("gray88", "gray24"),
+            corner_radius=8,
+            height=34,
+            padx=10,
+        ).grid(row=0, column=1, sticky="ew")
+
+    def _setup_main_split(self):
+        """Scrollable options on the left, status log on the right."""
+        self._split = CTkSplitter(self, ratio=0.42)
+        self._split.grid(row=1, column=0, sticky="nsew")
+
+        # --- Left: scrollable options ---
+        # CTkScrollableFrame replaces the hand-rolled Canvas + Scrollbar +
+        # mousewheel plumbing the ttk version needed. The old version also
+        # bound <MouseWheel> with bind_all, which hijacked scrolling for the
+        # whole app, not just this panel.
+        self._split.left.grid_rowconfigure(0, weight=1)
+        self._split.left.grid_columnconfigure(0, weight=1)
+
+        self._options_scroll = ctk.CTkScrollableFrame(
+            self._split.left, fg_color="transparent"
+        )
+        self._options_scroll.grid(row=0, column=0, sticky="nsew")
+        self._options_scroll.grid_columnconfigure(0, weight=1)
+
+        self._left_inner = self._options_scroll  # kept for backwards reference
+
+        self._setup_llm_settings_info()
+        self._setup_file_type()
+        self._setup_scanning_options()
+        self._setup_output_format()
+        self._setup_output_location()
+        self._setup_progress_section()
+
+        # --- Right: status log ---
+        self._split.right.grid_rowconfigure(0, weight=1)
+        self._split.right.grid_columnconfigure(0, weight=1)
+        self._setup_status_log()
+
+    def _next_left_row(self):
+        """Grid row counter for the scrollable options column."""
+        row = getattr(self, "_left_row", 0)
+        self._left_row = row + 1
+        return row
+
+    def _left_card(self, title: str):
+        """Create a card in the scrollable options column."""
+        section = CTkSection(self._options_scroll, title=title)
+        section.grid(row=self._next_left_row(), column=0, sticky="ew", pady=(0, 10))
+        return section
+
+    # ------------------------------------------------------------------
+    # Left column cards
+    # ------------------------------------------------------------------
+
+    def _setup_llm_settings_info(self):
+        """LLM settings inherited from the Summarizer tab."""
+        section = self._left_card(t("bulk_summarizer.frame.llm_settings"))
+        self._llm_section = section
+        body = section.body
+        body.grid_columnconfigure(0, weight=1)
+
+        self.provider_info_var = tk.StringVar(
+            value=t("bulk_summarizer.llm.provider_not_connected")
+        )
+        self.webhook_info_var = tk.StringVar(
+            value=t("bulk_summarizer.llm.base_url_not_configured")
+        )
+        self.model_info_var = tk.StringVar(
+            value=t("bulk_summarizer.llm.model_not_selected")
+        )
+        self.prompt_info_var = tk.StringVar(
+            value=t("bulk_summarizer.llm.prompt_not_selected")
+        )
+
+        row = 0
+        for var in (self.provider_info_var, self.webhook_info_var,
+                    self.model_info_var, self.prompt_info_var):
+            ctk.CTkLabel(
+                body, textvariable=var, anchor="w", justify="left", wraplength=360
+            ).grid(row=row, column=0, sticky="ew", pady=1)
+            row += 1
+
+        ctk.CTkButton(
+            body,
+            text=t("bulk_summarizer.btn.refresh_settings"),
+            command=self._refresh_llm_settings_display,
+            height=30,
+        ).grid(row=row, column=0, sticky="w", pady=(8, 0))
+        row += 1
+
+        ctk.CTkLabel(
+            body,
+            text=t("bulk_summarizer.lbl.llm_inherit_note"),
+            anchor="w",
+            justify="left",
+            wraplength=360,
+            text_color=("gray45", "gray60"),
+        ).grid(row=row, column=0, sticky="ew", pady=(6, 0))
+
+    def _setup_file_type(self):
+        """Checkboxes for file type selection."""
+        section = self._left_card(t("bulk_summarizer.frame.file_types"))
+        self._file_type_section = section
+        body = section.body
+
+        files = [
+            (t("bulk_summarizer.filetype.txt"), self.file_type_txt),
+            (t("bulk_summarizer.filetype.srt"), self.file_type_srt),
+            (t("bulk_summarizer.filetype.docx"), self.file_type_docx),
+            (t("bulk_summarizer.filetype.pdf"), self.file_type_pdf),
+            (t("bulk_summarizer.filetype.opus"), self.file_type_opus),
+        ]
+
+        # Two columns: five stacked checkboxes wasted a lot of vertical space.
+        for i, (label, var) in enumerate(files):
+            ctk.CTkCheckBox(
+                body,
+                text=label,
+                variable=var,
+                command=self._on_file_type_changed,
+                checkbox_width=18,
+                checkbox_height=18,
+            ).grid(row=i // 2, column=i % 2, sticky="w", padx=(0, 12), pady=3)
+
+    def _setup_scanning_options(self):
+        """Recursive subfolder scanning."""
+        section = self._left_card(t("bulk_summarizer.frame.scanning_options"))
+        self._scanning_section = section
+        body = section.body
+        body.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkCheckBox(
+            body,
+            text=t("bulk_summarizer.chk.scan_subfolders"),
+            variable=self.recursive_subfolders,
+            command=self._on_recursive_changed,
+            checkbox_width=18,
+            checkbox_height=18,
+        ).grid(row=0, column=0, sticky="w")
+
+        ctk.CTkLabel(
+            body,
+            text=t("bulk_summarizer.lbl.recursive_hint"),
+            anchor="w",
+            justify="left",
+            wraplength=360,
+            text_color=("gray45", "gray60"),
+        ).grid(row=1, column=0, sticky="ew", pady=(4, 0))
+
+    def _setup_output_format(self):
+        """Output format checkboxes."""
+        section = self._left_card(t("bulk_summarizer.frame.output_format"))
+        self._output_format_section = section
+        body = section.body
+        body.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkCheckBox(
+            body,
+            text=t("bulk_summarizer.chk.separate_files"),
+            variable=self.output_separate,
+            command=self._save_preferences,
+            checkbox_width=18,
+            checkbox_height=18,
+        ).grid(row=0, column=0, sticky="w", pady=2)
+
+        ctk.CTkCheckBox(
+            body,
+            text=t("bulk_summarizer.chk.combined_file"),
+            variable=self.output_combined,
+            command=self._save_preferences,
+            checkbox_width=18,
+            checkbox_height=18,
+        ).grid(row=1, column=0, sticky="w", pady=2)
+
+        ctk.CTkLabel(
+            body,
+            text=t("bulk_summarizer.lbl.output_format_note"),
+            anchor="w",
+            justify="left",
+            wraplength=360,
+            text_color=("gray45", "gray60"),
+        ).grid(row=2, column=0, sticky="ew", pady=(6, 0))
+
+    def _setup_output_location(self):
+        """Output location choice plus the resolved destination."""
+        section = self._left_card(t("bulk_summarizer.frame.output_location"))
+        self._output_location_section = section
+        body = section.body
+        body.grid_columnconfigure(0, weight=1)
+
+        # A two-way choice reads better as a segmented control than as two
+        # radio buttons bound to a BooleanVar.
+        self._location_labels = {
+            t("bulk_summarizer.rb.default_location"): True,
+            t("bulk_summarizer.rb.custom_location"): False,
+        }
+        self._location_values = {v: k for k, v in self._location_labels.items()}
+
+        self.location_selector = ctk.CTkSegmentedButton(
+            body,
+            values=list(self._location_labels.keys()),
+            command=self._on_location_selected,
+            height=32,
+            font=ctk.CTkFont(size=12),
+        )
+        self.location_selector.grid(row=0, column=0, sticky="ew")
+        self.location_selector.set(
+            self._location_values[self.output_location_default.get()]
+        )
+
+        ctk.CTkButton(
+            body,
+            text=t("bulk_summarizer.btn.browse"),
+            command=self._browse_output_folder,
+            height=30,
+        ).grid(row=1, column=0, sticky="w", pady=(8, 0))
+
+        ctk.CTkLabel(
+            body,
+            textvariable=self.output_folder_var,
+            anchor="w",
+            justify="left",
+            wraplength=360,
+            text_color=("gray45", "gray60"),
+        ).grid(row=2, column=0, sticky="ew", pady=(6, 0))
+
+    def _setup_progress_section(self):
+        """Progress bar and counters."""
+        section = self._left_card(t("bulk_summarizer.frame.progress"))
+        self._progress_section = section
+        body = section.body
+        body.grid_columnconfigure(0, weight=1)
+
+        self.current_file_var = tk.StringVar(value=t("bulk_summarizer.progress.idle"))
+        ctk.CTkLabel(
+            body,
+            textvariable=self.current_file_var,
+            anchor="w",
+            justify="left",
+            wraplength=360,
+        ).grid(row=0, column=0, sticky="ew")
+
+        self.progress_bar = ctk.CTkProgressBar(body, mode="determinate", height=8)
+        self.progress_bar.set(0)
+        self.progress_bar.grid(row=1, column=0, sticky="ew", pady=8)
+
+        self.progress_text_var = tk.StringVar(
+            value=t("bulk_summarizer.progress.files").format(current=0, total=0)
+        )
+        ctk.CTkLabel(
+            body, textvariable=self.progress_text_var, anchor="w",
+            text_color=("gray45", "gray60"),
+        ).grid(row=2, column=0, sticky="ew")
+
+    def _setup_status_log(self):
+        """Status log - right pane."""
+        section = CTkSection(
+            self._split.right, title=t("bulk_summarizer.frame.status_log"), padding=10
+        )
+        section.grid(row=0, column=0, sticky="nsew")
+        self._log_section = section
+        section.body.grid_rowconfigure(0, weight=1)
+        section.body.grid_columnconfigure(0, weight=1)
+
+        self.status_log = ctk.CTkTextbox(
+            section.body,
+            wrap="word",
+            font=("Cascadia Mono", 12),
+            activate_scrollbars=True,
+            corner_radius=8,
+            state="disabled",
+        )
+        self.status_log.grid(row=0, column=0, sticky="nsew")
+        self._register_context_menu(self.status_log, [{"copy": True}])
+
+    def _setup_action_bar(self):
+        """Start / Cancel and the live status line."""
+        action_frame = ctk.CTkFrame(self, fg_color="transparent")
+        action_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        action_frame.grid_columnconfigure(2, weight=1)
+
+        self.start_button = ctk.CTkButton(
+            action_frame,
+            text=t("bulk_summarizer.btn.start"),
+            command=self._on_start_clicked,
+            state="disabled",
+            width=170,
+            height=38,
+            corner_radius=8,
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        self.start_button.grid(row=0, column=0, padx=(0, 10))
+
+        self.cancel_button = ctk.CTkButton(
+            action_frame,
+            text=t("bulk_summarizer.btn.cancel"),
+            command=self._on_cancel_clicked,
+            state="disabled",
+            width=110,
+            height=38,
+            corner_radius=8,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray70", "gray40"),
+            text_color=("gray30", "gray80"),
+            hover_color=("gray85", "gray28"),
+        )
+        self.cancel_button.grid(row=0, column=1, padx=(0, 10))
+
+        self.status_label = ctk.CTkLabel(
+            action_frame,
+            text=t("bulk_summarizer.status.ready"),
+            anchor="w",
+            text_color=("gray35", "gray70"),
+        )
+        self.status_label.grid(row=0, column=2, sticky="ew")
+
+    # ------------------------------------------------------------------
+    # Folder handling
+    # ------------------------------------------------------------------
 
     def _browse_folder(self):
         """Open folder selection dialog"""
@@ -172,15 +459,19 @@ class BulkSummarizerTab(BaseTab):
             self.source_folder_var.set(folder)
             file_count = self._count_matching_files(folder)
             self.append_log(
-                t("bulk_summarizer.log.folder_selected").format(name=Path(folder).name, count=file_count),
-                "info"
+                t("bulk_summarizer.log.folder_selected").format(
+                    name=Path(folder).name, count=file_count
+                ),
+                "info",
             )
-            if file_count > 0:
-                self.start_button.config(state=tk.NORMAL)
-            else:
-                self.start_button.config(state=tk.DISABLED)
+            self._set_start_enabled(file_count > 0)
+            if file_count == 0:
                 self.append_log(t("bulk_summarizer.log.no_matching"), "warning")
-            self.output_folder_var.set(t("bulk_summarizer.folder.default_named").format(name=Path(folder).parent.name))
+            self.output_folder_var.set(
+                t("bulk_summarizer.folder.default_named").format(
+                    name=Path(folder).parent.name
+                )
+            )
 
     def _count_matching_files(self, folder: str) -> int:
         """Count files matching selected types"""
@@ -189,11 +480,11 @@ class BulkSummarizerTab(BaseTab):
         use_rglob = self.recursive_subfolders.get()
 
         type_patterns = [
-            (self.file_type_txt,  "*.txt"),
-            (self.file_type_srt,  "*.srt"),
+            (self.file_type_txt, "*.txt"),
+            (self.file_type_srt, "*.srt"),
             (self.file_type_docx, "*.docx"),
-            (self.file_type_pdf,  "*.pdf"),
-            (self.file_type_opus, "*.opus"),  # NEW v5.1
+            (self.file_type_pdf, "*.pdf"),
+            (self.file_type_opus, "*.opus"),
         ]
         for var, pattern in type_patterns:
             if var.get():
@@ -203,174 +494,67 @@ class BulkSummarizerTab(BaseTab):
                     count += len(list(folder_path.glob(pattern)))
         return count
 
-    def _setup_file_type(self):
-        """Checkboxes for file type selection - inside scrollable left panel"""
-        type_frame = ttk.LabelFrame(self._left_inner, text=t("bulk_summarizer.frame.file_types"))
-        type_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        files = [
-            (t("bulk_summarizer.filetype.txt"),  self.file_type_txt),
-            (t("bulk_summarizer.filetype.srt"),  self.file_type_srt),
-            (t("bulk_summarizer.filetype.docx"), self.file_type_docx),
-            (t("bulk_summarizer.filetype.pdf"),  self.file_type_pdf),
-            (t("bulk_summarizer.filetype.opus"), self.file_type_opus),  # NEW v5.1
-        ]
-
-        for label, var in files:
-            ttk.Checkbutton(
-                type_frame,
-                text=label,
-                variable=var,
-                command=self._on_file_type_changed
-            ).pack(anchor=tk.W, padx=10, pady=5)
+    def _set_start_enabled(self, enabled: bool):
+        """Enable or disable the Start button."""
+        self.start_button.configure(state="normal" if enabled else "disabled")
 
     def _on_file_type_changed(self):
         """Called when file type selection changes"""
         if not any([
             self.file_type_txt.get(), self.file_type_srt.get(),
             self.file_type_docx.get(), self.file_type_pdf.get(),
-            self.file_type_opus.get()
+            self.file_type_opus.get(),
         ]):
             self.append_log(t("bulk_summarizer.log.min_one_type"), "warning")
-            self.start_button.config(state=tk.DISABLED)
+            self._set_start_enabled(False)
             return
 
         folder = self.get_source_folder()
         if folder:
             file_count = self._count_matching_files(folder)
-            self.append_log(t("bulk_summarizer.log.file_types_updated").format(count=file_count), "info")
-            self.start_button.config(state=tk.NORMAL if file_count > 0 else tk.DISABLED)
+            self.append_log(
+                t("bulk_summarizer.log.file_types_updated").format(count=file_count),
+                "info",
+            )
+            self._set_start_enabled(file_count > 0)
         self._save_preferences()
-
-    def _setup_recursive_option(self):
-        """Recursive subfolder scanning checkbox - inside scrollable left panel"""
-        recursive_frame = ttk.LabelFrame(self._left_inner, text=t("bulk_summarizer.frame.scanning_options"))
-        recursive_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        ttk.Checkbutton(
-            recursive_frame,
-            text=t("bulk_summarizer.chk.scan_subfolders"),
-            variable=self.recursive_subfolders,
-            command=self._on_recursive_changed
-        ).pack(anchor=tk.W, padx=10, pady=5)
-
-        ttk.Label(
-            recursive_frame,
-            text=t("bulk_summarizer.lbl.recursive_hint"),
-            foreground="gray",
-            font=("TkDefaultFont", 9)
-        ).pack(anchor=tk.W, padx=30, pady=(0, 5))
 
     def _on_recursive_changed(self):
         """Called when recursive subfolder option changes"""
         folder = self.get_source_folder()
         if folder:
             file_count = self._count_matching_files(folder)
-            label = t("bulk_summarizer.log.scan_with_subfolders") if self.recursive_subfolders.get() else t("bulk_summarizer.log.scan_without_subfolders")
-            self.append_log(t("bulk_summarizer.log.scanning_mode_updated").format(label=label, count=file_count), "info")
-            self.start_button.config(state=tk.NORMAL if file_count > 0 else tk.DISABLED)
+            label = (
+                t("bulk_summarizer.log.scan_with_subfolders")
+                if self.recursive_subfolders.get()
+                else t("bulk_summarizer.log.scan_without_subfolders")
+            )
+            self.append_log(
+                t("bulk_summarizer.log.scanning_mode_updated").format(
+                    label=label, count=file_count
+                ),
+                "info",
+            )
+            self._set_start_enabled(file_count > 0)
         self._save_preferences()
 
-    def _setup_output_format(self):
-        """Output format checkboxes - inside scrollable left panel"""
-        output_frame = ttk.LabelFrame(self._left_inner, text=t("bulk_summarizer.frame.output_format"))
-        output_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        ttk.Checkbutton(
-            output_frame,
-            text=t("bulk_summarizer.chk.separate_files"),
-            variable=self.output_separate
-        ).pack(anchor=tk.W, padx=10, pady=5)
-
-        ttk.Checkbutton(
-            output_frame,
-            text=t("bulk_summarizer.chk.combined_file"),
-            variable=self.output_combined
-        ).pack(anchor=tk.W, padx=10, pady=5)
-
-        ttk.Label(
-            output_frame,
-            text=t("bulk_summarizer.lbl.output_format_note"),
-            foreground="gray"
-        ).pack(anchor=tk.W, padx=10, pady=(10, 5))
-
-    def _setup_llm_settings_info(self):
-        """LLM Settings info panel - displays settings inherited from Summarizer tab"""
-        llm_frame = ttk.LabelFrame(self._left_inner, text=t("bulk_summarizer.frame.llm_settings"))
-        llm_frame.pack(fill=tk.X, padx=10, pady=10)
-        
-        # Provider info
-        self.provider_info_var = tk.StringVar(value=t("bulk_summarizer.llm.provider_not_connected"))
-        ttk.Label(llm_frame, textvariable=self.provider_info_var).pack(anchor=tk.W, padx=10, pady=2)
-        
-        # Base URL info
-        self.webhook_info_var = tk.StringVar(value=t("bulk_summarizer.llm.base_url_not_configured"))
-        ttk.Label(llm_frame, textvariable=self.webhook_info_var).pack(anchor=tk.W, padx=10, pady=2)
-        
-        # Model info
-        self.model_info_var = tk.StringVar(value=t("bulk_summarizer.llm.model_not_selected"))
-        ttk.Label(llm_frame, textvariable=self.model_info_var).pack(anchor=tk.W, padx=10, pady=2)
-        
-        # Prompt preset info
-        self.prompt_info_var = tk.StringVar(value=t("bulk_summarizer.llm.prompt_not_selected"))
-        ttk.Label(llm_frame, textvariable=self.prompt_info_var).pack(anchor=tk.W, padx=10, pady=2)
-        
-        # Refresh button
-        ttk.Button(
-            llm_frame,
-            text=t("bulk_summarizer.btn.refresh_settings"),
-            command=self._refresh_llm_settings_display
-        ).pack(anchor=tk.W, padx=10, pady=5)
-        
-        # Note about inheritance
-        ttk.Label(
-            llm_frame,
-            text=t("bulk_summarizer.lbl.llm_inherit_note"),
-            foreground="gray",
-            font=("TkDefaultFont", 9)
-        ).pack(anchor=tk.W, padx=10, pady=(5, 0))
-
-    def _setup_output_location(self):
-        """Output location radio buttons - inside scrollable left panel"""
-        loc_frame = ttk.LabelFrame(self._left_inner, text=t("bulk_summarizer.frame.output_location"))
-        loc_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        ttk.Radiobutton(
-            loc_frame,
-            text=t("bulk_summarizer.rb.default_location"),
-            variable=self.output_location_default,
-            value=True,
-            command=self._on_output_location_changed
-        ).pack(anchor=tk.W, padx=10, pady=5)
-
-        button_frame = ttk.Frame(loc_frame)
-        button_frame.pack(anchor=tk.W, padx=10, pady=5)
-
-        ttk.Radiobutton(
-            button_frame,
-            text=t("bulk_summarizer.rb.custom_location"),
-            variable=self.output_location_default,
-            value=False,
-            command=self._on_output_location_changed
-        ).pack(side=tk.LEFT, padx=(0, 5))
-
-        ttk.Button(
-            button_frame,
-            text=t("bulk_summarizer.btn.browse"),
-            command=self._browse_output_folder
-        ).pack(side=tk.LEFT, padx=5)
-
-        ttk.Label(
-            loc_frame,
-            textvariable=self.output_folder_var
-        ).pack(anchor=tk.W, padx=30, pady=5)
+    def _on_location_selected(self, label: str):
+        """Segmented-button handler for the output location choice."""
+        value = self._location_labels.get(label)
+        if value is not None and value != self.output_location_default.get():
+            self.output_location_default.set(value)
+            self._on_output_location_changed()
 
     def _on_output_location_changed(self):
         """Called when output location changes"""
         if self.output_location_default.get():
             folder = self.get_source_folder()
             if folder:
-                self.output_folder_var.set(t("bulk_summarizer.folder.default_named").format(name=Path(folder).parent.name))
+                self.output_folder_var.set(
+                    t("bulk_summarizer.folder.default_named").format(
+                        name=Path(folder).parent.name
+                    )
+                )
 
     def _browse_output_folder(self):
         """Open folder selection dialog for output"""
@@ -378,80 +562,12 @@ class BulkSummarizerTab(BaseTab):
         if folder:
             self.output_folder_var.set(folder)
             self.output_location_default.set(False)
-            self.append_log(t("bulk_summarizer.log.output_folder_set").format(name=Path(folder).name), "info")
-
-    def _setup_processing_section(self):
-        """Start/Cancel buttons - inside scrollable left panel"""
-        proc_frame = ttk.LabelFrame(self._left_inner, text=t("bulk_summarizer.frame.processing"))
-        proc_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        info_frame = ttk.Frame(proc_frame)
-        info_frame.pack(fill=tk.X, padx=10, pady=5)
-
-        self.status_label = ttk.Label(info_frame, text=t("bulk_summarizer.status.ready"), foreground="green")
-        self.status_label.pack(side=tk.LEFT)
-
-        button_frame = ttk.Frame(proc_frame)
-        button_frame.pack(pady=10)
-
-        self.start_button = ttk.Button(
-            button_frame,
-            text=t("bulk_summarizer.btn.start"),
-            command=self._on_start_clicked,
-            state=tk.DISABLED
-        )
-        self.start_button.pack(side=tk.LEFT, padx=5)
-
-        self.cancel_button = ttk.Button(
-            button_frame,
-            text=t("bulk_summarizer.btn.cancel"),
-            command=self._on_cancel_clicked,
-            state=tk.DISABLED
-        )
-        self.cancel_button.pack(side=tk.LEFT, padx=5)
-
-    def _setup_progress_section(self):
-        """Progress bar - inside scrollable left panel"""
-        prog_frame = ttk.LabelFrame(self._left_inner, text=t("bulk_summarizer.frame.progress"))
-        prog_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        self.current_file_var = tk.StringVar(value=t("bulk_summarizer.progress.idle"))
-        ttk.Label(prog_frame, textvariable=self.current_file_var).pack(
-            anchor=tk.W, padx=10, pady=5
-        )
-
-        self.progress_bar = ttk.Progressbar(
-            prog_frame,
-            mode='determinate',
-            length=300
-        )
-        self.progress_bar.pack(fill=tk.X, padx=10, pady=10)
-
-        self.progress_text_var = tk.StringVar(value=t("bulk_summarizer.progress.files").format(current=0, total=0))
-        ttk.Label(prog_frame, textvariable=self.progress_text_var).pack(
-            anchor=tk.W, padx=10, pady=5
-        )
-
-    def _setup_status_log(self):
-        """Status log with scroll - right column (row 1, col 1)"""
-        log_frame = ttk.LabelFrame(self, text=t("bulk_summarizer.frame.status_log"))
-        log_frame.grid(row=1, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=10)
-        log_frame.columnconfigure(0, weight=1)
-        log_frame.rowconfigure(0, weight=1)
-
-        scrollbar = ttk.Scrollbar(log_frame)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        self.status_log = tk.Text(
-            log_frame,
-            height=10,
-            width=40,
-            yscrollcommand=scrollbar.set,
-            state=tk.DISABLED
-        )
-        self.status_log.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        scrollbar.config(command=self.status_log.yview)
-        self._register_context_menu(self.status_log, [{"copy": True}])
+            if hasattr(self, "location_selector"):
+                self.location_selector.set(self._location_values[False])
+            self.append_log(
+                t("bulk_summarizer.log.output_folder_set").format(name=Path(folder).name),
+                "info",
+            )
 
     # ------------------------------------------------------------------
     # Public API
@@ -472,54 +588,79 @@ class BulkSummarizerTab(BaseTab):
     def get_file_types(self) -> list:
         """Return selected file type strings (including opus if checked)"""
         types = []
-        if self.file_type_txt.get():  types.append("txt")
-        if self.file_type_srt.get():  types.append("srt")
-        if self.file_type_docx.get(): types.append("docx")
-        if self.file_type_pdf.get():  types.append("pdf")
-        if self.file_type_opus.get(): types.append("opus")  # NEW v5.1
+        if self.file_type_txt.get():
+            types.append("txt")
+        if self.file_type_srt.get():
+            types.append("srt")
+        if self.file_type_docx.get():
+            types.append("docx")
+        if self.file_type_pdf.get():
+            types.append("pdf")
+        if self.file_type_opus.get():
+            types.append("opus")
         return types
 
     def get_output_formats(self) -> dict:
         return {
             "separate": self.output_separate.get(),
-            "combined": self.output_combined.get()
+            "combined": self.output_combined.get(),
         }
 
     def get_recursive_option(self) -> bool:
         return self.recursive_subfolders.get()
 
     def set_processing_enabled(self, enabled: bool):
-        self.start_button.config(state=tk.NORMAL if enabled else tk.DISABLED)
-        self.cancel_button.config(state=tk.NORMAL if enabled else tk.DISABLED)
+        """
+        Enable/disable the processing controls.
+
+        ``enabled=True`` means "idle, ready to start again", so Start becomes
+        available and Cancel does not.
+        """
+        self.start_button.configure(state="normal" if enabled else "disabled")
+        self.cancel_button.configure(state="disabled" if enabled else "normal")
+        self.status_label.configure(
+            text=t("bulk_summarizer.status.ready") if enabled else
+            t("bulk_summarizer.progress.processing").format(filename="...")
+        )
 
     def update_progress(self, current: int, total: int):
-        percentage = (current / total * 100) if total > 0 else 0
-        self.progress_bar['value'] = percentage
-        self.progress_text_var.set(t("bulk_summarizer.progress.files").format(current=current, total=total))
+        # CTkProgressBar takes a 0..1 fraction, not a 0..100 value.
+        fraction = (current / total) if total > 0 else 0
+        self.progress_bar.set(min(max(fraction, 0.0), 1.0))
+        self.progress_text_var.set(
+            t("bulk_summarizer.progress.files").format(current=current, total=total)
+        )
 
     def set_current_file(self, filename: str):
-        self.current_file_var.set(t("bulk_summarizer.progress.processing").format(filename=filename))
+        self.current_file_var.set(
+            t("bulk_summarizer.progress.processing").format(filename=filename)
+        )
 
     def append_log(self, message: str, status: str = "info"):
-        self.status_log.config(state=tk.NORMAL)
+        self.status_log.configure(state="normal")
         timestamp = datetime.now().strftime("%H:%M:%S")
-        indicators = {"success": "\u2713", "error": "\u2717", "info": "\u2022", "warning": "\u26a0"}
+        indicators = {
+            "success": "\u2713", "error": "\u2717",
+            "info": "\u2022", "warning": "\u26a0",
+        }
         indicator = indicators.get(status, "\u2022")
         self.status_log.insert(tk.END, f"[{timestamp}] {indicator} {message}\n")
         self.status_log.see(tk.END)
-        self.status_log.config(state=tk.DISABLED)
+        self.status_log.configure(state="disabled")
 
     def clear_all(self):
         self.source_folder_var.set(t("bulk_summarizer.folder.none"))
         self.output_folder_var.set(t("bulk_summarizer.folder.default_parent"))
-        self.progress_bar['value'] = 0
-        self.progress_text_var.set(t("bulk_summarizer.progress.files").format(current=0, total=0))
+        self.progress_bar.set(0)
+        self.progress_text_var.set(
+            t("bulk_summarizer.progress.files").format(current=0, total=0)
+        )
         self.current_file_var.set(t("bulk_summarizer.progress.idle"))
-        self.status_log.config(state=tk.NORMAL)
+        self.status_log.configure(state="normal")
         self.status_log.delete('1.0', tk.END)
-        self.status_log.config(state=tk.DISABLED)
-        self.start_button.config(state=tk.DISABLED)
-        self.cancel_button.config(state=tk.DISABLED)
+        self.status_log.configure(state="disabled")
+        self.start_button.configure(state="disabled")
+        self.cancel_button.configure(state="disabled")
 
     def set_summarizer_tab(self, tab):
         """Set reference to SummarizerTab for inheriting LLM settings."""
@@ -534,7 +675,7 @@ class BulkSummarizerTab(BaseTab):
             'provider': self.summarizer_tab.get_provider(),
             'webhook_url': self.summarizer_tab.get_webhook_url(),
             'model_name': self.summarizer_tab.get_model_name(),
-            'prompt': self.summarizer_tab.get_prompt()
+            'prompt': self.summarizer_tab.get_prompt(),
         }
 
     def get_content(self) -> str:
@@ -549,32 +690,36 @@ class BulkSummarizerTab(BaseTab):
         self._refresh_llm_settings_display()
         if self.on_start_requested:
             self.on_start_requested()
-    
+
     def _refresh_llm_settings_display(self):
         """Update the LLM settings info panel with current values from Summarizer tab"""
-        if not self.summarizer_tab:
-            self.provider_info_var.set(t("bulk_summarizer.llm.provider_not_connected"))
+        settings = self.get_summarizer_settings() if self.summarizer_tab else None
+
+        if not settings:
+            self.provider_info_var.set(
+                t("bulk_summarizer.llm.provider_not_connected") if not self.summarizer_tab
+                else t("bulk_summarizer.llm.provider_not_configured")
+            )
             self.webhook_info_var.set(t("bulk_summarizer.llm.base_url_not_configured"))
             self.model_info_var.set(t("bulk_summarizer.llm.model_not_selected"))
             self.prompt_info_var.set(t("bulk_summarizer.llm.prompt_not_selected"))
             return
-        
-        settings = self.get_summarizer_settings()
-        if settings:
-            provider = settings['provider']
-            webhook_url = settings['webhook_url']
-            model_name = settings['model_name']
-            prompt_preview = settings['prompt'][:50] + "..." if len(settings['prompt']) > 50 else settings['prompt']
-            
-            self.provider_info_var.set(t("bulk_summarizer.llm.provider").format(value=provider))
-            self.webhook_info_var.set(t("bulk_summarizer.llm.base_url").format(value=webhook_url))
-            self.model_info_var.set(t("bulk_summarizer.llm.model").format(value=model_name))
-            self.prompt_info_var.set(t("bulk_summarizer.llm.prompt").format(value=prompt_preview))
-        else:
-            self.provider_info_var.set(t("bulk_summarizer.llm.provider_not_configured"))
-            self.webhook_info_var.set(t("bulk_summarizer.llm.base_url_not_configured"))
-            self.model_info_var.set(t("bulk_summarizer.llm.model_not_selected"))
-            self.prompt_info_var.set(t("bulk_summarizer.llm.prompt_not_selected"))
+
+        prompt = settings['prompt'] or ""
+        prompt_preview = (prompt[:50] + "...") if len(prompt) > 50 else prompt
+
+        self.provider_info_var.set(
+            t("bulk_summarizer.llm.provider").format(value=settings['provider'])
+        )
+        self.webhook_info_var.set(
+            t("bulk_summarizer.llm.base_url").format(value=settings['webhook_url'])
+        )
+        self.model_info_var.set(
+            t("bulk_summarizer.llm.model").format(value=settings['model_name'])
+        )
+        self.prompt_info_var.set(
+            t("bulk_summarizer.llm.prompt").format(value=prompt_preview)
+        )
 
     def _on_cancel_clicked(self):
         if self.on_cancel_requested:
@@ -590,63 +735,72 @@ class BulkSummarizerTab(BaseTab):
     # Preferences
     # ------------------------------------------------------------------
 
+    _PREF_FILE_TYPES = "BULK_FILE_TYPES"
+    _PREF_SEPARATE = "BULK_OUTPUT_SEPARATE"
+    _PREF_COMBINED = "BULK_OUTPUT_COMBINED"
+    _PREF_RECURSIVE = "BULK_RECURSIVE_SUBFOLDERS"
+
     def _load_preferences(self):
-        """Load saved preferences from .env file"""
+        """Load saved preferences via SettingsManager."""
+        if self.settings is None:
+            logger.debug("No SettingsManager; using default bulk preferences")
+            return
         try:
-            env_path = Path(".env")
-            if env_path.exists():
-                with open(env_path, "r") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line.startswith("BULK_FILE_TYPES="):
-                            file_types = line.split("=")[1].split(",")
-                            self.file_type_txt.set("txt" in file_types)
-                            self.file_type_srt.set("srt" in file_types)
-                            self.file_type_docx.set("docx" in file_types)
-                            self.file_type_pdf.set("pdf" in file_types)
-                            self.file_type_opus.set("opus" in file_types)  # NEW v5.1
-                        elif line.startswith("BULK_OUTPUT_SEPARATE="):
-                            self.output_separate.set(line.split("=")[1].lower() == "true")
-                        elif line.startswith("BULK_OUTPUT_COMBINED="):
-                            self.output_combined.set(line.split("=")[1].lower() == "true")
-                        elif line.startswith("BULK_RECURSIVE_SUBFOLDERS="):
-                            self.recursive_subfolders.set(line.split("=")[1].lower() == "true")
+            file_types = self.settings.get(self._PREF_FILE_TYPES, "txt")
+            selected = {p.strip() for p in file_types.split(",") if p.strip()}
+            self.file_type_txt.set("txt" in selected)
+            self.file_type_srt.set("srt" in selected)
+            self.file_type_docx.set("docx" in selected)
+            self.file_type_pdf.set("pdf" in selected)
+            self.file_type_opus.set("opus" in selected)
+
+            self.output_separate.set(
+                self.settings.get(self._PREF_SEPARATE, "True").lower() == "true"
+            )
+            self.output_combined.set(
+                self.settings.get(self._PREF_COMBINED, "False").lower() == "true"
+            )
+            self.recursive_subfolders.set(
+                self.settings.get(self._PREF_RECURSIVE, "False").lower() == "true"
+            )
             logger.info("Bulk Summarizer preferences loaded")
         except Exception as e:
             logger.warning(f"Could not load preferences: {str(e)}")
 
     def _save_preferences(self):
-        """Save preferences to .env file"""
+        """
+        Save preferences via SettingsManager.
+
+        SettingsManager rewrites only the values it owns and leaves comments and
+        unrelated keys untouched, which the previous hand-rolled writer did not.
+        """
+        if self.settings is None:
+            return
         try:
-            env_path = Path(".env")
-            file_types = []
-            if self.file_type_txt.get():  file_types.append("txt")
-            if self.file_type_srt.get():  file_types.append("srt")
-            if self.file_type_docx.get(): file_types.append("docx")
-            if self.file_type_pdf.get():  file_types.append("pdf")
-            if self.file_type_opus.get(): file_types.append("opus")  # NEW v5.1
-
-            file_types_str = ",".join(file_types) if file_types else "txt"
-
-            env_content = {}
-            if env_path.exists():
-                with open(env_path, "r") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith("BULK_"):
-                            kv = line.split("=", 1)
-                            if len(kv) == 2:
-                                env_content[kv[0]] = kv[1]
-
-            env_content["BULK_FILE_TYPES"] = file_types_str
-            env_content["BULK_OUTPUT_SEPARATE"] = str(self.output_separate.get())
-            env_content["BULK_OUTPUT_COMBINED"] = str(self.output_combined.get())
-            env_content["BULK_RECURSIVE_SUBFOLDERS"] = str(self.recursive_subfolders.get())
-
-            with open(env_path, "w") as f:
-                for key, value in env_content.items():
-                    f.write(f"{key}={value}\n")
-
+            file_types = self.get_file_types()
+            self.settings.set(
+                self._PREF_FILE_TYPES, ",".join(file_types) if file_types else "txt"
+            )
+            self.settings.set(self._PREF_SEPARATE, str(self.output_separate.get()))
+            self.settings.set(self._PREF_COMBINED, str(self.output_combined.get()))
+            self.settings.set(self._PREF_RECURSIVE, str(self.recursive_subfolders.get()))
             logger.info("Bulk Summarizer preferences saved")
         except Exception as e:
             logger.warning(f"Could not save preferences: {str(e)}")
+
+    # ------------------------------------------------------------------
+    # Theming hook used by MainWindow
+    # ------------------------------------------------------------------
+
+    def apply_font_size(self, size: int):
+        """Apply the app-wide font size to this tab's log area."""
+        self.status_log.configure(font=("Cascadia Mono", size + 1))
+
+        section_font = ctk.CTkFont(size=max(size + 1, 11), weight="bold")
+        for attr in ("_folder_section", "_llm_section", "_file_type_section",
+                     "_scanning_section", "_output_format_section",
+                     "_output_location_section", "_progress_section",
+                     "_log_section"):
+            section = getattr(self, attr, None)
+            if section is not None:
+                section.set_title_font(section_font)

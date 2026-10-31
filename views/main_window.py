@@ -64,6 +64,7 @@ from views.translation_tab import TranslationTab
 from views.downloader_tab import DownloaderTab
 from views.video_subtitler_tab import VideoSubtitlerTab
 from views.ctk_compat import CTkNotebook, owned_by_ctk
+from views.ctk_theme import build_palette, apply_palette
 
 # Load environment variables
 load_dotenv()
@@ -118,6 +119,12 @@ class MainWindow:
         self.root.title(self.app_title_display)
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
+
+        # Publish ourselves on the Tk root so tabs can find the main window.
+        # MainWindow is not a widget, so it never appears in a widget's master
+        # chain; without this, BaseTab.get_main_window() can never resolve and
+        # cross-tab actions (e.g. Translation -> Summarizer) do nothing.
+        self.root.main_window = self
 
         # Store settings manager
         self.settings = settings_manager
@@ -324,7 +331,7 @@ class MainWindow:
         self.title_label = ctk.CTkLabel(
             header_frame,
             text=self.app_title_display,
-            font=ctk.CTkFont(size=18, weight="bold"),
+            font=ctk.CTkFont(size=22, weight="bold"),
             anchor="w",
         )
         self.title_label.grid(row=0, column=0, sticky="w")
@@ -333,17 +340,35 @@ class MainWindow:
         controls_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
         controls_frame.grid(row=0, column=1, sticky="e", padx=(10, 0))
 
-        col = 0
-        ctk.CTkLabel(controls_frame, text=t("header.font")).grid(
-            row=0, column=col, padx=(0, 4)
+        # Font stepper: grouped on its own rounded surface so the three
+        # controls read as one unit instead of three loose buttons.
+        font_group = ctk.CTkFrame(
+            controls_frame, corner_radius=8, fg_color=("gray90", "gray20")
         )
+        font_group.grid(row=0, column=0, padx=(0, 10))
+
+        col = 0
+        ctk.CTkLabel(
+            font_group,
+            text=t("header.font"),
+            text_color=("gray40", "gray65"),
+        ).grid(row=0, column=col, padx=(10, 6), pady=4)
         col += 1
 
         # Decrease button — steps by 2 (original behaviour)
         self.font_decrease_btn = ctk.CTkButton(
-            controls_frame, text="🔍-", width=36, command=self._decrease_font_size
+            font_group,
+            text="\u2212",  # proper minus sign
+            width=28,
+            height=26,
+            corner_radius=6,
+            font=ctk.CTkFont(size=15, weight="bold"),
+            fg_color="transparent",
+            text_color=("gray25", "gray85"),
+            hover_color=("gray82", "gray30"),
+            command=self._decrease_font_size,
         )
-        self.font_decrease_btn.grid(row=0, column=col, padx=(0, 2))
+        self.font_decrease_btn.grid(row=0, column=col, padx=(0, 2), pady=4)
         col += 1
 
         # Font size entry — type any integer in [FONT_MIN, FONT_MAX] for precise
@@ -353,47 +378,61 @@ class MainWindow:
         self.font_size_var = tk.StringVar(value=str(self.current_font_size))
         self.font_size_var.trace_add("write", self._sanitize_font_entry)
         self.font_entry = ctk.CTkEntry(
-            controls_frame,
+            font_group,
             textvariable=self.font_size_var,
-            width=48,
+            width=42,
+            height=26,
+            corner_radius=6,
+            border_width=0,
             justify="center",
         )
-        self.font_entry.grid(row=0, column=col, padx=(0, 2))
+        self.font_entry.grid(row=0, column=col, padx=0, pady=4)
         col += 1
         # Commit typed value on Enter or focus-out
         self.font_entry.bind("<Return>",   lambda _e: self._on_font_entry_commit())
         self.font_entry.bind("<FocusOut>", lambda _e: self._on_font_entry_commit())
 
-        ctk.CTkLabel(controls_frame, text=t("header.px")).grid(
-            row=0, column=col, padx=(0, 2)
-        )
-        col += 1
-
         # Increase button — steps by 2 (original behaviour)
         self.font_increase_btn = ctk.CTkButton(
-            controls_frame, text="🔍+", width=36, command=self._increase_font_size
+            font_group,
+            text="+",
+            width=28,
+            height=26,
+            corner_radius=6,
+            font=ctk.CTkFont(size=15, weight="bold"),
+            fg_color="transparent",
+            text_color=("gray25", "gray85"),
+            hover_color=("gray82", "gray30"),
+            command=self._increase_font_size,
         )
-        self.font_increase_btn.grid(row=0, column=col, padx=(2, 12))
-        col += 1
+        self.font_increase_btn.grid(row=0, column=col, padx=(2, 10), pady=4)
 
-        # Theme toggle button
+        # Theme toggle — secondary action, outlined rather than filled.
         self.theme_btn = ctk.CTkButton(
             controls_frame,
             text=t("header.dark_mode") if self.current_theme == "light" else t("header.light_mode"),
             command=self._toggle_theme,
-            width=110,
+            width=118,
+            height=34,
+            corner_radius=8,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray70", "gray40"),
+            text_color=("gray25", "gray85"),
+            hover_color=("gray85", "gray28"),
         )
-        self.theme_btn.grid(row=0, column=col, padx=(0, 8))
-        col += 1
+        self.theme_btn.grid(row=0, column=1, padx=(0, 8))
 
         # Settings button (replaces old cogwheel → deps manager direct link)
         self.settings_btn = ctk.CTkButton(
             controls_frame,
             text=t("header.settings"),
             command=self._open_settings,
-            width=100,
+            width=104,
+            height=34,
+            corner_radius=8,
         )
-        self.settings_btn.grid(row=0, column=col)
+        self.settings_btn.grid(row=0, column=2)
 
     def _setup_tabs(self, parent):
         """
@@ -423,7 +462,11 @@ class MainWindow:
         self.prompt_manager = PromptManager()
 
         # Tab 0: Summarizer (NEW v9.3 - replaces File and YouTube tabs)
-        self.summarizer_tab = SummarizerTab(self.notebook, prompt_manager=self.prompt_manager)
+        self.summarizer_tab = SummarizerTab(
+            self.notebook,
+            prompt_manager=self.prompt_manager,
+            settings_manager=self.settings,
+        )
         self.notebook.add(self.summarizer_tab, text=t("tab.summarizer"))
         
         # Tab 1: Transcriber
@@ -431,11 +474,17 @@ class MainWindow:
         self.notebook.add(self.transcriber_tab, text=t("tab.transcriber"))
 
         # Tab 1: Bulk Summarizer
-        self.bulk_summarizer_tab = BulkSummarizerTab(self.notebook)
+        self.bulk_summarizer_tab = BulkSummarizerTab(
+            self.notebook,
+            prompt_manager=self.prompt_manager,
+            settings_manager=self.settings,
+        )
         self.notebook.add(self.bulk_summarizer_tab, text=t("tab.bulk_summarizer"))
 
         # Tab 2: Bulk Transcriber
-        self.bulk_transcriber_tab = BulkTranscriberTab(self.notebook)
+        self.bulk_transcriber_tab = BulkTranscriberTab(
+            self.notebook, settings_manager=self.settings
+        )
         self.notebook.add(self.bulk_transcriber_tab, text=t("tab.bulk_transcriber"))
 
         # Tab 3: Translation
@@ -463,17 +512,30 @@ class MainWindow:
         status_frame.grid(row=2, column=0, sticky="ew")
         status_frame.columnconfigure(0, weight=1)
 
+        # A quiet status strip: no sunken relief, just a small dot and muted
+        # text so it informs without competing with the content.
+        bar = ctk.CTkFrame(
+            status_frame, corner_radius=8, fg_color=("gray90", "gray16"), height=30
+        )
+        bar.grid(row=0, column=0, sticky="ew")
+        bar.grid_columnconfigure(1, weight=1)
+
+        # Semantic colour (healthy/ready), not branding - excluded from the
+        # palette pass so it keeps its meaning under any accent.
+        status_dot = ctk.CTkLabel(
+            bar, text="\u25cf", width=12, text_color=("#15803d", "#4ade80")
+        )
+        status_dot._theme_skip = True
+        status_dot.grid(row=0, column=0, padx=(10, 6), pady=4)
+
         self.status_var = tk.StringVar(value=t("status.ready"))
-        # CTkLabel has no `relief`; a filled rounded label reads as a status bar.
         self.status_label = ctk.CTkLabel(
-            status_frame,
+            bar,
             textvariable=self.status_var,
             anchor="w",
-            height=26,
-            corner_radius=6,
-            fg_color=("gray85", "gray20"),
+            text_color=("gray30", "gray75"),
         )
-        self.status_label.grid(row=0, column=0, sticky="ew")
+        self.status_label.grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=4)
 
     def _apply_theme(self):
         """
@@ -578,62 +640,23 @@ class MainWindow:
         text_bg = colors["bg_secondary"]
         text_fg = colors["text_primary"]
 
-        # Summarizer tab (migrated to CustomTkinter).
-        # CTk widgets reject bg/fg/insertbackground, so the tab applies the
-        # colors itself through its own themed options.
-        if hasattr(self, "summarizer_tab"):
-            self.summarizer_tab.apply_theme_colors(text_bg, text_fg)
-
-        # Transcriber tab
-        if hasattr(self, "transcriber_tab"):
-            self.transcriber_tab.transcript_text.configure(
-                bg=text_bg, fg=text_fg, insertbackground=text_fg
-            )
-
-        # Bulk Summarizer tab
-        if hasattr(self, "bulk_summarizer_tab"):
-            self.bulk_summarizer_tab.status_log.configure(
-                bg=text_bg, fg=text_fg, insertbackground=text_fg
-            )
-
-        # Bulk Transcriber tab
-        if hasattr(self, "bulk_transcriber_tab"):
-            self.bulk_transcriber_tab.status_log.configure(
-                bg=text_bg, fg=text_fg, insertbackground=text_fg
-            )
-
-        # Translation tab
-        if hasattr(self, "translation_tab"):
-            self.translation_tab.source_text.configure(
-                bg=text_bg, fg=text_fg, insertbackground=text_fg
-            )
-            self.translation_tab.target_text.configure(
-                bg=text_bg, fg=text_fg, insertbackground=text_fg
-            )
-
-        # Downloader tab
-        if hasattr(self, "downloader_tab"):
-            self.downloader_tab.status_log.configure(
-                bg=text_bg, fg=text_fg, insertbackground=text_fg
-            )
-
-        # Video Subtitler tab
-        if hasattr(self, "video_subtitler_tab"):
-            self.video_subtitler_tab.srt_text.configure(
-                bg=text_bg, fg=text_fg, insertbackground=text_fg
-            )
-            if hasattr(self.video_subtitler_tab, "translated_srt_text"):
-                self.video_subtitler_tab.translated_srt_text.configure(
-                    bg=text_bg, fg=text_fg, insertbackground=text_fg
-                )
-            if hasattr(self.video_subtitler_tab, "ffmpeg_status_var"):
-                # FFmpeg status label uses the same colors as other status labels
-                pass  # The label automatically inherits from theme configuration
-
-        # Catch-all: recolor every tk.Text / ScrolledText widget across all tabs.
-        # This covers any widget not explicitly listed above (e.g. the prompt editor).
+        # Recolor every classic tk.Text / ScrolledText widget across all tabs.
+        #
+        # This replaces the old per-tab list (transcript_text, status_log,
+        # source_text, srt_text, ...). That list had to name every widget
+        # explicitly, and it broke as tabs migrated to CustomTkinter, because
+        # CTk widgets raise ValueError for bg/fg. The recursive walk finds the
+        # same widgets, needs no maintenance, and skips CTk-owned ones (which
+        # the palette pass below handles instead).
         if hasattr(self, "notebook"):
             self._recolor_text_widgets(self.notebook, text_bg, text_fg)
+
+        # --- CustomTkinter widgets -------------------------------------------
+        # CTk widgets ignore ttk.Style, so without this pass they keep their
+        # built-in blue and the Settings colours (background / text / accent)
+        # never reach the migrated tabs, the header or the tab strip.
+        self.ctk_palette = build_palette(colors, is_dark=self.current_theme == "dark")
+        apply_palette(self.root, self.ctk_palette)
 
         # Title label (CTkLabel uses `text_color`, not `foreground`)
         if hasattr(self, "title_label"):
@@ -1513,36 +1536,24 @@ class MainWindow:
         if hasattr(self, "notebook") and hasattr(self.notebook, "set_tab_font"):
             self.notebook.set_tab_font(ctk.CTkFont(size=fs))
 
-        # Apply to Summarizer tab (migrated to CustomTkinter - it owns its fonts)
-        if hasattr(self, "summarizer_tab"):
-            self.summarizer_tab.apply_font_size(fs)
-
-        # Apply to Transcriber tab
-        if hasattr(self, "transcriber_tab"):
-            self.transcriber_tab.transcript_text.configure(font=("Segoe UI", fs))
-
-        # Apply to Bulk Summarizer tab
-        if hasattr(self, "bulk_summarizer_tab"):
-            self.bulk_summarizer_tab.status_log.configure(font=("Segoe UI", fs))
-
-        # Apply to Bulk Transcriber tab
-        if hasattr(self, "bulk_transcriber_tab"):
-            self.bulk_transcriber_tab.status_log.configure(font=("Segoe UI", fs))
-
-        # Apply to Translation tab
-        if hasattr(self, "translation_tab"):
-            self.translation_tab.source_text.configure(font=("Segoe UI", fs))
-            self.translation_tab.target_text.configure(font=("Segoe UI", fs))
-
-        # Apply to Downloader tab
-        if hasattr(self, "downloader_tab"):
-            self.downloader_tab.status_log.configure(font=("Segoe UI", fs))
-
-        # Apply to Video Subtitler tab
-        if hasattr(self, "video_subtitler_tab"):
-            self.video_subtitler_tab.srt_text.configure(font=("Segoe UI", fs))
-            if hasattr(self.video_subtitler_tab, "translated_srt_text"):
-                self.video_subtitler_tab.translated_srt_text.configure(font=("Segoe UI", fs))
+        # Per-tab text areas.
+        #
+        # Every tab is now CustomTkinter and owns its own typography via
+        # apply_font_size(), because they mix monospace document panes with
+        # UI-font metadata boxes - something a single font for every widget
+        # cannot express. The getattr/callable guards keep this safe if a tab
+        # is ever added without the hook.
+        for tab_attr in (
+            "summarizer_tab", "transcriber_tab", "translation_tab",
+            "bulk_summarizer_tab", "bulk_transcriber_tab", "downloader_tab",
+            "video_subtitler_tab",
+        ):
+            tab = getattr(self, tab_attr, None)
+            hook = getattr(tab, "apply_font_size", None) if tab else None
+            if callable(hook):
+                hook(fs)
+            elif tab is not None:
+                logger.debug(f"{tab_attr} has no apply_font_size hook")
 
         logger.debug(f"Applied font size {fs}px to all widgets")
 

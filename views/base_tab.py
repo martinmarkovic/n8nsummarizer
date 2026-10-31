@@ -124,16 +124,23 @@ class TabMixin:
 
     def get_main_window(self):
         """
-        Get the main window instance to access other tabs.
+        Get the MainWindow instance so a tab can reach its sibling tabs.
+
+        MainWindow is a plain object, not a widget, so it never appears in the
+        ``master`` chain. Walking that chain therefore always returned None and
+        every cross-tab feature built on it silently did nothing. MainWindow
+        now publishes itself as ``main_window`` on the Tk root, so the lookup
+        is: climb to a widget carrying that attribute and return it.
 
         Returns:
-            MainWindow instance or None if not found
+            MainWindow instance, or None if it has not registered yet.
         """
-        # Navigate up the widget hierarchy to find MainWindow.
-        # MainWindow is not a widget, so look for a known tab attribute on the
-        # objects in the master chain.
         current = self
         while current is not None:
+            window = getattr(current, "main_window", None)
+            if window is not None:
+                return window
+            # Legacy shape: an object in the chain that *is* the main window.
             if hasattr(current, "summarizer_tab"):
                 return current
             current = getattr(current, "master", None)

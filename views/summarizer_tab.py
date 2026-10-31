@@ -43,7 +43,7 @@ from utils.prompt_manager import PromptManager
 from utils.logger import logger
 from models.llm_client.discovery import discover_models, Provider, ModelOption
 from views.base_tab import CTkBaseTab
-from views.ctk_compat import CTkSection
+from views.ctk_compat import CTkSection, CTkCollapsibleSection, CTkSplitter
 from utils.i18n import t
 
 # Colors for the connection status dot, as (light_mode, dark_mode) pairs so the
@@ -73,8 +73,12 @@ class SummarizerTab(CTkBaseTab):
             settings_manager: Optional SettingsManager instance for persistent preferences
         """
         # Initialize variables BEFORE calling super().__init__()
-        # Input mode
-        self.input_mode_var = tk.StringVar(value="file")  # "file" or "youtube"
+        # Input mode - restored from persisted settings when available so the
+        # tab reopens on whichever mode (file / youtube) was last used.
+        initial_mode = "file"
+        if settings_manager is not None:
+            initial_mode = settings_manager.get_summarizer_input_mode()
+        self.input_mode_var = tk.StringVar(value=initial_mode)  # "file" or "youtube"
 
         # File mode state
         self.file_path_var = tk.StringVar(value=t("summarizer.no_file"))
@@ -143,109 +147,188 @@ class SummarizerTab(CTkBaseTab):
     # UI construction
     # ------------------------------------------------------------------
 
-    def _setup_ui(self):
-        """Setup the complete UI with all sections."""
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(2, weight=1)  # Content/response section expands
+    # Below this window width the two top cards stack vertically instead of
+    # sitting side by side.
+    _STACK_BREAKPOINT = 1100
 
-        # Setup sections in order
-        self._setup_input_section()             # row=0, column=0
-        self._setup_file_info_section()         # row=0, column=1
-        self._setup_settings_section()          # row=1, column=0, columnspan=2
-        self._setup_content_response_section()  # row=2 (weight=1), column=0, columnspan=2
-        self._setup_action_bar()                # row=3, column=0, columnspan=2
+    def _setup_ui(self):
+        """
+        Setup the complete UI.
+
+        Layout (rows of the tab itself):
+            0  top cards: input + file info (side by side, stacking when narrow)
+            1  LLM settings (collapsible, so it can get out of the way)
+            2  content / response split  <- the expanding region
+            3  action bar
+            4  progress bar (only gridded while working)
+        """
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(2, weight=1)  # Content/response split expands
+
+        # Responsive state must exist before any layout runs: _place_file_info
+        # reads it. Starts wide, then the first <Configure> corrects it.
+        self._stacked = False
+
+        self._setup_top_row()
+        self._setup_settings_section()
+        self._setup_content_response_section()
+        self._setup_action_bar()
 
         # Initialize mode visibility
         self._on_mode_changed()
+
+        # Responsive: restack the top cards as the window width changes.
+        self.bind("<Configure>", self._on_resize)
 
         # Trigger initial model discovery
         self.after(100, self._discover_models)
 
         logger.debug("SummarizerTab UI setup complete")
 
+    def _on_resize(self, _event=None):
+        """Re-evaluate the responsive layout after a resize settles."""
+        self.after_idle(self._apply_responsive_layout)
+
+    def _apply_responsive_layout(self):
+        """
+        Stack the input and file-info cards vertically on narrow windows.
+
+        A fixed two-column grid squeezes both cards into unusable slivers when
+        the window is small, which is exactly what makes a layout feel rigid.
+        """
+        width = self.winfo_width()
+        if width <= 1:
+            # Not realized yet (or currently hidden): fall back to the window
+            # width so the first paint is not stuck on the wide layout.
+            width = self.winfo_toplevel().winfo_width()
+        if width <= 1:
+            return
+        stacked = width < self._STACK_BREAKPOINT
+        if stacked == self._stacked:
+            return
+        self._stacked = stacked
+        self._top_row.grid_columnconfigure(1, weight=0 if stacked else 1)
+        self._place_file_info()
+
+    def _place_file_info(self):
+        """
+        Position (or hide) the file-info card.
+
+        Both the responsive layout and the input-mode toggle want a say here,
+        so this is the single owner of that card's geometry. It has to be,
+        because grid_configure() on a grid_remove()d widget does not bring the
+        widget back - the two callers would otherwise silently fight.
+        """
+        if self.input_mode_var.get() != "file":
+            self._file_info_section.grid_remove()
+            return
+
+        if self._stacked:
+            self._file_info_section.grid(
+                row=1, column=0, sticky="ew", padx=0, pady=(10, 0)
+            )
+        else:
+            self._file_info_section.grid(
+                row=0, column=1, sticky="new", padx=(10, 0), pady=0
+            )
+
+    def _setup_top_row(self):
+        """Container for the input and file-info cards."""
+        self._top_row = ctk.CTkFrame(self, fg_color="transparent")
+        self._top_row.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        self._top_row.grid_columnconfigure(0, weight=1)
+        self._top_row.grid_columnconfigure(1, weight=1)
+
+        self._setup_input_section()
+        self._setup_file_info_section()
+
     def _setup_input_section(self):
         """Setup input section with file/YouTube mode selection."""
-        section = CTkSection(self, title=t("summarizer.frame.input"))
-        section.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        section = CTkSection(self._top_row, title=t("summarizer.frame.input"))
+        section.grid(row=0, column=0, sticky="new")
         input_frame = section.body
         self._input_section = section
+        input_frame.grid_columnconfigure(0, weight=1)
 
-        # Mode selection radio buttons
-        mode_frame = ctk.CTkFrame(input_frame, fg_color="transparent")
-        mode_frame.grid(row=0, column=0, sticky="w", pady=(0, 6))
+        # Mode selection: a segmented control is the modern idiom for a small
+        # set of mutually exclusive choices, and it reads far better than two
+        # loose radio buttons.
+        self._mode_labels = {
+            t("summarizer.radio.file"): "file",
+            t("summarizer.radio.video_url"): "youtube",
+        }
+        self._mode_values = {v: k for k, v in self._mode_labels.items()}
 
-        ctk.CTkRadioButton(
-            mode_frame,
-            text=t("summarizer.radio.file"),
-            value="file",
-            variable=self.input_mode_var,
-            command=self._on_mode_changed,
-            radiobutton_width=18,
-            radiobutton_height=18,
-        ).grid(row=0, column=0, padx=(0, 12))
-
-        ctk.CTkRadioButton(
-            mode_frame,
-            text=t("summarizer.radio.video_url"),
-            value="youtube",
-            variable=self.input_mode_var,
-            command=self._on_mode_changed,
-            radiobutton_width=18,
-            radiobutton_height=18,
-        ).grid(row=0, column=1, padx=(0, 12))
+        self.mode_selector = ctk.CTkSegmentedButton(
+            input_frame,
+            values=list(self._mode_labels.keys()),
+            command=self._on_mode_selected,
+            height=32,
+            font=ctk.CTkFont(size=13),
+        )
+        self.mode_selector.grid(row=0, column=0, sticky="w", pady=(0, 12))
+        self.mode_selector.set(self._mode_values[self.input_mode_var.get()])
 
         # --- File mode frame ---
         self._file_frame = ctk.CTkFrame(input_frame, fg_color="transparent")
-        self._file_frame.grid_columnconfigure(1, weight=1)
+        self._file_frame.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(self._file_frame, text=t("summarizer.lbl.file")).grid(
-            row=0, column=0, sticky="w"
-        )
-        # Stand-in for the old sunken ttk.Label: a filled, rounded label reads
-        # as a read-only field in CustomTkinter.
-        ctk.CTkLabel(
+        # The chosen path gets its own full-width row so long paths stay
+        # readable instead of being crushed between a label and a button.
+        self.file_path_label = ctk.CTkLabel(
             self._file_frame,
             textvariable=self.file_path_var,
             anchor="w",
-            fg_color=("gray90", "gray25"),
-            corner_radius=6,
-            height=28,
-        ).grid(row=0, column=1, sticky="ew", padx=6)
+            justify="left",
+            fg_color=("gray88", "gray24"),
+            corner_radius=8,
+            height=34,
+            padx=10,
+        )
+        self.file_path_label.grid(row=0, column=0, sticky="ew")
 
         ctk.CTkButton(
             self._file_frame,
             text=t("summarizer.btn.browse"),
             command=self._browse_file,
-            width=90,
-        ).grid(row=0, column=2, padx=(0, 0))
+            width=100,
+            height=34,
+        ).grid(row=0, column=1, padx=(8, 0))
 
-        self._file_frame.grid(row=1, column=0, sticky="ew", pady=5)
+        self._file_frame.grid(row=1, column=0, sticky="ew")
 
         # --- YouTube mode frame ---
         self._youtube_frame = ctk.CTkFrame(input_frame, fg_color="transparent")
-        self._youtube_frame.grid_columnconfigure(1, weight=1)
+        self._youtube_frame.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(self._youtube_frame, text="URL:").grid(row=0, column=0, sticky="w")
         self.url_entry = ctk.CTkEntry(
             self._youtube_frame,
             textvariable=self.url_var,
-            width=380,
+            height=34,
+            placeholder_text="https://",
         )
-        self.url_entry.grid(row=0, column=1, sticky="ew", padx=6, pady=2)
+        self.url_entry.grid(row=0, column=0, columnspan=2, sticky="ew")
         self.url_var.set("https://")
         self._register_entry_context_menu(self.url_entry)
 
-        ctk.CTkLabel(self._youtube_frame, text=t("summarizer.lbl.format")).grid(
-            row=1, column=0, sticky="w"
-        )
+        # Format + re-transcribe sit together on one compact row.
+        options_row = ctk.CTkFrame(self._youtube_frame, fg_color="transparent")
+        options_row.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+
+        ctk.CTkLabel(
+            options_row,
+            text=t("summarizer.lbl.format"),
+            text_color=("gray40", "gray65"),
+        ).grid(row=0, column=0, sticky="w", padx=(0, 6))
+
         self.format_combo = ctk.CTkOptionMenu(
-            self._youtube_frame,
+            options_row,
             variable=self.format_var,
             values=[".txt", ".srt", ".vtt", ".json"],
             width=100,
+            height=30,
         )
-        self.format_combo.grid(row=1, column=1, sticky="w", padx=6, pady=2)
+        self.format_combo.grid(row=0, column=1, sticky="w")
 
         self.force_retranscribe_var = tk.BooleanVar(value=False)
         ctk.CTkCheckBox(
@@ -254,29 +337,61 @@ class SummarizerTab(CTkBaseTab):
             variable=self.force_retranscribe_var,
             checkbox_width=18,
             checkbox_height=18,
-        ).grid(row=2, column=1, sticky="w", padx=6, pady=2)
+        ).grid(row=2, column=0, sticky="w", pady=(8, 0))
 
-        self._youtube_frame.grid(row=1, column=0, sticky="ew", pady=5)
+        self._youtube_frame.grid(row=1, column=0, sticky="ew")
 
-        input_frame.grid_columnconfigure(0, weight=1)
+    def _settings_expanded_default(self) -> bool:
+        """Whether the LLM settings panel starts expanded (persisted)."""
+        if self.settings is None:
+            return True
+        return self.settings.get("SUMMARIZER_SETTINGS_EXPANDED", "true").lower() != "false"
+
+    def _on_settings_toggled(self, expanded: bool):
+        """Remember whether the user keeps the settings panel open."""
+        if self.settings is not None:
+            self.settings.set(
+                "SUMMARIZER_SETTINGS_EXPANDED", "true" if expanded else "false"
+            )
+
+    def _on_mode_selected(self, label: str):
+        """Translate a segmented-button label back into the mode value."""
+        mode = self._mode_labels.get(label)
+        if mode and mode != self.input_mode_var.get():
+            self.input_mode_var.set(mode)
+            self._on_mode_changed()
 
     def _on_mode_changed(self):
         """Handle input mode changes (file <-> YouTube)."""
-        if self.input_mode_var.get() == "file":
+        mode = self.input_mode_var.get()
+        if mode == "file":
             self._file_frame.grid()
             self._youtube_frame.grid_remove()
-            self._file_info_section.grid()
         else:
             self._youtube_frame.grid()
             self._file_frame.grid_remove()
-            self._file_info_section.grid_remove()
 
-        logger.debug(f"Input mode changed to: {self.input_mode_var.get()}")
+        # The file-info card is shown only in file mode; _place_file_info owns
+        # its geometry so this stays consistent with the responsive layout.
+        self._place_file_info()
+
+        # Keep the segmented control in sync when the mode is changed
+        # programmatically (e.g. restored from settings).
+        if hasattr(self, "mode_selector"):
+            label = self._mode_values.get(mode)
+            if label and self.mode_selector.get() != label:
+                self.mode_selector.set(label)
+
+        # Persist the choice so the tab reopens in the same mode next launch.
+        if self.settings is not None:
+            self.settings.set_summarizer_input_mode(mode)
+
+        logger.debug(f"Input mode changed to: {mode}")
 
     def _setup_file_info_section(self):
         """Setup file information display section."""
-        section = CTkSection(self, title=t("summarizer.frame.file_info"))
-        section.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+        section = CTkSection(self._top_row, title=t("summarizer.frame.file_info"))
+        # Geometry is managed by _place_file_info (responsive + mode aware).
         self._file_info_section = section
         # Kept for backwards compatibility with any code referencing the frame
         self.file_info_frame = section
@@ -287,8 +402,10 @@ class SummarizerTab(CTkBaseTab):
         self.info_text = ctk.CTkTextbox(
             section.body,
             wrap="word",
-            height=92,
+            height=96,
             activate_scrollbars=True,
+            fg_color="transparent",
+            font=("Segoe UI", 12),
         )
         self.info_text.grid(row=0, column=0, sticky="nsew")
 
@@ -298,8 +415,15 @@ class SummarizerTab(CTkBaseTab):
 
     def _setup_settings_section(self):
         """Setup LLM settings section."""
-        section = CTkSection(self, title=t("summarizer.frame.settings"))
-        section.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        # Collapsible: this panel is configured once in a while but otherwise
+        # just steals vertical space from the content/response area.
+        section = CTkCollapsibleSection(
+            self,
+            title=t("summarizer.frame.settings"),
+            expanded=self._settings_expanded_default(),
+            on_toggle=self._on_settings_toggled,
+        )
+        section.grid(row=1, column=0, sticky="ew", pady=(0, 10))
         settings_frame = section.body
         self._settings_section = section
 
@@ -339,7 +463,10 @@ class SummarizerTab(CTkBaseTab):
         status_frame = ctk.CTkFrame(settings_frame, fg_color="transparent")
         status_frame.grid(row=row, column=0, columnspan=4, sticky="w", pady=2)
 
+        # Connection state dot: red/amber/green is semantic, so it opts out of
+        # the accent palette pass (see _set_status_dot).
         self.status_indicator = ctk.CTkLabel(status_frame, text="●", width=14)
+        self.status_indicator._theme_skip = True
         self.status_indicator.grid(row=0, column=0, padx=(0, 5))
 
         self.status_label = ctk.CTkLabel(status_frame, textvariable=self.models_status)
@@ -413,11 +540,13 @@ class SummarizerTab(CTkBaseTab):
         row += 1
         self.prompt_text = ctk.CTkTextbox(
             settings_frame,
-            height=96,
+            height=104,
             wrap="word",
             activate_scrollbars=True,
+            corner_radius=8,
+            font=("Segoe UI", 12),
         )
-        self.prompt_text.grid(row=row, column=0, columnspan=4, sticky="ew", pady=(6, 0))
+        self.prompt_text.grid(row=row, column=0, columnspan=4, sticky="ew", pady=(10, 0))
         self.prompt_text.bind("<Button-3>", self._on_prompt_text_rightclick)
 
         # Load presets using prompt_manager if available
@@ -438,26 +567,28 @@ class SummarizerTab(CTkBaseTab):
 
     def _setup_content_response_section(self):
         """Setup content preview and response display sections."""
-        content_frame = ctk.CTkFrame(self, fg_color="transparent")
-        content_frame.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
-
-        content_frame.grid_rowconfigure(0, weight=1)
-        content_frame.grid_columnconfigure(0, weight=1)
-        content_frame.grid_columnconfigure(1, weight=1)
+        # A draggable splitter instead of a hard 50/50 grid, so the user can
+        # give the preview or the response more room as needed.
+        self._split = CTkSplitter(self, ratio=0.5)
+        self._split.grid(row=2, column=0, sticky="nsew")
+        content_frame = self._split
 
         # --- Content preview (left) ---
         preview_section = CTkSection(
-            content_frame, title=t("summarizer.frame.content_preview"), padding=6
+            self._split.left, title=t("summarizer.frame.content_preview"), padding=10
         )
-        preview_section.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        preview_section.grid(row=0, column=0, sticky="nsew")
+        self._split.left.grid_rowconfigure(0, weight=1)
+        self._split.left.grid_columnconfigure(0, weight=1)
         preview_section.body.grid_rowconfigure(0, weight=1)
         self._preview_section = preview_section
 
         self.content_text = ctk.CTkTextbox(
             preview_section.body,
             wrap="word",
-            font=("Courier New", 11),
+            font=("Cascadia Mono", 12),
             activate_scrollbars=True,
+            corner_radius=8,
         )
         self.content_text.grid(row=0, column=0, sticky="nsew")
 
@@ -476,17 +607,20 @@ class SummarizerTab(CTkBaseTab):
 
         # --- Response display (right) ---
         response_section = CTkSection(
-            content_frame, title=t("summarizer.frame.response"), padding=6
+            self._split.right, title=t("summarizer.frame.response"), padding=10
         )
-        response_section.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
+        response_section.grid(row=0, column=0, sticky="nsew")
+        self._split.right.grid_rowconfigure(0, weight=1)
+        self._split.right.grid_columnconfigure(0, weight=1)
         response_section.body.grid_rowconfigure(0, weight=1)
         self._response_section = response_section
 
         self.response_text = ctk.CTkTextbox(
             response_section.body,
             wrap="word",
-            font=("Courier New", 11),
+            font=("Cascadia Mono", 12),
             activate_scrollbars=True,
+            corner_radius=8,
         )
         self.response_text.grid(row=0, column=0, sticky="nsew")
         # Read-only, but still selectable so TTS can read from a selection
@@ -511,22 +645,24 @@ class SummarizerTab(CTkBaseTab):
     def _setup_action_bar(self):
         """Setup action bar with buttons and export controls."""
         action_frame = ctk.CTkFrame(self, fg_color="transparent")
-        action_frame.grid(row=3, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        action_frame.grid(row=3, column=0, sticky="ew", pady=(10, 0))
         action_frame.grid_columnconfigure(1, weight=1)
 
-        # Summarize button
+        # Summarize button - the primary action, so it gets real visual weight.
         self.send_btn = ctk.CTkButton(
             action_frame,
             text=t("summarizer.btn.summarize"),
             command=self._send_clicked,
-            width=150,
-            height=34,
+            width=170,
+            height=38,
+            corner_radius=8,
+            font=ctk.CTkFont(size=14, weight="bold"),
         )
-        self.send_btn.grid(row=0, column=0, padx=(0, 8))
+        self.send_btn.grid(row=0, column=0, padx=(0, 10))
 
         # Export controls frame
         export_controls_frame = ctk.CTkFrame(action_frame, fg_color="transparent")
-        export_controls_frame.grid(row=0, column=1, sticky="w", padx=8)
+        export_controls_frame.grid(row=0, column=1, sticky="w")
 
         col = 0
         ctk.CTkCheckBox(
@@ -591,19 +727,24 @@ class SummarizerTab(CTkBaseTab):
         self.copy_btn.grid(row=0, column=col, padx=2)
 
         # Clear button
+        # Secondary/destructive action: present but visually quiet.
         self.clear_btn = ctk.CTkButton(
             action_frame,
             text=t("summarizer.btn.clear_all"),
             command=self._clear_clicked,
             width=110,
-            height=34,
-            fg_color=("gray70", "gray30"),
-            hover_color=("gray60", "gray40"),
+            height=38,
+            corner_radius=8,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray70", "gray40"),
+            text_color=("gray30", "gray80"),
+            hover_color=("gray85", "gray28"),
         )
-        self.clear_btn.grid(row=0, column=2, padx=5)
+        self.clear_btn.grid(row=0, column=2, padx=(10, 0))
 
         # Progress bar (created but not visible initially)
-        self.progress = ctk.CTkProgressBar(self, mode="indeterminate")
+        self.progress = ctk.CTkProgressBar(self, mode="indeterminate", height=6)
 
     # ------------------------------------------------------------------
     # Small widget helpers
@@ -1209,7 +1350,7 @@ class SummarizerTab(CTkBaseTab):
         """Show or hide loading indicator."""
         self._loading = show
         if show:
-            self.progress.grid(row=4, column=0, columnspan=2, sticky="ew", padx=5, pady=(0, 5))
+            self.progress.grid(row=4, column=0, sticky="ew", pady=(10, 0))
             self.send_btn.configure(state="disabled")
             self.progress.start()
         else:
@@ -1229,9 +1370,13 @@ class SummarizerTab(CTkBaseTab):
     # ------------------------------------------------------------------
 
     def clear_all(self):
-        """Reset all UI elements to initial state."""
-        # Reset input mode and file state
-        self.input_mode_var.set("file")
+        """Reset all UI elements to initial state.
+
+        The input mode (file / youtube) is intentionally left untouched: "Clear
+        All" clears content, not the user's chosen input mode, and forcing it
+        back to "file" would overwrite the persisted preference.
+        """
+        # Reset file state
         self.file_path_var.set(t("summarizer.no_file"))
         self.current_file_directory = None
         self.current_file_basename = None
@@ -1275,12 +1420,18 @@ class SummarizerTab(CTkBaseTab):
         the textboxes follow the chosen background and text colors, while
         buttons and dropdowns follow CustomTkinter's light/dark theme.
         """
-        for textbox in (self.content_text, self.response_text, self.info_text,
-                        self.prompt_text):
+        for textbox in (self.content_text, self.response_text, self.prompt_text):
             try:
                 textbox.configure(fg_color=bg, text_color=fg)
             except (ValueError, tk.TclError):
                 logger.debug("Could not apply theme colors to textbox", exc_info=True)
+
+        # The file-info box reads as part of its card, so it keeps a
+        # transparent background and only takes the text color.
+        try:
+            self.info_text.configure(text_color=fg)
+        except (ValueError, tk.TclError):
+            logger.debug("Could not apply theme color to info box", exc_info=True)
 
         # The caret lives on the inner tk.Text and is not exposed by CTkTextbox.
         from views.ctk_compat import unwrap_text
@@ -1299,12 +1450,14 @@ class SummarizerTab(CTkBaseTab):
         CTk widgets reject the classic ``bg``/``fg`` options that the ttk tabs
         still use.
         """
-        self.content_text.configure(font=("Courier New", size))
-        self.response_text.configure(font=("Courier New", size))
-        self.info_text.configure(font=("Segoe UI", max(size - 1, 8)))
-        self.prompt_text.configure(font=("Segoe UI", max(size - 1, 8)))
+        # Monospace for the document panes (alignment matters for transcripts
+        # and subtitles), UI font for the smaller metadata/prompt boxes.
+        self.content_text.configure(font=("Cascadia Mono", size + 1))
+        self.response_text.configure(font=("Cascadia Mono", size + 1))
+        self.info_text.configure(font=("Segoe UI", max(size, 9)))
+        self.prompt_text.configure(font=("Segoe UI", max(size, 9)))
 
-        section_font = ctk.CTkFont(size=size, weight="bold")
+        section_font = ctk.CTkFont(size=max(size + 1, 11), weight="bold")
         for attr in (
             "_input_section",
             "_file_info_section",
