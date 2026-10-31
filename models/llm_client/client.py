@@ -16,7 +16,6 @@ Features:
 import requests
 import re
 from typing import Optional, Tuple, Dict, List
-from dataclasses import dataclass
 from urllib.parse import urlparse, urlunparse
 
 from .config import LLMClientConfig
@@ -158,9 +157,9 @@ hosted OpenAI-compatible endpoint.
             parsed_url = urlparse(self.config.webhook_url.strip())
             
             # Construct proper endpoint based on provider
-            if provider_str == "lmstudio":
-                logger.info("Using LM Studio endpoint logic")
-                # LM Studio uses OpenAI-compatible /v1/chat/completions endpoint
+            if provider_str in {"lmstudio", "unsloth"}:
+                logger.info("Using OpenAI-compatible endpoint logic for %s", provider_str)
+                # LM Studio and Unsloth use OpenAI-compatible chat endpoints.
                 # Build clean base URL from parsed components
                 base_url = urlunparse((parsed_url.scheme, parsed_url.netloc, '', '', '', ''))
                 endpoint = f"{base_url}/v1/chat/completions"
@@ -178,8 +177,8 @@ hosted OpenAI-compatible endpoint.
             logger.info(f"LLMClient constructed endpoint: {endpoint} (provider={self.config.provider})")
             
             # Construct request body based on provider
-            if self.config.provider == "lmstudio":
-                # LM Studio expects OpenAI chat format with messages
+            if provider_str in {"lmstudio", "unsloth"}:
+                # OpenAI-compatible servers expect chat messages.
                 request_body = {
                     "messages": [
                         {"role": "system", "content": prompt},
@@ -188,7 +187,7 @@ hosted OpenAI-compatible endpoint.
                     "model": self.config.model_name,
                     "stream": False
                 }
-            elif self.config.provider == "ollama-local":
+            elif provider_str == "ollama-local":
                 # Use Ollama's native API format (model first, then messages)
                 request_body = {
                     "model": self.config.model_name,

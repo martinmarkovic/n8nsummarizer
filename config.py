@@ -85,6 +85,13 @@ PROVIDER_CONFIG = {
         "list_models_path": "/models",
         "type": "openai"
     },
+    "unsloth": {
+        # Unsloth's llama-server deployment exposes the OpenAI-compatible API.
+        # The UI keeps this editable for installations using another port.
+        "default_base_url": "http://127.0.0.1:8001/v1",
+        "list_models_path": "/models",
+        "type": "openai"
+    },
     "ollama-local": {
         "default_base_url": "http://localhost:11434/api",
         "list_models_path": "/tags", 

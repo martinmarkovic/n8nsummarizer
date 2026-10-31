@@ -695,10 +695,13 @@ class DownloaderTab(CTkBaseTab):
 
         item_vars = []
         for i, e in enumerate(entries):
-            var = tk.BooleanVar(value=True)  # default: download everything
+            kind = e.get("kind", "unknown")
+            available = e.get("available", kind in {"image", "video"})
+            # A missing yt-dlp carousel slot has no trustworthy media URL, so
+            # it is visible but cannot accidentally be submitted for download.
+            var = tk.BooleanVar(value=available)
             item_vars.append((e, var))
 
-            kind = e.get("kind", "unknown")
             icon = {"video": "🎬", "image": "🖼", "unknown": "❔"}.get(kind, "❔")
             dims = ""
             if e.get("width") and e.get("height"):
@@ -716,12 +719,14 @@ class DownloaderTab(CTkBaseTab):
             ctk.CTkCheckBox(
                 row, text="", variable=var, width=26,
                 checkbox_width=18, checkbox_height=18,
+                state="normal" if available else "disabled",
             ).grid(row=0, column=0, padx=(0, 5))
             # The separate title button deliberately only previews; it never
             # changes the corresponding checkbox value.
             ctk.CTkButton(
                 row, text=details, anchor="w", fg_color="transparent",
                 hover_color=("gray85", "gray28"),
+                state="normal" if available else "disabled",
                 command=lambda entry=e: self._preview_list_item(
                     entry, preview_title, preview_image
                 ),

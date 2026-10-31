@@ -239,6 +239,28 @@ class InstagramDownloader(BaseDownloader):
             entries = [info]
         return entries
 
+    def _extract_entry_at_index(self, url: str, index: int):
+        """Retry a missing carousel slot directly instead of guessing its URL."""
+        opts: Dict[str, Any] = {
+            "quiet": True,
+            "no_warnings": True,
+            "extract_flat": False,
+            "ignoreerrors": False,
+            "playlist_items": str(index),
+        }
+        opts.update(self._cookie_opts())
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                self._apply_cookies(ydl)
+                info = ydl.extract_info(url, download=False)
+            entries = info.get("entries") if info else None
+            if entries is not None:
+                return next((entry for entry in entries if entry), None)
+            return info
+        except Exception as exc:
+            logger.info("[Instagram] Could not recover carousel item %s: %s", index, exc)
+            return None
+
     @staticmethod
     def _best_image_url(entry: Dict[str, Any]) -> Optional[str]:
         """Pick the highest-resolution still-image URL from an entry."""
@@ -302,26 +324,34 @@ class InstagramDownloader(BaseDownloader):
                 return False, "No information could be extracted from this URL."
 
             entries = []
-            for i, e in enumerate(raw_entries, start=1):
-                if not e:
+            for i, entry in enumerate(raw_entries, start=1):
+                # ignoreerrors=True preserves carousel order but represents a
+                # failed slide as None. Retry only that slot with yt-dlp's
+                # playlist_items selection; never substitute a parent cover as
+                # downloadable media because that could save the wrong item.
+                if not entry:
+                    entry = self._extract_entry_at_index(url, i)
+                if not entry:
                     entries.append({
                         "index": i, "title": f"Item {i} (unavailable)", "ext": "",
                         "kind": "unknown", "width": 0, "height": 0,
-                        "duration": 0, "id": "",
+                        "duration": 0, "id": "", "thumbnail_url": None,
+                        "available": False,
                     })
                     continue
-                kind = self._classify_entry(e)
-                best_format = self._best_media_format(e, kind)
+                kind = self._classify_entry(entry)
+                best_format = self._best_media_format(entry, kind)
                 entries.append({
                     "index": i,
-                    "title": e.get("title") or e.get("description") or e.get("id") or f"Item {i}",
-                    "ext": (e.get("ext") or best_format.get("ext") or "").lower(),
+                    "title": entry.get("title") or entry.get("description") or entry.get("id") or f"Item {i}",
+                    "ext": (entry.get("ext") or best_format.get("ext") or "").lower(),
                     "kind": kind,
-                    "width": e.get("width") or best_format.get("width") or 0,
-                    "height": e.get("height") or best_format.get("height") or 0,
-                    "duration": e.get("duration") or best_format.get("duration") or 0,
-                    "id": e.get("id") or "",
-                    "thumbnail_url": self._thumbnail_url(e, kind),
+                    "width": entry.get("width") or best_format.get("width") or 0,
+                    "height": entry.get("height") or best_format.get("height") or 0,
+                    "duration": entry.get("duration") or best_format.get("duration") or 0,
+                    "id": entry.get("id") or "",
+                    "thumbnail_url": self._thumbnail_url(entry, kind),
+                    "available": kind in {"image", "video"},
                 })
             return True, entries
         except Exception as exc:
@@ -356,18 +386,36 @@ class InstagramDownloader(BaseDownloader):
             # stable extractor ID sent by the selection dialog; retain integer
             # positions only for callers using the old API.
             indexed = {i: entry for i, entry in enumerate(entries, start=1) if entry}
+            requested = indices or []
+            unavailable_selected = [
+                selection for selection in requested
+                if isinstance(selection, dict) and selection.get("available") is False
+            ]
+            if unavailable_selected:
+                logger.warning(
+                    "[Instagram] Skipping %d unavailable selected item(s)",
+                    len(unavailable_selected),
+                )
             selected_ids = {
                 str(selection.get("id"))
-                for selection in (indices or [])
-                if isinstance(selection, dict) and selection.get("id")
+                for selection in requested
+                if (
+                    isinstance(selection, dict)
+                    and selection.get("available") is not False
+                    and selection.get("id")
+                )
             }
             selected_positions = {
                 int(selection.get("index", 0))
-                for selection in (indices or [])
-                if isinstance(selection, dict) and not selection.get("id")
+                for selection in requested
+                if (
+                    isinstance(selection, dict)
+                    and selection.get("available") is not False
+                    and not selection.get("id")
+                )
             }
             selected_positions.update(
-                int(selection) for selection in (indices or [])
+                int(selection) for selection in requested
                 if isinstance(selection, int)
             )
 
@@ -395,7 +443,7 @@ class InstagramDownloader(BaseDownloader):
                     unknown_indices.append(index)
 
             successes = 0
-            failures = len(unknown_indices)
+            failures = len(unknown_indices) + len(unavailable_selected)
             if unknown_indices:
                 logger.warning(
                     "[Instagram] Skipping unclassified selected item(s): %s",

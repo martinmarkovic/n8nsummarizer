@@ -452,13 +452,23 @@ class SummarizerTab(CTkBaseTab):
 
         ctk.CTkRadioButton(
             provider_frame,
+            text="Unsloth Local",
+            value="unsloth",
+            variable=self.provider_var,
+            command=self._on_provider_changed,
+            radiobutton_width=18,
+            radiobutton_height=18,
+        ).grid(row=0, column=1, padx=(0, 12))
+
+        ctk.CTkRadioButton(
+            provider_frame,
             text="Ollama Local",
             value="ollama-local",
             variable=self.provider_var,
             command=self._on_provider_changed,
             radiobutton_width=18,
             radiobutton_height=18,
-        ).grid(row=0, column=1, padx=(0, 12))
+        ).grid(row=0, column=2, padx=(0, 12))
 
         # --- Status indicator ---
         row += 1

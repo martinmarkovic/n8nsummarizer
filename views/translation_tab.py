@@ -194,7 +194,11 @@ class TranslationTab(CTkBaseTab):
         provider_frame = ctk.CTkFrame(body, fg_color="transparent")
         provider_frame.grid(row=row, column=0, columnspan=4, sticky="w")
 
-        self._provider_labels = {"LM Studio": "lmstudio", "Ollama Local": "ollama-local"}
+        self._provider_labels = {
+            "LM Studio": "lmstudio",
+            "Unsloth Local": "unsloth",
+            "Ollama Local": "ollama-local",
+        }
         self._provider_values = {v: k for k, v in self._provider_labels.items()}
 
         self.provider_selector = ctk.CTkSegmentedButton(

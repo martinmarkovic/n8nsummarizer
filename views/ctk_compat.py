@@ -596,6 +596,16 @@ class CTkNotebook(ctk.CTkFrame):
             return
         self._reflow_columns = layout
 
+        # Only compact mode uses equal-width viewport columns. In wide mode
+        # every pill must retain its natural width and pack contiguously from
+        # the left; leaving weights on the first three columns spreads them
+        # across the strip and visually separates the tab sequence.
+        for column in range(max(len(self._tabs), self._MAX_VISIBLE_TABS)):
+            self._tab_viewport.grid_columnconfigure(
+                column,
+                weight=1 if compact and column < self._MAX_VISIBLE_TABS else 0,
+            )
+
         # The viewport uses all three bar columns normally, or the centre
         # column in compact mode so the arrows flank the visible tab pills.
         self._tab_viewport.grid_configure(

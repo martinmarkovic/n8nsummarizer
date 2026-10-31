@@ -10,7 +10,7 @@ import requests
 from utils.logger import logger
 
 # Type definitions
-Provider = Literal["lmstudio", "ollama-local"]
+Provider = Literal["lmstudio", "unsloth", "ollama-local"]
 
 class ModelOption(TypedDict):
     id: str
@@ -20,6 +20,11 @@ class ModelOption(TypedDict):
 PROVIDER_CONFIG = {
     "lmstudio": {
         "default_base_url": "http://127.0.0.1:1234/v1",
+        "list_models_path": "/models",
+        "type": "openai"
+    },
+    "unsloth": {
+        "default_base_url": "http://127.0.0.1:8001/v1",
         "list_models_path": "/models",
         "type": "openai"
     },
@@ -97,8 +102,8 @@ def discover_models(provider: Provider, base_url: str) -> Tuple[List[ModelOption
             return [], 'error', error_msg
 
         # Parse response based on provider
-        if provider == 'lmstudio':
-            # OpenAI-compatible response format
+        if config["type"] == "openai":
+            # OpenAI-compatible response format (LM Studio / Unsloth).
             # Expected: {"data": [{"id": "model-name", ...}]}
             try:
                 data = response.json()
@@ -108,10 +113,10 @@ def discover_models(provider: Provider, base_url: str) -> Tuple[List[ModelOption
                     for model in models
                     if 'id' in model
                 ]
-                logger.info(f"Discovered {len(model_options)} models from LM Studio")
+                logger.info(f"Discovered {len(model_options)} models from {provider}")
                 return model_options, 'ok', None
             except (ValueError, KeyError) as e:
-                error_msg = f"Invalid response format from LM Studio: {str(e)}"
+                error_msg = f"Invalid OpenAI-compatible response from {provider}: {str(e)}"
                 logger.error(error_msg)
                 return [], 'error', error_msg
 
