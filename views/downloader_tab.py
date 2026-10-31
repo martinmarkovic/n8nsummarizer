@@ -27,6 +27,10 @@ are now aliases for the same variables.
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from io import BytesIO
+import threading
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 import customtkinter as ctk
 
@@ -645,23 +649,21 @@ class DownloaderTab(CTkBaseTab):
             return
 
         self.log_message(f"Found {len(entries)} item(s).")
-        if len(entries) == 1:
-            # Nothing to choose - just download it
-            self.log_message("Only one item — downloading it directly.")
-            self.controller.start_download_selected(url, [1])
-            return
-
+        # List Items is an inspection/selection action. Even a single reel
+        # opens the same dialog so its thumbnail can be previewed and nothing
+        # is downloaded until the user explicitly presses Download Selected.
         self._open_selection_dialog(url, entries)
 
     def _open_selection_dialog(self, url, entries):
         """Show a checkbox list of items with a Download Selected action."""
         dialog = ctk.CTkToplevel(self)
         dialog.title("Select items to download")
-        dialog.geometry("560x460")
+        dialog.geometry("800x500")
         dialog.transient(self.winfo_toplevel())
         # Grab after the window is mapped, otherwise it can fail on Windows.
         dialog.after(100, dialog.grab_set)
-        dialog.grid_columnconfigure(0, weight=1)
+        dialog.grid_columnconfigure(0, weight=3)
+        dialog.grid_columnconfigure(1, weight=2)
         dialog.grid_rowconfigure(1, weight=1)
 
         ctk.CTkLabel(
@@ -669,17 +671,32 @@ class DownloaderTab(CTkBaseTab):
             text=f"{len(entries)} items found. Choose which to download:",
             font=ctk.CTkFont(size=14, weight="bold"),
             anchor="w",
-        ).grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 6))
+        ).grid(row=0, column=0, columnspan=2, sticky="ew", padx=14, pady=(14, 6))
 
         # CTkScrollableFrame replaces the manual Canvas + Scrollbar wiring.
         scroll = ctk.CTkScrollableFrame(dialog)
-        scroll.grid(row=1, column=0, sticky="nsew", padx=14)
+        scroll.grid(row=1, column=0, sticky="nsew", padx=(14, 7))
         scroll.grid_columnconfigure(0, weight=1)
+
+        preview_section = CTkSection(dialog, title="Preview", padding=10)
+        preview_section.grid(row=1, column=1, sticky="nsew", padx=(7, 14))
+        preview_section.body.grid_columnconfigure(0, weight=1)
+        preview_section.body.grid_rowconfigure(1, weight=1)
+        preview_title = ctk.CTkLabel(
+            preview_section.body, text="Select an item title to load its preview.",
+            anchor="w", justify="left", wraplength=250,
+        )
+        preview_title.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        preview_image = ctk.CTkLabel(
+            preview_section.body, text="No preview selected", anchor="center",
+            justify="center", height=240,
+        )
+        preview_image.grid(row=1, column=0, sticky="nsew")
 
         item_vars = []
         for i, e in enumerate(entries):
             var = tk.BooleanVar(value=True)  # default: download everything
-            item_vars.append((e["index"], var))
+            item_vars.append((e, var))
 
             kind = e.get("kind", "unknown")
             icon = {"video": "🎬", "image": "🖼", "unknown": "❔"}.get(kind, "❔")
@@ -688,16 +705,31 @@ class DownloaderTab(CTkBaseTab):
                 dims = f" {e['width']}x{e['height']}"
             dur = f" {int(e['duration'])}s" if e.get("duration") else ""
             ext = f" .{e['ext']}" if e.get("ext") else ""
-            label = f"#{e['index']}  {icon} {kind}{dims}{dur}{ext}"
+            title = str(e.get("title") or f"Item {e['index']}").replace("\n", " ")
+            title = title[:72] + ("…" if len(title) > 72 else "")
+            details = f"#{e['index']}  {icon} {kind}{dims}{dur}{ext} — {title}"
 
+            row = ctk.CTkFrame(scroll, fg_color="transparent")
+            row.grid(row=i, column=0, sticky="ew", pady=2)
+            row.grid_columnconfigure(1, weight=1)
+            # Only this compact checkbox changes whether the item downloads.
             ctk.CTkCheckBox(
-                scroll, text=label, variable=var,
+                row, text="", variable=var, width=26,
                 checkbox_width=18, checkbox_height=18,
-            ).grid(row=i, column=0, sticky="w", pady=2)
+            ).grid(row=0, column=0, padx=(0, 5))
+            # The separate title button deliberately only previews; it never
+            # changes the corresponding checkbox value.
+            ctk.CTkButton(
+                row, text=details, anchor="w", fg_color="transparent",
+                hover_color=("gray85", "gray28"),
+                command=lambda entry=e: self._preview_list_item(
+                    entry, preview_title, preview_image
+                ),
+            ).grid(row=0, column=1, sticky="ew")
 
         # Select all / none helpers
         helpers = ctk.CTkFrame(dialog, fg_color="transparent")
-        helpers.grid(row=2, column=0, sticky="ew", padx=14, pady=(8, 0))
+        helpers.grid(row=2, column=0, columnspan=2, sticky="ew", padx=14, pady=(8, 0))
 
         def _set_all(value):
             for _, v in item_vars:
@@ -717,11 +749,11 @@ class DownloaderTab(CTkBaseTab):
 
         # Action buttons
         actions = ctk.CTkFrame(dialog, fg_color="transparent")
-        actions.grid(row=3, column=0, sticky="ew", padx=14, pady=12)
+        actions.grid(row=3, column=0, columnspan=2, sticky="ew", padx=14, pady=12)
         actions.grid_columnconfigure(0, weight=1)
 
         def _download_selected():
-            chosen = [idx for idx, v in item_vars if v.get()]
+            chosen = [entry for entry, selected in item_vars if selected.get()]
             if not chosen:
                 messagebox.showinfo(
                     "Nothing selected", "Select at least one item.", parent=dialog
@@ -741,6 +773,66 @@ class DownloaderTab(CTkBaseTab):
             hover_color=("gray85", "gray28"),
             command=dialog.destroy,
         ).grid(row=0, column=1, padx=(0, 8))
+
+    def _preview_list_item(self, entry, title_label, image_label):
+        """Load an extractor-provided HTTPS thumbnail without touching selection."""
+        preview_url = (entry.get("thumbnail_url") or "").strip()
+        kind = entry.get("kind", "unknown")
+        title_label.configure(text=f"#{entry.get('index', '?')} · {kind.title()}")
+        image_label.configure(image=None, text="Loading preview…")
+        image_label._preview_image = None
+        if not preview_url:
+            image_label.configure(text="No preview image is available for this item.")
+            return
+
+        def load_preview():
+            try:
+                parsed = urlparse(preview_url)
+                host = (parsed.hostname or "").lower()
+                allowed = (
+                    host.endswith(".instagram.com")
+                    or host.endswith(".cdninstagram.com")
+                    or host.endswith(".instagramcdn.com")
+                    or host.endswith(".fbcdn.net")
+                )
+                if (
+                    parsed.scheme != "https" or parsed.username or parsed.password
+                    or not host or not allowed
+                ):
+                    raise ValueError("unsupported preview host")
+                request = Request(preview_url, headers={"User-Agent": "Mozilla/5.0"})
+                with urlopen(request, timeout=12) as response:
+                    content_type = (response.headers.get("Content-Type") or "").lower()
+                    length = int(response.headers.get("Content-Length") or 0)
+                    if length > 4 * 1024 * 1024:
+                        raise ValueError("preview is too large")
+                    if content_type and not content_type.startswith("image/"):
+                        raise ValueError("preview is not an image")
+                    data = response.read(4 * 1024 * 1024 + 1)
+                if len(data) > 4 * 1024 * 1024:
+                    raise ValueError("preview is too large")
+                from PIL import Image
+                image = Image.open(BytesIO(data))
+                if image.width * image.height > 16_000_000:
+                    raise ValueError("preview dimensions are too large")
+                image.load()
+                image.thumbnail((250, 250))
+                image = image.convert("RGBA")
+                ctk_image = ctk.CTkImage(light_image=image, dark_image=image, size=image.size)
+                self.after(0, lambda: self._show_list_preview(image_label, ctk_image))
+            except Exception as exc:
+                logger.info("Could not load item preview: %s", exc)
+                self.after(0, lambda: image_label.configure(
+                    image=None, text="Preview unavailable for this item."
+                ))
+
+        threading.Thread(target=load_preview, daemon=True).start()
+
+    @staticmethod
+    def _show_list_preview(image_label, image):
+        """Display a loaded thumbnail and retain the image for Tk."""
+        image_label._preview_image = image
+        image_label.configure(image=image, text="")
 
     # ------------------------------------------------------------------
     # View Helper Methods (called by controller)

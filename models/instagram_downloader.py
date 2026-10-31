@@ -8,8 +8,7 @@ Uses the same format mapping as YouTubeDownloader for consistency.
 """
 
 import yt_dlp
-from pathlib import Path
-from typing import Optional, Callable, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple
 import logging
 
 from models.youtube_downloader import YouTubeDownloader
@@ -149,20 +148,73 @@ class InstagramDownloader(BaseDownloader):
             opts["cookies_from_browser"] = self.cookie_browser
         return opts
 
-    @staticmethod
-    def _classify_entry(entry: Dict[str, Any]) -> str:
-        """Best-effort classification of a carousel entry as video/image/unknown."""
+    _IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "heic", "gif"}
+    _VIDEO_EXTENSIONS = {"mp4", "webm", "mkv", "mov", "avi"}
+
+    @classmethod
+    def _classify_entry(cls, entry: Dict[str, Any]) -> str:
+        """Classify carousel media using entry fields *and* yt-dlp formats."""
         if not entry:
             return "unknown"
+        declared_type = str(entry.get("media_type") or entry.get("type") or "").lower()
+        if declared_type in {"image", "photo"}:
+            return "image"
+        if declared_type in {"video", "reel"}:
+            return "video"
+
         vcodec = entry.get("vcodec")
         ext = (entry.get("ext") or "").lower()
-        if entry.get("duration") or (vcodec and vcodec != "none") or ext in (
-            "mp4", "webm", "mkv", "mov", "avi"
+        if entry.get("duration") or (vcodec and vcodec != "none") or ext in cls._VIDEO_EXTENSIONS:
+            return "video"
+        if ext in cls._IMAGE_EXTENSIONS:
+            return "image"
+
+        formats = entry.get("formats") or []
+        if any(
+            (f.get("vcodec") and f.get("vcodec") != "none")
+            or (f.get("ext") or "").lower() in cls._VIDEO_EXTENSIONS
+            for f in formats
         ):
             return "video"
-        if ext in ("jpg", "jpeg", "png", "webp", "heic", "gif"):
+        if any(
+            (f.get("ext") or "").lower() in cls._IMAGE_EXTENSIONS
+            for f in formats
+        ):
             return "image"
         return "unknown"
+
+    @classmethod
+    def _best_media_format(cls, entry: Dict[str, Any], kind: str) -> Dict[str, Any]:
+        """Return the largest matching yt-dlp format for display metadata."""
+        candidates = []
+        for media_format in entry.get("formats") or []:
+            ext = (media_format.get("ext") or "").lower()
+            if kind == "image" and ext in cls._IMAGE_EXTENSIONS:
+                candidates.append(media_format)
+            elif kind == "video" and (
+                (media_format.get("vcodec") and media_format.get("vcodec") != "none")
+                or ext in cls._VIDEO_EXTENSIONS
+            ):
+                candidates.append(media_format)
+        return max(
+            candidates,
+            key=lambda f: (f.get("width") or 0) * (f.get("height") or 0),
+            default={},
+        )
+
+    @staticmethod
+    def _thumbnail_url(entry: Dict[str, Any], kind: str) -> Optional[str]:
+        """Return yt-dlp's preview URL, falling back to confirmed image media."""
+        thumbnail = entry.get("thumbnail")
+        if thumbnail:
+            return thumbnail
+        thumbnails = entry.get("thumbnails") or []
+        for candidate in reversed(thumbnails):
+            if candidate.get("url"):
+                return candidate["url"]
+        if kind == "image":
+            return InstagramDownloader._best_image_url(entry)
+        return None
 
     def _extract_entries_info(self, url: str):
         """Run a single extract_info and return the list of raw entry dicts.
@@ -193,8 +245,9 @@ class InstagramDownloader(BaseDownloader):
         best_url = None
         best_area = -1
         for f in (entry.get("formats") or []):
+            ext = (f.get("ext") or "").lower()
             u = f.get("url")
-            if not u:
+            if not u or ext not in InstagramDownloader._IMAGE_EXTENSIONS:
                 continue
             area = (f.get("width") or 0) * (f.get("height") or 0)
             if area >= best_area:
@@ -257,15 +310,18 @@ class InstagramDownloader(BaseDownloader):
                         "duration": 0, "id": "",
                     })
                     continue
+                kind = self._classify_entry(e)
+                best_format = self._best_media_format(e, kind)
                 entries.append({
                     "index": i,
                     "title": e.get("title") or e.get("description") or e.get("id") or f"Item {i}",
-                    "ext": (e.get("ext") or "").lower(),
-                    "kind": self._classify_entry(e),
-                    "width": e.get("width") or 0,
-                    "height": e.get("height") or 0,
-                    "duration": e.get("duration") or 0,
+                    "ext": (e.get("ext") or best_format.get("ext") or "").lower(),
+                    "kind": kind,
+                    "width": e.get("width") or best_format.get("width") or 0,
+                    "height": e.get("height") or best_format.get("height") or 0,
+                    "duration": e.get("duration") or best_format.get("duration") or 0,
                     "id": e.get("id") or "",
+                    "thumbnail_url": self._thumbnail_url(e, kind),
                 })
             return True, entries
         except Exception as exc:
@@ -296,23 +352,57 @@ class InstagramDownloader(BaseDownloader):
                 self.is_downloading = False
                 return False, "Could not extract any items from this URL."
 
-            # Map 1-based index -> entry (skip None entries from ignoreerrors)
-            indexed = {i: e for i, e in enumerate(entries, start=1) if e}
-            wanted = indices if indices else list(indexed.keys())
+            # Re-extraction can reorder or omit carousel items. Prefer the
+            # stable extractor ID sent by the selection dialog; retain integer
+            # positions only for callers using the old API.
+            indexed = {i: entry for i, entry in enumerate(entries, start=1) if entry}
+            selected_ids = {
+                str(selection.get("id"))
+                for selection in (indices or [])
+                if isinstance(selection, dict) and selection.get("id")
+            }
+            selected_positions = {
+                int(selection.get("index", 0))
+                for selection in (indices or [])
+                if isinstance(selection, dict) and not selection.get("id")
+            }
+            selected_positions.update(
+                int(selection) for selection in (indices or [])
+                if isinstance(selection, int)
+            )
+
+            selected = []
+            for index, entry in indexed.items():
+                entry_id = str(entry.get("id") or "")
+                if selected_ids or selected_positions:
+                    if entry_id and entry_id in selected_ids:
+                        selected.append((index, entry))
+                    elif not entry_id and index in selected_positions:
+                        selected.append((index, entry))
+                else:
+                    selected.append((index, entry))
 
             video_indices = []
             image_targets = []  # (index, entry)
-            for i in wanted:
-                e = indexed.get(i)
-                if not e:
-                    continue
-                if self._classify_entry(e) == "image":
-                    image_targets.append((i, e))
+            unknown_indices = []
+            for index, entry in selected:
+                kind = self._classify_entry(entry)
+                if kind == "image":
+                    image_targets.append((index, entry))
+                elif kind == "video":
+                    video_indices.append(index)
                 else:
-                    video_indices.append(i)
+                    unknown_indices.append(index)
 
             successes = 0
-            failures = 0
+            failures = len(unknown_indices)
+            if unknown_indices:
+                logger.warning(
+                    "[Instagram] Skipping unclassified selected item(s): %s",
+                    ", ".join(str(index) for index in unknown_indices),
+                )
+            if indices and not selected:
+                return False, "The selected Instagram items are no longer available. Please list them again."
 
             logger.info(
                 f"[Instagram] Download plan for {url}: "
@@ -347,8 +437,12 @@ class InstagramDownloader(BaseDownloader):
                 try:
                     with yt_dlp.YoutubeDL(vopts) as ydl:
                         self._apply_cookies(ydl)
-                        ydl.download([url])
-                    successes += len(video_indices)
+                        result = ydl.download([url])
+                    if result in (None, 0):
+                        successes += len(video_indices)
+                    else:
+                        logger.error("[Instagram] yt-dlp returned status %s", result)
+                        failures += len(video_indices)
                 except Exception as exc:
                     logger.error(f"[Instagram] Video download failed: {exc}")
                     failures += len(video_indices)

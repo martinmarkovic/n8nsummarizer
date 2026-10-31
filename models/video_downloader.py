@@ -57,7 +57,6 @@ class VideoDownloader:
         try:
             parsed = urlparse(url)
             host = (parsed.netloc or "").lower()
-            path = (parsed.path or "").lower()
         except Exception:
             return "unknown"
 
