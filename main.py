@@ -2,8 +2,7 @@
 Main entry point for n8n Summarizer application (v8.2)
 
 Wires up views and controllers:
-- FileTab ↔ FileController
-- YouTubeSummarizerTab ↔ YouTubeSummarizerController (with Transcriber references)
+- SummarizerTab ↔ SummarizerController (file + video URL, direct LLM)
 - TranscriberTab ↔ TranscriberController
 - BulkSummarizerTab ↔ BulkSummarizerController
 - BulkTranscriberTab ↔ BulkTranscriberController
@@ -19,11 +18,8 @@ Version: 8.1
 Updated: 2026-04-26 - Video Subtitler feature
 """
 
-import tkinter as tk
 import customtkinter as ctk
 from views.main_window import MainWindow
-from controllers.file_controller import FileController
-from controllers.youtube_summarizer_controller import YouTubeSummarizerController
 from controllers.summarizer_controller import SummarizerController
 from controllers.transcriber_controller import TranscriberController
 from controllers.bulk_summarizer_controller import BulkSummarizerController
@@ -42,10 +38,8 @@ def main():
     Creates:
     - SettingsManager (persistent user preferences)
     - MainWindow (views layer with all tabs)
-     - FileController (coordinates FileTab + models) [LEGACY]
-     - SummarizerController (coordinates SummarizerTab + models) [NEW v9.3]
+     - SummarizerController (coordinates SummarizerTab + models)
      - TranscriberController (coordinates TranscriberTab + models)
-     - YouTubeSummarizerController (coordinates YouTubeSummarizerTab + models) [LEGACY]
      - BulkSummarizerController (coordinates BulkSummarizerTab + models)
      - BulkTranscriberController (coordinates BulkTranscriberTab + models)
      - TranslationController (coordinates TranslationTab + TranslationModel)

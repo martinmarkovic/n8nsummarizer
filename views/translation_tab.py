@@ -339,7 +339,7 @@ class TranslationTab(CTkBaseTab):
 
         self.clear_btn = ctk.CTkButton(
             action_frame,
-            text=t("common.clear") if t("common.clear") != "common.clear" else "Clear",
+            text=t("common.clear"),
             command=self._clear_clicked,
             width=110,
             height=38,

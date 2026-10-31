@@ -83,15 +83,23 @@ class MainWindow:
     - Status bar
     - Tab selection persistence
 
-        Tab order (v9.5):
-        1. Summarizer (index 0)
-        2. Transcriber (index 1)
-        3. Bulk Summarizer (index 2)
-        4. Bulk Transcriber (index 3)
-        5. Translation (index 4)
-        6. Downloader (index 5)
-        7. Video Subtitler (index 6)
+    The on-screen tab order is defined by :attr:`TAB_ORDER`.
     """
+
+    # On-screen tab order: (attribute name, translation key).
+    #
+    # This is the single source of truth for tab order. Index-based lookups
+    # elsewhere derive from the notebook itself rather than hardcoding
+    # positions, so reordering this list is all that is needed.
+    TAB_ORDER = (
+        ("summarizer_tab", "tab.summarizer"),
+        ("downloader_tab", "tab.downloader"),
+        ("translation_tab", "tab.translation"),
+        ("transcriber_tab", "tab.transcriber"),
+        ("video_subtitler_tab", "tab.video_subtitler"),
+        ("bulk_summarizer_tab", "tab.bulk_summarizer"),
+        ("bulk_transcriber_tab", "tab.bulk_transcriber"),
+    )
 
     # Font sizes (allowed range for validation; user can type any value in [MIN, MAX])
     FONT_MIN = 8
@@ -224,8 +232,8 @@ class MainWindow:
         """
         try:
             last_tab = self.settings.get_last_active_tab()
-            # Validate tab index (0-6 for 7 tabs)
-            if 0 <= last_tab <= 6:
+            # Validate against the actual number of tabs, not a hardcoded 6.
+            if 0 <= last_tab < len(self.TAB_ORDER):
                 self.notebook.select(last_tab)
                 logger.info(f"Restored last active tab: {last_tab}")
             else:
@@ -438,15 +446,7 @@ class MainWindow:
         """
         Setup tab notebook with all tabs.
 
-        Tab order (v8.1):
-        0. File Summarizer
-        1. YouTube Summarization
-        2. Transcriber
-        3. Bulk Summarizer
-        4. Bulk Transcriber
-        5. Translation
-        6. Downloader
-        7. Video Subtitler
+        The display order lives in :attr:`TAB_ORDER`.
 
         Args:
             parent: Parent frame
@@ -461,45 +461,34 @@ class MainWindow:
         # Initialize PromptManager
         self.prompt_manager = PromptManager()
 
-        # Tab 0: Summarizer (NEW v9.3 - replaces File and YouTube tabs)
+        # --- Construct the tabs ---
+        # Construction is kept separate from ordering below, so the on-screen
+        # order is defined in exactly one place (TAB_ORDER) instead of being an
+        # accident of the order these lines happen to run in.
         self.summarizer_tab = SummarizerTab(
             self.notebook,
             prompt_manager=self.prompt_manager,
             settings_manager=self.settings,
         )
-        self.notebook.add(self.summarizer_tab, text=t("tab.summarizer"))
-        
-        # Tab 1: Transcriber
         self.transcriber_tab = TranscriberTab(self.notebook, self.settings)
-        self.notebook.add(self.transcriber_tab, text=t("tab.transcriber"))
-
-        # Tab 1: Bulk Summarizer
         self.bulk_summarizer_tab = BulkSummarizerTab(
             self.notebook,
             prompt_manager=self.prompt_manager,
             settings_manager=self.settings,
         )
-        self.notebook.add(self.bulk_summarizer_tab, text=t("tab.bulk_summarizer"))
-
-        # Tab 2: Bulk Transcriber
         self.bulk_transcriber_tab = BulkTranscriberTab(
             self.notebook, settings_manager=self.settings
         )
-        self.notebook.add(self.bulk_transcriber_tab, text=t("tab.bulk_transcriber"))
-
-        # Tab 3: Translation
         self.translation_tab = TranslationTab(self.notebook)
-        self.notebook.add(self.translation_tab, text=t("tab.translation"))
-
-        # Tab 4: Downloader
         self.downloader_tab = DownloaderTab(self.notebook)
-        self.notebook.add(self.downloader_tab, text=t("tab.downloader"))
-
-        # Tab 5: Video Subtitler
         self.video_subtitler_tab = VideoSubtitlerTab(self.notebook)
-        self.notebook.add(self.video_subtitler_tab, text=t("tab.video_subtitler"))
 
-        logger.info("All tabs initialized (v9.5 - Removed File and YouTube Summarizer tabs)")
+        # --- Display order ---
+        # Single-item work comes first, the bulk/batch tools last.
+        for attr, label_key in self.TAB_ORDER:
+            self.notebook.add(getattr(self, attr), text=t(label_key))
+
+        logger.info(f"All tabs initialized ({len(self.TAB_ORDER)} tabs)")
 
     def _setup_status_bar(self, parent):
         """
@@ -1578,19 +1567,7 @@ class MainWindow:
         Returns:
             Current tab widget or None
         """
-        tab_index = self.notebook.index(self.notebook.select())
-        if tab_index == 0:
-            return self.summarizer_tab
-        elif tab_index == 1:
-            return self.transcriber_tab
-        elif tab_index == 2:
-            return self.bulk_summarizer_tab
-        elif tab_index == 3:
-            return self.bulk_transcriber_tab
-        elif tab_index == 4:
-            return self.translation_tab
-        elif tab_index == 5:
-            return self.downloader_tab
-        elif tab_index == 6:
-            return self.video_subtitler_tab
-        return None
+        # The notebook already knows which widget is showing, so ask it rather
+        # than mapping hardcoded indices to attributes - that mapping silently
+        # returned the wrong tab the moment the display order changed.
+        return self.notebook.select()

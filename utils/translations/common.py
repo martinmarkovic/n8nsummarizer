@@ -26,8 +26,9 @@ STRINGS = {
     # Status bar
     "status.ready":          {"en": "Ready",               "hr": "Spremno"},
 
-    # Shared base-tab status
+    # Shared base-tab status / actions
     "common.cleared":        {"en": "Cleared",             "hr": "Očišćeno"},
+    "common.clear":          {"en": "Clear",               "hr": "Očisti"},
 
     # Settings dialog
     "settings.title":            {"en": "⚙ Settings",       "hr": "⚙ Postavke"},
