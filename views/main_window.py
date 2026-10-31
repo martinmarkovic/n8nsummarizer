@@ -63,6 +63,7 @@ from views.bulk_transcriber_tab import BulkTranscriberTab
 from views.translation_tab import TranslationTab
 from views.downloader_tab import DownloaderTab
 from views.video_subtitler_tab import VideoSubtitlerTab
+from views.picture_to_text_tab import PictureToTextTab
 from views.ctk_compat import (
     CTkGradientFrame, CTkNotebook, owned_by_ctk, normalize_gradient_spec,
 )
@@ -99,6 +100,7 @@ class MainWindow:
         ("translation_tab", "tab.translation"),
         ("transcriber_tab", "tab.transcriber"),
         ("video_subtitler_tab", "tab.video_subtitler"),
+        ("picture_to_text_tab", "tab.picture_to_text"),
         ("bulk_summarizer_tab", "tab.bulk_summarizer"),
         ("bulk_transcriber_tab", "tab.bulk_transcriber"),
     )
@@ -623,6 +625,7 @@ class MainWindow:
         self.translation_tab = TranslationTab(self.notebook)
         self.downloader_tab = DownloaderTab(self.notebook)
         self.video_subtitler_tab = VideoSubtitlerTab(self.notebook)
+        self.picture_to_text_tab = PictureToTextTab(self.notebook)
 
         # --- Display order ---
         # Single-item work comes first, the bulk/batch tools last.
@@ -1846,7 +1849,7 @@ class MainWindow:
         for tab_attr in (
             "summarizer_tab", "transcriber_tab", "translation_tab",
             "bulk_summarizer_tab", "bulk_transcriber_tab", "downloader_tab",
-            "video_subtitler_tab",
+            "video_subtitler_tab", "picture_to_text_tab",
         ):
             tab = getattr(self, tab_attr, None)
             hook = getattr(tab, "apply_font_size", None) if tab else None

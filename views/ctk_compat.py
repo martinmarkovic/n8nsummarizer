@@ -445,7 +445,12 @@ class CTkNotebook(ctk.CTkFrame):
     # layout. Keep the navigation equally compact instead of growing a second
     # row of tiny tab buttons.
     _COMPACT_BREAKPOINT = 980
-    _MAX_VISIBLE_TABS = 3
+    # Floor for the compact pager: it never shows fewer than this many pills at
+    # once. The actual count grows to fill the available width (see
+    # :meth:`_compact_capacity`) so that at wider-but-still-compact sizes more
+    # than three tabs are reachable without paging - otherwise middle tabs
+    # (e.g. the 6th of 8) look "missing" because they sit off the pager.
+    _MIN_VISIBLE_TABS = 3
 
     def __init__(self, master, **kwargs):
         kwargs.setdefault("fg_color", "transparent")
@@ -473,7 +478,7 @@ class CTkNotebook(ctk.CTkFrame):
         # and shows no more than three pills at a time.
         self._tab_viewport = ctk.CTkFrame(self._tab_bar, fg_color="transparent")
         self._tab_viewport.grid(row=0, column=0, columnspan=3, sticky="ew")
-        for column in range(self._MAX_VISIBLE_TABS):
+        for column in range(self._MIN_VISIBLE_TABS):
             self._tab_viewport.grid_columnconfigure(column, weight=1)
         self._previous_tab_button = ctk.CTkButton(
             self._tab_bar, text="‹", width=30, height=34, corner_radius=8,
@@ -524,16 +529,51 @@ class CTkNotebook(ctk.CTkFrame):
             return False
         return required > available
 
+    def _compact_capacity(self) -> int:
+        """How many pills the compact pager shows at once for the current size.
+
+        Grows with the available width so wider-but-still-compact windows show
+        more than the :attr:`_MIN_VISIBLE_TABS` floor, keeping middle tabs
+        reachable without paging. Never exceeds the number of tabs, and leaves
+        room for the two pager arrows.
+        """
+        count = len(self._tabs)
+        floor = min(self._MIN_VISIBLE_TABS, count) if count else self._MIN_VISIBLE_TABS
+        try:
+            available = self._tab_bar.winfo_width()
+        except tk.TclError:
+            return floor
+        if available <= 1:
+            return floor
+
+        # Reserve space for the ‹ › arrows plus their padding.
+        usable = available - 2 * (30 + self._TAB_GAP)
+        if usable <= 0:
+            return floor
+
+        # Size each slot by the widest pill so the estimate never clips a tab.
+        try:
+            widest = max(
+                (entry["button"].winfo_reqwidth() for entry in self._tabs),
+                default=110,
+            )
+        except tk.TclError:
+            widest = 110
+        slot = max(widest, 90) + self._TAB_GAP
+        fits = max(1, usable // slot)
+        return max(floor, min(count or floor, fits))
+
     def _ensure_selected_visible(self, index: int) -> bool:
         """Move the compact viewport just enough to reveal *index*."""
         if not self._compact_tabs:
             return False
-        last_start = max(0, len(self._tabs) - self._MAX_VISIBLE_TABS)
+        capacity = self._compact_capacity()
+        last_start = max(0, len(self._tabs) - capacity)
         start = self._visible_tab_start
         if index < start:
             start = index
-        elif index >= start + self._MAX_VISIBLE_TABS:
-            start = index - self._MAX_VISIBLE_TABS + 1
+        elif index >= start + capacity:
+            start = index - capacity + 1
         start = max(0, min(start, last_start))
         changed = start != self._visible_tab_start
         self._visible_tab_start = start
@@ -543,7 +583,7 @@ class CTkNotebook(ctk.CTkFrame):
         """Browse the compact tab pills without changing the active tab."""
         if not self._compact_tabs:
             return
-        last_start = max(0, len(self._tabs) - self._MAX_VISIBLE_TABS)
+        last_start = max(0, len(self._tabs) - self._compact_capacity())
         start = max(0, min(self._visible_tab_start + direction, last_start))
         if start != self._visible_tab_start:
             self._visible_tab_start = start
@@ -582,12 +622,16 @@ class CTkNotebook(ctk.CTkFrame):
         if not compact:
             self._visible_tab_start = 0
 
+        capacity = self._compact_capacity() if compact else 0
         if compact:
+            # Clamp the window start so the last page stays full.
+            last_start = max(0, len(self._tabs) - capacity)
+            self._visible_tab_start = min(self._visible_tab_start, last_start)
             visible = range(
                 self._visible_tab_start,
-                min(self._visible_tab_start + self._MAX_VISIBLE_TABS, len(self._tabs)),
+                min(self._visible_tab_start + capacity, len(self._tabs)),
             )
-            layout = ("compact", self._visible_tab_start, len(self._tabs))
+            layout = ("compact", self._visible_tab_start, capacity, len(self._tabs))
         else:
             visible = range(len(self._tabs))
             layout = ("wide", len(self._tabs))
@@ -598,12 +642,12 @@ class CTkNotebook(ctk.CTkFrame):
 
         # Only compact mode uses equal-width viewport columns. In wide mode
         # every pill must retain its natural width and pack contiguously from
-        # the left; leaving weights on the first three columns spreads them
-        # across the strip and visually separates the tab sequence.
-        for column in range(max(len(self._tabs), self._MAX_VISIBLE_TABS)):
+        # the left; leaving weights on the leading columns spreads them across
+        # the strip and visually separates the tab sequence.
+        for column in range(max(len(self._tabs), capacity)):
             self._tab_viewport.grid_columnconfigure(
                 column,
-                weight=1 if compact and column < self._MAX_VISIBLE_TABS else 0,
+                weight=1 if compact and column < capacity else 0,
             )
 
         # The viewport uses all three bar columns normally, or the centre
@@ -615,7 +659,7 @@ class CTkNotebook(ctk.CTkFrame):
         if compact:
             self._previous_tab_button.grid(row=0, column=0, padx=(self._TAB_GAP, 2), pady=0)
             self._next_tab_button.grid(row=0, column=2, padx=(2, self._TAB_GAP), pady=0)
-            last_start = max(0, len(self._tabs) - self._MAX_VISIBLE_TABS)
+            last_start = max(0, len(self._tabs) - capacity)
             self._previous_tab_button.configure(
                 state="normal" if self._visible_tab_start > 0 else "disabled"
             )
@@ -842,7 +886,7 @@ class CTkNotebook(ctk.CTkFrame):
         """Re-render after tabs are removed without exposing hidden pills."""
         self._visible_tab_start = min(
             self._visible_tab_start,
-            max(0, len(self._tabs) - self._MAX_VISIBLE_TABS),
+            max(0, len(self._tabs) - self._compact_capacity()),
         )
         self._reflow_columns = None
         self._render_tab_strip(force=True)

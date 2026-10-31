@@ -21,6 +21,7 @@ from utils.translations import (
     translation,
     downloader,
     video_subtitler,
+    picture_to_text,
     context_menu,
     fullscreen,
 )
@@ -36,6 +37,7 @@ _MODULES = (
     translation,
     downloader,
     video_subtitler,
+    picture_to_text,
     context_menu,
     fullscreen,
 )

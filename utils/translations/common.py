@@ -15,6 +15,7 @@ STRINGS = {
     "tab.translation":       {"en": "🌐 Translation",       "hr": "🌐 Prijevod"},
     "tab.downloader":        {"en": "📥 Downloader",        "hr": "📥 Preuzimanje"},
     "tab.video_subtitler":   {"en": "🎞 Video Subtitler",   "hr": "🎞 Titlovanje videa"},
+    "tab.picture_to_text":   {"en": "🖼 Picture to text",   "hr": "🖼 Slika u tekst"},
 
     # Header controls
     "header.font":           {"en": "Font:",               "hr": "Font:"},

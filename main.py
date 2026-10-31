@@ -26,6 +26,7 @@ from controllers.bulk_summarizer_controller import BulkSummarizerController
 from controllers.bulk_transcriber_controller import BulkTranscriberController
 from controllers.translation_controller import TranslationController
 from controllers.video_subtitler_controller import VideoSubtitlerController
+from controllers.picture_to_text_controller import PictureToTextController
 from utils.logger import logger
 from utils.settings_manager import SettingsManager
 from config import APP_TITLE
@@ -128,6 +129,11 @@ def main():
         # Wires: VideoSubtitlerTab UI ↔ VideoSubtitlerController ↔ VideoSubtitlerModel
         video_subtitler_controller = VideoSubtitlerController(window.video_subtitler_tab, settings, translation_controller)
         logger.info("VideoSubtitlerController initialized")
+
+        # Initialize Picture to Text (OCR) tab controller
+        # Wires: PictureToTextTab UI <-> PictureToTextController <-> OCRModel
+        picture_to_text_controller = PictureToTextController(window.picture_to_text_tab)
+        logger.info("PictureToTextController initialized")
 
         # NEW: Wire VideoSubtitler to Translation settings
         def update_video_subtitler_llm_config(provider, model, url):
