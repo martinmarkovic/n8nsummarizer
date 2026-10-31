@@ -33,6 +33,7 @@ import customtkinter as ctk
 
 from utils.logger import logger
 from utils.i18n import t
+from views.ctk_compat import CTkAutoScrollFrame
 
 
 class TabMixin:
@@ -302,7 +303,20 @@ class CTkBaseTab(TabMixin, ctk.CTkFrame, ABC):
     Behaves identically to BaseTab from a controller's point of view. The frame
     is transparent so it picks up the window background, and padding is applied
     by children via padx/pady (CTkFrame has no ``padding`` option).
+
+    Subclasses must build their UI inside ``self.body``, not ``self``. When
+    :attr:`SCROLLABLE` is true (the default) ``self.body`` is the content area
+    of a :class:`CTkAutoScrollFrame`, which scrolls only once the window is too
+    short to show everything - otherwise it stretches, so rows configured with
+    ``weight=1`` still expand exactly as they would without it.
+
+    Tabs that already manage their own scrolling internally (the bulk tabs,
+    which scroll one column and let the log pane fill) set
+    ``SCROLLABLE = False`` and get ``self.body is self``.
     """
+
+    #: Wrap the tab content in a scroll-when-needed container.
+    SCROLLABLE = True
 
     def __init__(self, parent, tab_name: str):
         """
@@ -313,6 +327,17 @@ class CTkBaseTab(TabMixin, ctk.CTkFrame, ABC):
             tab_name: Display name for tab
         """
         ctk.CTkFrame.__init__(self, parent, fg_color="transparent")
+
+        if self.SCROLLABLE:
+            self.grid_rowconfigure(0, weight=1)
+            self.grid_columnconfigure(0, weight=1)
+            self._scroller = CTkAutoScrollFrame(self)
+            self._scroller.grid(row=0, column=0, sticky="nsew")
+            self.body = self._scroller.inner
+        else:
+            self._scroller = None
+            self.body = self
+
         self._init_tab(parent, tab_name)
 
     @abstractmethod

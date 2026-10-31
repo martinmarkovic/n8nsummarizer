@@ -41,7 +41,7 @@ from config import LLM_WEBHOOK_URL, LLM_MODEL, LLM_PROVIDER, PROVIDER_CONFIG
 from utils.prompt_presets import PROMPT_PRESETS, PRESET_NAMES, DEFAULT_PROMPT_KEY
 from utils.prompt_manager import PromptManager
 from utils.logger import logger
-from models.llm_client.discovery import discover_models, Provider, ModelOption
+from models.llm_client.discovery import discover_models, ModelOption
 from views.base_tab import CTkBaseTab
 from views.ctk_compat import CTkSection, CTkCollapsibleSection, CTkSplitter
 from utils.i18n import t
@@ -162,8 +162,10 @@ class SummarizerTab(CTkBaseTab):
             3  action bar
             4  progress bar (only gridded while working)
         """
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)  # Content/response split expands
+        # Content goes in self.body (the scroll-when-needed area from
+        # CTkBaseTab), not self, so short windows can still reach everything.
+        self.body.grid_columnconfigure(0, weight=1)
+        self.body.grid_rowconfigure(2, weight=1)  # Content/response split expands
 
         # Responsive state must exist before any layout runs: _place_file_info
         # reads it. Starts wide, then the first <Configure> corrects it.
@@ -234,7 +236,7 @@ class SummarizerTab(CTkBaseTab):
 
     def _setup_top_row(self):
         """Container for the input and file-info cards."""
-        self._top_row = ctk.CTkFrame(self, fg_color="transparent")
+        self._top_row = ctk.CTkFrame(self.body, fg_color="transparent")
         self._top_row.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         self._top_row.grid_columnconfigure(0, weight=1)
         self._top_row.grid_columnconfigure(1, weight=1)
@@ -418,7 +420,7 @@ class SummarizerTab(CTkBaseTab):
         # Collapsible: this panel is configured once in a while but otherwise
         # just steals vertical space from the content/response area.
         section = CTkCollapsibleSection(
-            self,
+            self.body,
             title=t("summarizer.frame.settings"),
             expanded=self._settings_expanded_default(),
             on_toggle=self._on_settings_toggled,
@@ -467,6 +469,7 @@ class SummarizerTab(CTkBaseTab):
         # the accent palette pass (see _set_status_dot).
         self.status_indicator = ctk.CTkLabel(status_frame, text="●", width=14)
         self.status_indicator._theme_skip = True
+        self.status_indicator._font_skip = True  # glyph, not text
         self.status_indicator.grid(row=0, column=0, padx=(0, 5))
 
         self.status_label = ctk.CTkLabel(status_frame, textvariable=self.models_status)
@@ -569,9 +572,8 @@ class SummarizerTab(CTkBaseTab):
         """Setup content preview and response display sections."""
         # A draggable splitter instead of a hard 50/50 grid, so the user can
         # give the preview or the response more room as needed.
-        self._split = CTkSplitter(self, ratio=0.5)
+        self._split = CTkSplitter(self.body, ratio=0.5)
         self._split.grid(row=2, column=0, sticky="nsew")
-        content_frame = self._split
 
         # --- Content preview (left) ---
         preview_section = CTkSection(
@@ -644,7 +646,7 @@ class SummarizerTab(CTkBaseTab):
 
     def _setup_action_bar(self):
         """Setup action bar with buttons and export controls."""
-        action_frame = ctk.CTkFrame(self, fg_color="transparent")
+        action_frame = ctk.CTkFrame(self.body, fg_color="transparent")
         action_frame.grid(row=3, column=0, sticky="ew", pady=(10, 0))
         action_frame.grid_columnconfigure(1, weight=1)
 
@@ -744,7 +746,7 @@ class SummarizerTab(CTkBaseTab):
         self.clear_btn.grid(row=0, column=2, padx=(10, 0))
 
         # Progress bar (created but not visible initially)
-        self.progress = ctk.CTkProgressBar(self, mode="indeterminate", height=6)
+        self.progress = ctk.CTkProgressBar(self.body, mode="indeterminate", height=6)
 
     # ------------------------------------------------------------------
     # Small widget helpers
@@ -1444,27 +1446,19 @@ class SummarizerTab(CTkBaseTab):
 
     def apply_font_size(self, size: int):
         """
-        Apply the app-wide font size to this tab's text areas.
+        Apply the app-wide font size to this tab's text panes.
 
-        MainWindow calls this instead of poking widget options directly, since
-        CTk widgets reject the classic ``bg``/``fg`` options that the ttk tabs
-        still use.
+        Only the text areas are handled here: labels, buttons, dropdowns and
+        the section headings are scaled centrally by
+        :func:`views.ctk_theme.apply_font_scale`, so this hook stays limited to
+        the panes whose font *family* is tab-specific.
         """
+        from views.ctk_theme import font_sizes
+        sizes = font_sizes(size)
+
         # Monospace for the document panes (alignment matters for transcripts
         # and subtitles), UI font for the smaller metadata/prompt boxes.
-        self.content_text.configure(font=("Cascadia Mono", size + 1))
-        self.response_text.configure(font=("Cascadia Mono", size + 1))
-        self.info_text.configure(font=("Segoe UI", max(size, 9)))
-        self.prompt_text.configure(font=("Segoe UI", max(size, 9)))
-
-        section_font = ctk.CTkFont(size=max(size + 1, 11), weight="bold")
-        for attr in (
-            "_input_section",
-            "_file_info_section",
-            "_settings_section",
-            "_preview_section",
-            "_response_section",
-        ):
-            section = getattr(self, attr, None)
-            if section is not None:
-                section.set_title_font(section_font)
+        self.content_text.configure(font=("Cascadia Mono", sizes["mono"]))
+        self.response_text.configure(font=("Cascadia Mono", sizes["mono"]))
+        self.info_text.configure(font=("Segoe UI", sizes["label"]))
+        self.prompt_text.configure(font=("Segoe UI", sizes["label"]))

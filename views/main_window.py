@@ -34,9 +34,9 @@ Version: 6.3
 
 import tkinter as tk
 from tkinter import ttk
-from pathlib import Path
 from dotenv import load_dotenv
 import os
+import re
 import subprocess
 import threading
 
@@ -64,7 +64,7 @@ from views.translation_tab import TranslationTab
 from views.downloader_tab import DownloaderTab
 from views.video_subtitler_tab import VideoSubtitlerTab
 from views.ctk_compat import CTkNotebook, owned_by_ctk
-from views.ctk_theme import build_palette, apply_palette
+from views.ctk_theme import build_palette, apply_palette, apply_font_scale, font_sizes
 
 # Load environment variables
 load_dotenv()
@@ -127,6 +127,9 @@ class MainWindow:
         self.root.title(self.app_title_display)
         self.root.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.root.resizable(True, True)
+        # Minimum size: below this the layout stops being usable even with the
+        # tabs' scroll containers.
+        self.root.minsize(820, 520)
 
         # Publish ourselves on the Tk root so tabs can find the main window.
         # MainWindow is not a widget, so it never appears in a widget's master
@@ -178,9 +181,136 @@ class MainWindow:
         # Chrome-style tab hotkeys (Ctrl+1..Ctrl+8, Ctrl+9 = last tab)
         self._setup_tab_hotkeys()
 
+        # Restore the window size/position from the last session, and save it
+        # again on close. Done last so the layout is already built and the
+        # restored size is applied to a complete window.
+        self._last_normal_geometry = None
+        self._restore_window_geometry()
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
         logger.info(
             f"MainWindow initialized (v6.3 - {self.current_theme} theme, {self.current_font_size}px font)"
         )
+
+    # ------------------------------------------------------------------
+    # Window size / position persistence
+    # ------------------------------------------------------------------
+
+    # Smallest window we are willing to restore; anything smaller is treated
+    # as a corrupt value rather than shrinking the app into uselessness.
+    _MIN_RESTORE_W = 820
+    _MIN_RESTORE_H = 520
+
+    def _parse_geometry(self, geometry: str):
+        """
+        Parse a Tk geometry string into (w, h, x, y).
+
+        Returns None if it does not match "WxH+X+Y" (negative offsets, which
+        are valid on multi-monitor setups, are accepted).
+        """
+        match = re.fullmatch(
+            r"(\d+)x(\d+)([+-]\d+)([+-]\d+)", (geometry or "").strip()
+        )
+        if not match:
+            return None
+        w, h, x, y = match.groups()
+        return int(w), int(h), int(x), int(y)
+
+    def _geometry_is_visible(self, w: int, h: int, x: int, y: int) -> bool:
+        """
+        True if the window would land somewhere the user can actually see.
+
+        Guards against restoring onto a monitor that is no longer attached: a
+        saved position from a second screen can put the title bar completely
+        off-canvas, leaving a window that cannot be moved or closed.
+        """
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+
+        # Require a reasonable slice of the title bar to be on-screen.
+        margin = 120
+        if x + w < margin or x > screen_w - margin:
+            return False
+        if y < -10 or y > screen_h - 80:
+            return False
+        return True
+
+    def _restore_window_geometry(self):
+        """Restore the size/position (and maximized state) from last session."""
+        try:
+            saved = self.settings.get_window_geometry()
+            parsed = self._parse_geometry(saved)
+
+            if parsed:
+                w, h, x, y = parsed
+                if w < self._MIN_RESTORE_W or h < self._MIN_RESTORE_H:
+                    logger.info(
+                        f"Ignoring saved window size {w}x{h} (below minimum)"
+                    )
+                elif not self._geometry_is_visible(w, h, x, y):
+                    # Keep the size, drop the off-screen position.
+                    self.root.geometry(f"{w}x{h}")
+                    logger.info(
+                        f"Saved window position {x},{y} is off-screen; "
+                        f"restored size only"
+                    )
+                else:
+                    self.root.geometry(saved)
+                    logger.info(f"Restored window geometry: {saved}")
+            elif saved:
+                logger.warning(f"Could not parse saved window geometry: {saved!r}")
+
+            # Remember the normal (un-maximized) geometry from here on.
+            self.root.update_idletasks()
+            self._last_normal_geometry = self.root.geometry()
+
+            if self.settings.get_window_maximized():
+                self.root.state("zoomed")
+                logger.info("Restored maximized window state")
+        except Exception as e:
+            logger.error(f"Error restoring window geometry: {e}")
+            self._last_normal_geometry = None
+
+        # Track the normal geometry as the user moves/resizes, because
+        # root.geometry() reports the *zoomed* box while maximized and would
+        # otherwise overwrite the restore size with the screen size.
+        self.root.bind("<Configure>", self._on_window_configure, add="+")
+
+    def _on_window_configure(self, event=None):
+        """Record the last normal (non-maximized) geometry."""
+        if event is not None and event.widget is not self.root:
+            return
+        try:
+            if self.root.state() == "normal":
+                self._last_normal_geometry = self.root.geometry()
+        except tk.TclError:
+            pass
+
+    def _save_window_geometry(self):
+        """Persist the window size/position and maximized state."""
+        try:
+            try:
+                maximized = self.root.state() == "zoomed"
+            except tk.TclError:
+                maximized = False
+
+            geometry = getattr(self, "_last_normal_geometry", None)
+            if not maximized:
+                geometry = self.root.geometry()
+
+            if self._parse_geometry(geometry):
+                self.settings.set_window_geometry(geometry)
+            self.settings.set_window_maximized(maximized)
+            logger.info(
+                f"Saved window geometry: {geometry} (maximized={maximized})"
+            )
+        except Exception as e:
+            logger.error(f"Error saving window geometry: {e}")
+
+    def _on_close(self):
+        """Save window state, then close."""
+        self._save_window_geometry()
+        self.root.destroy()
 
     def _setup_tab_hotkeys(self):
         """
@@ -342,6 +472,9 @@ class MainWindow:
             font=ctk.CTkFont(size=22, weight="bold"),
             anchor="w",
         )
+        # Sized explicitly in _apply_font_size (title role), so the generic
+        # label pass must leave it alone.
+        self.title_label._font_skip = True
         self.title_label.grid(row=0, column=0, sticky="w")
 
         # Controls on the right side
@@ -376,6 +509,9 @@ class MainWindow:
             hover_color=("gray82", "gray30"),
             command=self._decrease_font_size,
         )
+        # Fixed-size glyph button: it must not resize itself when the font
+        # size it controls changes.
+        self.font_decrease_btn._font_skip = True
         self.font_decrease_btn.grid(row=0, column=col, padx=(0, 2), pady=4)
         col += 1
 
@@ -394,6 +530,8 @@ class MainWindow:
             border_width=0,
             justify="center",
         )
+        # Part of the grouped stepper: keep it seamless inside the group.
+        self.font_entry._borderless = True
         self.font_entry.grid(row=0, column=col, padx=0, pady=4)
         col += 1
         # Commit typed value on Enter or focus-out
@@ -413,6 +551,7 @@ class MainWindow:
             hover_color=("gray82", "gray30"),
             command=self._increase_font_size,
         )
+        self.font_increase_btn._font_skip = True
         self.font_increase_btn.grid(row=0, column=col, padx=(2, 10), pady=4)
 
         # Theme toggle — secondary action, outlined rather than filled.
@@ -515,6 +654,7 @@ class MainWindow:
             bar, text="\u25cf", width=12, text_color=("#15803d", "#4ade80")
         )
         status_dot._theme_skip = True
+        status_dot._font_skip = True  # glyph, not text
         status_dot.grid(row=0, column=0, padx=(10, 6), pady=4)
 
         self.status_var = tk.StringVar(value=t("status.ready"))
@@ -644,7 +784,11 @@ class MainWindow:
         # CTk widgets ignore ttk.Style, so without this pass they keep their
         # built-in blue and the Settings colours (background / text / accent)
         # never reach the migrated tabs, the header or the tab strip.
-        self.ctk_palette = build_palette(colors, is_dark=self.current_theme == "dark")
+        self.ctk_palette = build_palette(
+            colors,
+            is_dark=self.current_theme == "dark",
+            gradient=self._active_gradient(),
+        )
         apply_palette(self.root, self.ctk_palette)
 
         # Title label (CTkLabel uses `text_color`, not `foreground`)
@@ -657,6 +801,21 @@ class MainWindow:
             self._apply_font_size()
 
         logger.info(f"Applied {self.current_theme} theme")
+
+    def _active_gradient(self):
+        """
+        The (start, end) background gradient, or None when it is off.
+
+        Both colours must be set; a half-configured gradient falls back to the
+        flat background rather than rendering something arbitrary.
+        """
+        if not self.settings.get_gradient_enabled():
+            return None
+        start, end = self.settings.get_gradient_colors()
+        start, end = (start or "").strip(), (end or "").strip()
+        if not start or not end:
+            return None
+        return (start, end)
 
     def _recolor_text_widgets(self, parent, bg, fg):
         """
@@ -880,6 +1039,76 @@ class MainWindow:
             foreground=colors.get("text_secondary", "gray"),
         ).pack(anchor=tk.W, pady=(2, 0))
 
+        # --- Background gradient ---
+        ttk.Separator(appear_frame, orient=tk.HORIZONTAL).pack(
+            fill=tk.X, pady=(10, 8)
+        )
+
+        gradient_enabled_var = tk.BooleanVar(
+            value=self.settings.get_gradient_enabled()
+        )
+        saved_grad_start, saved_grad_end = self.settings.get_gradient_colors()
+
+        ttk.Checkbutton(
+            appear_frame,
+            text=t("settings.gradient_enable"),
+            variable=gradient_enabled_var,
+        ).pack(anchor=tk.W)
+
+        # Gradient start
+        grad_start_row = ttk.Frame(appear_frame)
+        grad_start_row.pack(fill=tk.X, pady=2)
+        ttk.Label(grad_start_row, text=t("settings.gradient_from"),
+                  width=14, anchor=tk.W).pack(side=tk.LEFT)
+        grad_start_var = tk.StringVar(value=saved_grad_start)
+        ttk.Entry(grad_start_row, textvariable=grad_start_var, width=10).pack(
+            side=tk.LEFT, padx=(0, 6)
+        )
+        grad_start_preview = tk.Label(
+            grad_start_row,
+            bg=saved_grad_start if saved_grad_start else colors["bg_primary"],
+            width=3, relief=tk.SOLID, borderwidth=1,
+        )
+        grad_start_preview.pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(
+            grad_start_row,
+            text=t("settings.btn.pick"),
+            command=lambda: self._pick_color(
+                grad_start_var, grad_start_preview,
+                t("settings.gradient_pick_from"),
+            ),
+        ).pack(side=tk.LEFT)
+
+        # Gradient end
+        grad_end_row = ttk.Frame(appear_frame)
+        grad_end_row.pack(fill=tk.X, pady=2)
+        ttk.Label(grad_end_row, text=t("settings.gradient_to"),
+                  width=14, anchor=tk.W).pack(side=tk.LEFT)
+        grad_end_var = tk.StringVar(value=saved_grad_end)
+        ttk.Entry(grad_end_row, textvariable=grad_end_var, width=10).pack(
+            side=tk.LEFT, padx=(0, 6)
+        )
+        grad_end_preview = tk.Label(
+            grad_end_row,
+            bg=saved_grad_end if saved_grad_end else colors["bg_primary"],
+            width=3, relief=tk.SOLID, borderwidth=1,
+        )
+        grad_end_preview.pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(
+            grad_end_row,
+            text=t("settings.btn.pick"),
+            command=lambda: self._pick_color(
+                grad_end_var, grad_end_preview, t("settings.gradient_pick_to")
+            ),
+        ).pack(side=tk.LEFT)
+
+        ttk.Label(
+            appear_frame,
+            text=t("settings.gradient_hint"),
+            foreground=colors.get("text_secondary", "gray"),
+            wraplength=480,
+        ).pack(anchor=tk.W, pady=(2, 0))
+
         # Live-sync preview squares when user types a hex value manually
         def _sync_preview(var, preview):
             val = var.get().strip()
@@ -980,25 +1209,25 @@ class MainWindow:
                     parent=win,
                 )
 
-        def _apply_and_close():
-            language_changed = self._apply_settings_from_dialog(
-                bg_var.get().strip(),
-                text_var.get().strip(),
-                accent_var.get().strip(),
-                ffmpeg_var.get().strip(),
-                i18n.code_for_name(lang_var.get()),
+        def _collect():
+            return dict(
+                bg_color=bg_var.get().strip(),
+                text_color=text_var.get().strip(),
+                accent_color=accent_var.get().strip(),
+                ffmpeg_path=ffmpeg_var.get().strip(),
+                language=i18n.code_for_name(lang_var.get()),
+                gradient_enabled=gradient_enabled_var.get(),
+                gradient_start=grad_start_var.get().strip(),
+                gradient_end=grad_end_var.get().strip(),
             )
+
+        def _apply_and_close():
+            language_changed = self._apply_settings_from_dialog(**_collect())
             _notify_restart_if_needed(language_changed)
             win.destroy()
 
         def _apply_only():
-            language_changed = self._apply_settings_from_dialog(
-                bg_var.get().strip(),
-                text_var.get().strip(),
-                accent_var.get().strip(),
-                ffmpeg_var.get().strip(),
-                i18n.code_for_name(lang_var.get()),
-            )
+            language_changed = self._apply_settings_from_dialog(**_collect())
             _notify_restart_if_needed(language_changed)
 
         ttk.Button(btn_bar, text=t("settings.apply_close"), command=_apply_and_close).pack(
@@ -1045,6 +1274,9 @@ class MainWindow:
         accent_color: str,
         ffmpeg_path: str,
         language: str = None,
+        gradient_enabled: bool = None,
+        gradient_start: str = None,
+        gradient_end: str = None,
     ) -> bool:
         """Persist settings from the dialog and apply theme / path changes live.
 
@@ -1081,6 +1313,16 @@ class MainWindow:
         self.settings.set("APP_COLOR_TEXT", text_color)
         self.settings.set("APP_COLOR_ACCENT", accent_color)
         logger.info(f"Saved colors — BG={bg_color!r}, TEXT={text_color!r}, ACCENT={accent_color!r}")
+
+        # --- Background gradient ---
+        if gradient_enabled is not None:
+            self.settings.set_gradient_enabled(bool(gradient_enabled))
+        if gradient_start is not None or gradient_end is not None:
+            self.settings.set_gradient_colors(gradient_start or "", gradient_end or "")
+        logger.info(
+            f"Saved gradient — enabled={gradient_enabled}, "
+            f"from={gradient_start!r}, to={gradient_end!r}"
+        )
 
         # Rebuild the active theme dict with custom colors if provided, then re-apply
         self._rebuild_theme_colors()
@@ -1418,7 +1660,7 @@ class MainWindow:
         Save theme preference to .env file.
         """
         import os
-        from dotenv import dotenv_values, set_key
+        from dotenv import set_key
 
         env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
 
@@ -1515,15 +1757,24 @@ class MainWindow:
         style.configure("TLabelFrame.Label", font=("Segoe UI", fs))
         style.configure("TNotebook.Tab", font=("Segoe UI", fs))
 
-        # Title label stays bold and slightly larger than the chosen size
+        sizes = font_sizes(fs)
+
+        # Scale every label, checkbox, dropdown and button across the app.
+        # Without this pass those widgets keep CustomTkinter's fixed size 13
+        # forever, so at larger font settings the field labels ("Burn mode",
+        # "Provider", "Prompt preset", ...) looked far too small next to the
+        # text they describe.
+        apply_font_scale(self.root, fs)
+
+        # Title label stays bold and clearly above everything else
         if hasattr(self, "title_label"):
             self.title_label.configure(
-                font=ctk.CTkFont(size=max(fs + 6, 14), weight="bold")
+                font=ctk.CTkFont(size=sizes["title"], weight="bold")
             )
 
         # Tab strip buttons (CTkNotebook is not styled by ttk.Style)
         if hasattr(self, "notebook") and hasattr(self.notebook, "set_tab_font"):
-            self.notebook.set_tab_font(ctk.CTkFont(size=fs))
+            self.notebook.set_tab_font(ctk.CTkFont(size=sizes["label"]))
 
         # Per-tab text areas.
         #

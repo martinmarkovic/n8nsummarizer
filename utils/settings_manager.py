@@ -236,6 +236,52 @@ class SettingsManager:
         """Set the UI language code (persisted to .env as APP_LANGUAGE)."""
         self.set("APP_LANGUAGE", language)
 
+    def get_gradient_enabled(self) -> bool:
+        """Whether the two-colour background gradient is enabled."""
+        return self.get("APP_GRADIENT_ENABLED", "false").lower() == "true"
+
+    def set_gradient_enabled(self, enabled: bool) -> None:
+        """Enable or disable the background gradient."""
+        self.set("APP_GRADIENT_ENABLED", "true" if enabled else "false")
+
+    def get_gradient_colors(self) -> tuple:
+        """
+        Get the (start, end) gradient colours.
+
+        Returns ("", "") when unset so the caller can fall back to the flat
+        theme background.
+        """
+        return (
+            self.get("APP_GRADIENT_START", ""),
+            self.get("APP_GRADIENT_END", ""),
+        )
+
+    def set_gradient_colors(self, start: str, end: str) -> None:
+        """Persist the gradient start/end colours."""
+        self.set("APP_GRADIENT_START", start)
+        self.set("APP_GRADIENT_END", end)
+
+    def get_window_geometry(self) -> str:
+        """
+        Get the saved window geometry string ("WIDTHxHEIGHT+X+Y").
+
+        Returns an empty string when nothing has been saved yet, in which case
+        the caller should fall back to its default size.
+        """
+        return self.get("APP_WINDOW_GEOMETRY", "")
+
+    def set_window_geometry(self, geometry: str) -> None:
+        """Persist the window geometry string."""
+        self.set("APP_WINDOW_GEOMETRY", geometry)
+
+    def get_window_maximized(self) -> bool:
+        """Whether the window was maximized when it was last closed."""
+        return self.get("APP_WINDOW_MAXIMIZED", "false").lower() == "true"
+
+    def set_window_maximized(self, maximized: bool) -> None:
+        """Persist whether the window was maximized."""
+        self.set("APP_WINDOW_MAXIMIZED", "true" if maximized else "false")
+
     def get_summarizer_input_mode(self) -> str:
         """Get the last-used Summarizer input mode ('file' or 'youtube')."""
         mode = self.get("SUMMARIZER_INPUT_MODE", "file")

@@ -109,8 +109,10 @@ class TranscriberTab(CTkBaseTab):
             2  transcript  <- expanding region
             3  action bar
         """
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)  # Transcript area expands
+        # Content goes in self.body (the scroll-when-needed area from
+        # CTkBaseTab), not self, so short windows can still reach everything.
+        self.body.grid_columnconfigure(0, weight=1)
+        self.body.grid_rowconfigure(2, weight=1)  # Transcript area expands
 
         # Responsive state must exist before any layout runs.
         self._stacked = False
@@ -154,7 +156,7 @@ class TranscriberTab(CTkBaseTab):
 
     def _setup_top_row(self):
         """Container for the source and options cards."""
-        self._top_row = ctk.CTkFrame(self, fg_color="transparent")
+        self._top_row = ctk.CTkFrame(self.body, fg_color="transparent")
         self._top_row.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         self._top_row.grid_columnconfigure(0, weight=1)
         self._top_row.grid_columnconfigure(1, weight=1)
@@ -282,7 +284,7 @@ class TranscriberTab(CTkBaseTab):
     def _setup_output_location_section(self):
         """Output location, folded away by default when set to 'original'."""
         section = CTkCollapsibleSection(
-            self,
+            self.body,
             title=t("transcriber.frame.output_location"),
             expanded=self.output_location_var.get() == "custom",
         )
@@ -336,7 +338,7 @@ class TranscriberTab(CTkBaseTab):
 
     def _setup_output_section(self):
         """Transcript display with its own toolbar (expandable)."""
-        section = CTkSection(self, title=t("transcriber.frame.transcript"), padding=10)
+        section = CTkSection(self.body, title=t("transcriber.frame.transcript"), padding=10)
         section.grid(row=2, column=0, sticky="nsew")
         self._transcript_section = section
         body = section.body
@@ -399,7 +401,7 @@ class TranscriberTab(CTkBaseTab):
 
     def _setup_action_bar(self):
         """Primary actions plus an inline status line."""
-        action_frame = ctk.CTkFrame(self, fg_color="transparent")
+        action_frame = ctk.CTkFrame(self.body, fg_color="transparent")
         action_frame.grid(row=3, column=0, sticky="ew", pady=(10, 0))
         action_frame.grid_columnconfigure(2, weight=1)
 
@@ -656,12 +658,13 @@ class TranscriberTab(CTkBaseTab):
     # ------------------------------------------------------------------
 
     def apply_font_size(self, size: int):
-        """Apply the app-wide font size to this tab's text area."""
-        self.transcript_text.configure(font=("Cascadia Mono", size + 1))
+        """
+        Apply the app-wide font size to this tab's transcript pane.
 
-        section_font = ctk.CTkFont(size=max(size + 1, 11), weight="bold")
-        for attr in ("_source_section", "_options_section",
-                     "_output_location_section", "_transcript_section"):
-            section = getattr(self, attr, None)
-            if section is not None:
-                section.set_title_font(section_font)
+        Labels, controls and section headings are scaled centrally by
+        :func:`views.ctk_theme.apply_font_scale`.
+        """
+        from views.ctk_theme import font_sizes
+        self.transcript_text.configure(
+            font=("Cascadia Mono", font_sizes(size)["mono"])
+        )

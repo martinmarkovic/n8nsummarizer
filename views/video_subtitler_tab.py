@@ -110,29 +110,37 @@ class VideoSubtitlerTab(CTkBaseTab):
         def _clamp_on_commit(_event=None):
             var.set(max(from_, min(to, self._safe_int(var, from_))))
 
-        ctk.CTkButton(
+        minus = ctk.CTkButton(
             holder, text="\u2212", width=26, height=26, corner_radius=6,
             fg_color="transparent", text_color=("gray25", "gray85"),
             hover_color=("gray82", "gray30"),
             font=ctk.CTkFont(size=14, weight="bold"),
             command=lambda: _nudge(-1),
-        ).grid(row=0, column=0)
+        )
+        # Fixed-size glyph buttons: scaling these with the app font would burst
+        # the 26px stepper.
+        minus._font_skip = True
+        minus.grid(row=0, column=0)
 
         entry = ctk.CTkEntry(
             holder, textvariable=var, width=width, height=26,
             justify="center", border_width=0, corner_radius=6,
         )
+        # Part of the grouped stepper: keep it seamless inside the group.
+        entry._borderless = True
         entry.grid(row=0, column=1, padx=2)
         entry.bind("<FocusOut>", _clamp_on_commit)
         entry.bind("<Return>", _clamp_on_commit)
 
-        ctk.CTkButton(
+        plus = ctk.CTkButton(
             holder, text="+", width=26, height=26, corner_radius=6,
             fg_color="transparent", text_color=("gray25", "gray85"),
             hover_color=("gray82", "gray30"),
             font=ctk.CTkFont(size=14, weight="bold"),
             command=lambda: _nudge(1),
-        ).grid(row=0, column=2)
+        )
+        plus._font_skip = True
+        plus.grid(row=0, column=2)
 
         return holder
 
@@ -154,8 +162,11 @@ class VideoSubtitlerTab(CTkBaseTab):
             1  progress card
             2  transcript / translation split   <- expanding region
         """
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)
+        # Content goes in self.body (the scroll-when-needed area from
+        # CTkBaseTab), not self, so short windows can still reach everything.
+        # This tab in particular has a tall burn-options card.
+        self.body.grid_columnconfigure(0, weight=1)
+        self.body.grid_rowconfigure(2, weight=1)
 
         self._stacked = False
 
@@ -195,7 +206,7 @@ class VideoSubtitlerTab(CTkBaseTab):
             self._burn_section.grid_configure(row=0, column=1, padx=(10, 0), pady=0)
 
     def _setup_top_row(self):
-        self._top_row = ctk.CTkFrame(self, fg_color="transparent")
+        self._top_row = ctk.CTkFrame(self.body, fg_color="transparent")
         self._top_row.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         self._top_row.grid_columnconfigure(0, weight=1)
         self._top_row.grid_columnconfigure(1, weight=1)
@@ -593,7 +604,9 @@ class VideoSubtitlerTab(CTkBaseTab):
     # --------------------------- progress -----------------------------
 
     def _setup_progress_section(self):
-        section = CTkSection(self, title=t("video_subtitler.frame.progress"), padding=10)
+        section = CTkSection(
+            self.body, title=t("video_subtitler.frame.progress"), padding=10
+        )
         section.grid(row=1, column=0, sticky="ew", pady=(0, 10))
         self._progress_section = section
         body = section.body
@@ -620,7 +633,7 @@ class VideoSubtitlerTab(CTkBaseTab):
 
     def _setup_text_split(self):
         """Transcript and translation side by side with a draggable divider."""
-        self._split = CTkSplitter(self, ratio=0.5)
+        self._split = CTkSplitter(self.body, ratio=0.5)
         self._split.grid(row=2, column=0, sticky="nsew")
 
         # --- Transcription (left) ---
@@ -1170,13 +1183,13 @@ class VideoSubtitlerTab(CTkBaseTab):
     # ------------------------------------------------------------------
 
     def apply_font_size(self, size: int):
-        """Apply the app-wide font size to this tab's text areas."""
-        self.srt_text.configure(font=("Cascadia Mono", size + 1))
-        self.translated_srt_text.configure(font=("Cascadia Mono", size + 1))
+        """
+        Apply the app-wide font size to this tab's SRT panes.
 
-        section_font = ctk.CTkFont(size=max(size + 1, 11), weight="bold")
-        for attr in ("_source_section", "_burn_section", "_progress_section",
-                     "_srt_section", "_translation_section", "style_frame"):
-            section = getattr(self, attr, None)
-            if section is not None and hasattr(section, "set_title_font"):
-                section.set_title_font(section_font)
+        Labels, controls and section headings are scaled centrally by
+        :func:`views.ctk_theme.apply_font_scale`.
+        """
+        from views.ctk_theme import font_sizes
+        mono = font_sizes(size)["mono"]
+        self.srt_text.configure(font=("Cascadia Mono", mono))
+        self.translated_srt_text.configure(font=("Cascadia Mono", mono))

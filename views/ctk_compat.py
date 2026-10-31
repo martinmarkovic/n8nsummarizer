@@ -26,6 +26,8 @@ import tkinter as tk
 
 import customtkinter as ctk
 
+from utils.logger import logger
+
 
 # ---------------------------------------------------------------------------
 # Text widget helpers
@@ -67,6 +69,56 @@ def unwrap_input(widget):
 def is_ctk_widget(widget) -> bool:
     """True if *widget* is managed by CustomTkinter (so it themes itself)."""
     return isinstance(widget, ctk.CTkBaseClass)
+
+
+# ---------------------------------------------------------------------------
+# Gradient rendering
+# ---------------------------------------------------------------------------
+
+def render_vertical_gradient(width: int, height: int, start: str, end: str):
+    """
+    Build a vertical two-stop gradient as a Tk-ready image.
+
+    Returns a ``PhotoImage`` the caller must keep a reference to (Tk discards
+    images that only the canvas holds), or ``None`` if Pillow is unavailable or
+    either colour cannot be parsed - callers fall back to a flat background.
+
+    Pillow ships with CustomTkinter, so this is normally available. It is
+    rendered as one image rather than a stack of thin rectangles so resizing
+    stays cheap.
+    """
+    try:
+        from PIL import Image, ImageTk
+    except ImportError:
+        logger.debug("Pillow unavailable; gradient background disabled")
+        return None
+
+    def parse(color):
+        value = (color or "").strip().lstrip("#")
+        if len(value) == 3:
+            value = "".join(c * 2 for c in value)
+        if len(value) != 6:
+            return None
+        try:
+            return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
+        except ValueError:
+            return None
+
+    top, bottom = parse(start), parse(end)
+    if not top or not bottom:
+        return None
+
+    # One pixel per row, stretched horizontally: the gradient only varies
+    # vertically, so there is no reason to compute width * height pixels.
+    strip = Image.new("RGB", (1, max(height, 1)))
+    rows = max(height - 1, 1)
+    for y in range(height):
+        ratio = y / rows
+        strip.putpixel((0, y), tuple(
+            int(round(top[i] + (bottom[i] - top[i]) * ratio)) for i in range(3)
+        ))
+
+    return ImageTk.PhotoImage(strip.resize((max(width, 1), max(height, 1))))
 
 
 def owned_by_ctk(widget) -> bool:
@@ -124,6 +176,10 @@ class CTkSection(ctk.CTkFrame):
                 font=ctk.CTkFont(size=13, weight="bold"),
                 text_color=("gray35", "gray70"),
             )
+            # Sized via set_title_font() with the heading size. Without this
+            # flag the generic font pass would walk in afterwards and reset it
+            # to the smaller body/label size.
+            self._title_label._font_skip = True
             self._title_label.grid(
                 row=0, column=0, sticky="ew", padx=padding, pady=(padding, 2)
             )
@@ -146,8 +202,16 @@ class CTkSection(ctk.CTkFrame):
             self._title_label.configure(font=font)
 
     def apply_palette(self, p: dict):
-        """Theme the card surface and its muted heading."""
-        self.configure(fg_color=p["card"])
+        """
+        Theme the card surface and its muted heading.
+
+        A hairline border is applied as well as the fill: when the user picks a
+        custom background close in tone to the card colour, fill alone leaves
+        the sections invisible.
+        """
+        self.configure(
+            fg_color=p["card"], border_width=1, border_color=p["border"]
+        )
         if self._title_label is not None:
             # Marked self-styling so the generic walker does not turn this
             # muted heading into normal body text.
@@ -237,6 +301,10 @@ class CTkNotebook(ctk.CTkFrame):
         """
         if not self._tabs:
             return
+        # after_idle() can fire once the notebook is already being torn down
+        # (window close), at which point every winfo_* call raises TclError.
+        if not self.winfo_exists():
+            return
         available = self.winfo_width()
         if available <= 1:
             return
@@ -245,7 +313,11 @@ class CTkNotebook(ctk.CTkFrame):
         used = 0
         layout = []
         for entry in self._tabs:
-            width = entry["button"].winfo_reqwidth() + self._TAB_GAP
+            try:
+                width = entry["button"].winfo_reqwidth() + self._TAB_GAP
+            except tk.TclError:
+                # A pill was destroyed mid-teardown; nothing left to lay out.
+                return
             # Wrap, but never leave a row completely empty.
             if col > 0 and used + width > available:
                 row += 1
@@ -521,6 +593,9 @@ class CTkCollapsibleSection(ctk.CTkFrame):
             font=ctk.CTkFont(size=13, weight="bold"),
             command=self.toggle,
         )
+        # Sized via set_title_font() with the heading size; excluded from the
+        # generic font pass so it is not reset to the body/label size.
+        self._header._font_skip = True
         self._header.grid(row=0, column=0, sticky="ew", padx=padding - 6,
                           pady=(padding - 4, 2))
 
@@ -571,7 +646,9 @@ class CTkCollapsibleSection(ctk.CTkFrame):
 
     def apply_palette(self, p: dict):
         """Theme the card surface and keep the header flat and muted."""
-        self.configure(fg_color=p["card"])
+        self.configure(
+            fg_color=p["card"], border_width=1, border_color=p["border"]
+        )
         # Self-styling: the generic walker would otherwise fill this header
         # with the accent colour like any other button.
         self._header._theme_skip = True
@@ -684,3 +761,290 @@ class CTkSplitter(ctk.CTkFrame):
         self._grip._theme_skip = True
         self._grip._theme_skip_children = True
         self._grip.configure(fg_color=self._idle_color)
+
+
+# ---------------------------------------------------------------------------
+# Scroll-when-needed container
+# ---------------------------------------------------------------------------
+
+def _scrolls_itself(widget) -> bool:
+    """
+    True for widgets that own their vertical wheel behaviour.
+
+    A transcript pane should scroll its own text when the pointer is over it,
+    rather than scrolling the page out from under the user.
+    """
+    if not isinstance(widget, (tk.Text, tk.Listbox)):
+        return False
+    try:
+        first, last = widget.yview()
+    except Exception:
+        return True
+    # Only claim the wheel while there is actually something to scroll;
+    # otherwise fall through so the page keeps moving.
+    return (float(last) - float(first)) < 1.0
+
+
+def _dispatch_wheel(event):
+    """
+    Route a wheel event to the nearest enclosing CTkAutoScrollFrame.
+
+    This replaces per-container ``<Enter>``/``<Leave>`` binding, which looked
+    scoped but did not work: Tk fires ``<Leave>`` on the container as soon as
+    the pointer moves onto one of its own children, so hovering any card tore
+    the binding down and only the bare canvas still scrolled.
+
+    Walking up from ``event.widget`` means the wheel works over every
+    descendant - labels, cards, buttons - without binding each one.
+    """
+    widget = getattr(event, "widget", None)
+    if not isinstance(widget, tk.Misc):
+        return
+
+    if _scrolls_itself(widget):
+        return
+
+    node = widget
+    while node is not None:
+        if isinstance(node, CTkAutoScrollFrame):
+            node.scroll_by_wheel(event)
+            return
+        node = getattr(node, "master", None)
+
+
+def _install_wheel_dispatcher(widget):
+    """
+    Install the wheel dispatcher on this widget's toplevel, exactly once.
+
+    The flag lives on the toplevel so repeated tab construction does not stack
+    duplicate handlers (which would scroll several lines per notch).
+    """
+    try:
+        root = widget.winfo_toplevel()
+    except Exception:
+        return
+    if getattr(root, "_ctk_wheel_dispatcher", False):
+        return
+    root.bind_all("<MouseWheel>", _dispatch_wheel, add="+")
+    root._ctk_wheel_dispatcher = True
+
+
+class CTkAutoScrollFrame(ctk.CTkFrame):
+    """
+    A container that scrolls **only when its content does not fit**.
+
+    ``CTkScrollableFrame`` always sizes its content to the natural height, which
+    would break the tabs here: their transcript / response panes are meant to
+    grow and fill a large window. Conversely a plain frame leaves controls
+    unreachable once the window gets short - the action bar simply falls off
+    the bottom.
+
+    This widget gives both behaviours. The content is placed in a canvas
+    window whose height is ``max(visible height, required height)``:
+
+    - window taller than the content -> the content is stretched to fill, so
+      ``grid_rowconfigure(weight=1)`` inside still expands as before,
+    - window shorter than the content -> the window keeps the required height
+      and the canvas scrolls, with the scrollbar appearing automatically.
+
+    Add children to ``.inner``.
+    """
+
+    def __init__(self, master, **kwargs):
+        kwargs.setdefault("fg_color", "transparent")
+        super().__init__(master, **kwargs)
+
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        # A classic Canvas is required: CTk has no scrollable viewport
+        # primitive that supports stretching its content window.
+        #
+        # NOTE the attribute name. CTkFrame keeps its own internal canvas in
+        # ``self._canvas`` and overrides winfo_children() to filter that
+        # attribute out of the child list. Naming this canvas ``_canvas`` would
+        # shadow it, which both breaks the frame's own drawing and makes every
+        # widget inside this container invisible to tree walks - the theme and
+        # font passes silently stop at this frame.
+        self._view = tk.Canvas(self, highlightthickness=0, borderwidth=0)
+        self._view.grid(row=0, column=0, sticky="nsew")
+
+        self._scrollbar = ctk.CTkScrollbar(self, command=self._view.yview)
+        self._view.configure(yscrollcommand=self._on_scroll_set)
+        self._scrollbar_visible = False
+
+        self.inner = ctk.CTkFrame(self._view, fg_color="transparent")
+        self._window = self._view.create_window(
+            (0, 0), window=self.inner, anchor="nw"
+        )
+        self.inner.grid_columnconfigure(0, weight=1)
+
+        self._view.bind("<Configure>", self._on_configure)
+        self.inner.bind("<Configure>", self._on_configure)
+
+        self._sync_pending = False
+
+        # Background state: either a flat colour or a two-stop gradient.
+        self._bg_color = None
+        self._gradient = None          # (start, end) or None
+        self._gradient_image = None    # kept alive; Tk drops unreferenced images
+        self._gradient_item = None
+        self._gradient_size = (0, 0)
+
+        _install_wheel_dispatcher(self)
+
+    # -- geometry ----------------------------------------------------------
+
+    def _on_configure(self, _event=None):
+        """Coalesce the many Configure events a resize produces into one sync."""
+        if self._sync_pending:
+            return
+        self._sync_pending = True
+        self.after_idle(self._sync)
+
+    def _sync(self):
+        self._sync_pending = False
+        try:
+            width = self._view.winfo_width()
+            height = self._view.winfo_height()
+            if width <= 1 or height <= 1:
+                return
+
+            required = self.inner.winfo_reqheight()
+            content_height = max(height, required)
+
+            self._view.itemconfigure(
+                self._window, width=width, height=content_height
+            )
+            self._view.configure(scrollregion=(0, 0, width, content_height))
+
+            self._set_scrollbar_visible(required > height)
+            if required <= height:
+                # Nothing to scroll: make sure we are not left mid-scroll after
+                # the window grows.
+                self._view.yview_moveto(0)
+
+            # Re-paint the backdrop to the new size.
+            if self._gradient:
+                self._render_gradient()
+        except tk.TclError:
+            pass  # widget torn down mid-callback
+
+    def _set_scrollbar_visible(self, visible: bool):
+        if visible == self._scrollbar_visible:
+            return
+        self._scrollbar_visible = visible
+        if visible:
+            self._scrollbar.grid(row=0, column=1, sticky="ns")
+        else:
+            self._scrollbar.grid_remove()
+
+    def _on_scroll_set(self, first, last):
+        self._scrollbar.set(first, last)
+
+    # -- mouse wheel -------------------------------------------------------
+
+    def can_scroll(self) -> bool:
+        """True when there is more content than visible space."""
+        return self._scrollbar_visible
+
+    def scroll_by_wheel(self, event) -> None:
+        """Scroll in response to a wheel event dispatched from anywhere inside."""
+        if not self._scrollbar_visible:
+            return
+        delta = getattr(event, "delta", 0)
+        if not delta:
+            return
+        self._view.yview_scroll(int(-1 * (delta / 120)), "units")
+
+    # -- theming -----------------------------------------------------------
+
+    def apply_palette(self, p: dict):
+        """
+        Match the canvas to the window background.
+
+        The canvas is a classic Tk widget, so the CTk palette walker cannot
+        colour it; left alone it shows up as a white rectangle.
+        """
+        self._bg_color = p["bg"]
+        gradient = p.get("gradient")
+        self._gradient = gradient if gradient else None
+
+        try:
+            self._view.configure(bg=self._bg_color)
+            # ``inner`` is a CTkFrame embedded in a classic Tk Canvas.  CTk's
+            # "transparent" mode copies its master's background *once* when
+            # constructed; it does not track a later Canvas ``bg`` change.
+            # The canvas therefore became dark while this frame kept the
+            # default light colour, producing the white gutters visible around
+            # and between cards. Give the content surface the explicit palette
+            # colour so every exposed strip matches the tab background.
+            self.inner.configure(
+                # CTk draws a frame through its own internal canvas.  Both the
+                # fill and backing colour must be set: `fg_color` alone leaves
+                # that canvas at its original `systemButtonFace`, which can
+                # still leak white around transparent child layout frames.
+                fg_color=self._bg_color,
+                bg_color=self._bg_color,
+            )
+        except tk.TclError:
+            return
+
+        if self._gradient:
+            self._render_gradient(force=True)
+        else:
+            self._clear_gradient()
+
+    # -- gradient backdrop -------------------------------------------------
+
+    def _clear_gradient(self):
+        if self._gradient_item is not None:
+            try:
+                self._view.delete(self._gradient_item)
+            except tk.TclError:
+                pass
+        self._gradient_item = None
+        self._gradient_image = None
+        self._gradient_size = (0, 0)
+
+    def _render_gradient(self, force: bool = False):
+        """
+        Paint a vertical two-stop gradient behind the content.
+
+        Rendered with Pillow into a single image rather than as a stack of
+        thin rectangles, which keeps redraws cheap during a window resize.
+        """
+        if not self._gradient:
+            return
+        try:
+            width = max(self._view.winfo_width(), 1)
+            height = max(
+                self._view.winfo_height(), self.inner.winfo_reqheight(), 1
+            )
+        except tk.TclError:
+            return
+
+        if width <= 1 or height <= 1:
+            return
+        if not force and (width, height) == self._gradient_size:
+            return
+
+        image = render_vertical_gradient(width, height, *self._gradient)
+        if image is None:
+            # Pillow unavailable: fall back to the flat background.
+            self._clear_gradient()
+            return
+
+        self._gradient_image = image
+        self._gradient_size = (width, height)
+
+        if self._gradient_item is None:
+            self._gradient_item = self._view.create_image(
+                0, 0, anchor="nw", image=self._gradient_image
+            )
+        else:
+            self._view.itemconfigure(
+                self._gradient_item, image=self._gradient_image
+            )
+        # Keep the backdrop behind the content window.
+        self._view.tag_lower(self._gradient_item)

@@ -93,8 +93,10 @@ class DownloaderTab(CTkBaseTab):
             4  progress + log   <- expanding region
             5  action bar
         """
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(4, weight=1)
+        # Content goes in self.body (the scroll-when-needed area from
+        # CTkBaseTab), not self, so short windows can still reach everything.
+        self.body.grid_columnconfigure(0, weight=1)
+        self.body.grid_rowconfigure(4, weight=1)
 
         self._stacked = False
 
@@ -130,7 +132,7 @@ class DownloaderTab(CTkBaseTab):
             self._dest_section.grid_configure(row=0, column=1, padx=(10, 0), pady=0)
 
     def _setup_top_row(self):
-        self._top_row = ctk.CTkFrame(self, fg_color="transparent")
+        self._top_row = ctk.CTkFrame(self.body, fg_color="transparent")
         self._top_row.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         self._top_row.grid_columnconfigure(0, weight=1)
         self._top_row.grid_columnconfigure(1, weight=1)
@@ -211,7 +213,7 @@ class DownloaderTab(CTkBaseTab):
     def _setup_po_token_section(self):
         """YouTube PO token, folded away by default."""
         section = CTkCollapsibleSection(
-            self, title=t("downloader.lbl.po_token"), expanded=False
+            self.body, title=t("downloader.lbl.po_token"), expanded=False
         )
         section.grid(row=1, column=0, sticky="ew", pady=(0, 10))
         self._po_section = section
@@ -242,7 +244,7 @@ class DownloaderTab(CTkBaseTab):
         which is when these fields actually matter.
         """
         section = CTkCollapsibleSection(
-            self, title=t("downloader.frame.instagram"), expanded=False
+            self.body, title=t("downloader.frame.instagram"), expanded=False
         )
         self._cookies_section = section
         # Kept under the old attribute name used by _on_url_change.
@@ -342,7 +344,7 @@ class DownloaderTab(CTkBaseTab):
 
     def _setup_info_section(self):
         """Video info readout."""
-        section = CTkSection(self, title=t("downloader.frame.video_info"), padding=10)
+        section = CTkSection(self.body, title=t("downloader.frame.video_info"), padding=10)
         section.grid(row=3, column=0, sticky="ew", pady=(0, 10))
         self._info_section = section
         section.body.grid_columnconfigure(0, weight=1)
@@ -360,7 +362,7 @@ class DownloaderTab(CTkBaseTab):
 
     def _setup_log_section(self):
         """Progress line and status log."""
-        section = CTkSection(self, title=t("downloader.frame.progress"), padding=10)
+        section = CTkSection(self.body, title=t("downloader.frame.progress"), padding=10)
         section.grid(row=4, column=0, sticky="nsew")
         self._log_section = section
         body = section.body
@@ -384,7 +386,7 @@ class DownloaderTab(CTkBaseTab):
 
     def _setup_action_bar(self):
         """Primary download action."""
-        action_frame = ctk.CTkFrame(self, fg_color="transparent")
+        action_frame = ctk.CTkFrame(self.body, fg_color="transparent")
         action_frame.grid(row=5, column=0, sticky="ew", pady=(10, 0))
         action_frame.grid_columnconfigure(1, weight=1)
 
@@ -821,13 +823,13 @@ class DownloaderTab(CTkBaseTab):
     # ------------------------------------------------------------------
 
     def apply_font_size(self, size: int):
-        """Apply the app-wide font size to this tab's text areas."""
-        self.status_log.configure(font=("Cascadia Mono", size + 1))
-        self.info_text.configure(font=("Segoe UI", max(size, 9)))
+        """
+        Apply the app-wide font size to this tab's text areas.
 
-        section_font = ctk.CTkFont(size=max(size + 1, 11), weight="bold")
-        for attr in ("_source_section", "_dest_section", "_po_section",
-                     "_cookies_section", "_info_section", "_log_section"):
-            section = getattr(self, attr, None)
-            if section is not None:
-                section.set_title_font(section_font)
+        Labels, controls and section headings are scaled centrally by
+        :func:`views.ctk_theme.apply_font_scale`.
+        """
+        from views.ctk_theme import font_sizes
+        sizes = font_sizes(size)
+        self.status_log.configure(font=("Cascadia Mono", sizes["mono"]))
+        self.info_text.configure(font=("Segoe UI", sizes["label"]))

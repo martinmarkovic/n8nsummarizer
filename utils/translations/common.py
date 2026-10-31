@@ -66,6 +66,22 @@ STRINGS = {
         "hr": "  Naglasak boji obrube, gumbe, kartice i naslove odjeljaka.",
     },
 
+    # Settings dialog — background gradient
+    "settings.gradient_enable": {
+        "en": "Use a background gradient",
+        "hr": "Koristi gradijent pozadine",
+    },
+    "settings.gradient_from":      {"en": "Gradient from:", "hr": "Gradijent od:"},
+    "settings.gradient_to":        {"en": "Gradient to:",   "hr": "Gradijent do:"},
+    "settings.gradient_pick_from": {"en": "Gradient start colour", "hr": "Početna boja gradijenta"},
+    "settings.gradient_pick_to":   {"en": "Gradient end colour",   "hr": "Završna boja gradijenta"},
+    "settings.gradient_hint": {
+        "en": "  Both colours are required. The gradient fills the tab area; "
+              "cards and panels stay solid so text stays readable.",
+        "hr": "  Obje boje su obavezne. Gradijent ispunjava područje kartice; "
+              "kartice i ploče ostaju pune boje kako bi tekst ostao čitljiv.",
+    },
+
     # Settings dialog — font size
     "settings.font_size":      {"en": "Font size:", "hr": "Veličina fonta:"},
     "settings.font_size_hint": {

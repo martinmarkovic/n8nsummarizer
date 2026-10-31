@@ -46,6 +46,10 @@ from utils.i18n import t
 class BulkTranscriberTab(CTkBaseTab):
     """UI for bulk media transcription (v2.0 - CustomTkinter)."""
 
+    # This tab scrolls its own left column and lets the log pane fill, so it
+    # does not want the base class's whole-tab scroll wrapper.
+    SCROLLABLE = False
+
     def __init__(self, notebook, settings_manager=None):
         # CRITICAL: Initialize variables BEFORE calling super().__init__()
         self.notebook = notebook
@@ -737,14 +741,11 @@ class BulkTranscriberTab(CTkBaseTab):
     # ------------------------------------------------------------------
 
     def apply_font_size(self, size: int):
-        """Apply the app-wide font size to this tab's log area."""
-        self.status_log.configure(font=("Cascadia Mono", size + 1))
+        """
+        Apply the app-wide font size to this tab's log area.
 
-        section_font = ctk.CTkFont(size=max(size + 1, 11), weight="bold")
-        for attr in ("_folder_section", "_video_section", "_audio_section",
-                     "_scanning_section", "_output_format_section",
-                     "_output_location_section", "_progress_section",
-                     "_log_section"):
-            section = getattr(self, attr, None)
-            if section is not None:
-                section.set_title_font(section_font)
+        Labels, controls and section headings are scaled centrally by
+        :func:`views.ctk_theme.apply_font_scale`.
+        """
+        from views.ctk_theme import font_sizes
+        self.status_log.configure(font=("Cascadia Mono", font_sizes(size)["mono"]))

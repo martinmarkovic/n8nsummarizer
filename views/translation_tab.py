@@ -97,8 +97,10 @@ class TranslationTab(CTkBaseTab):
             2  source / translation split  <- expanding region
             3  action bar
         """
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)
+        # Content goes in self.body (the scroll-when-needed area from
+        # CTkBaseTab), not self, so short windows can still reach everything.
+        self.body.grid_columnconfigure(0, weight=1)
+        self.body.grid_rowconfigure(2, weight=1)
 
         self._setup_input_section()
         self._setup_llm_settings_section()
@@ -110,7 +112,7 @@ class TranslationTab(CTkBaseTab):
 
     def _setup_input_section(self):
         """File picker and target language."""
-        section = CTkSection(self, title=t("translation.frame.source"))
+        section = CTkSection(self.body, title=t("translation.frame.source"))
         section.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         self._input_section = section
         body = section.body
@@ -158,7 +160,7 @@ class TranslationTab(CTkBaseTab):
     def _setup_llm_settings_section(self):
         """LLM provider / endpoint / model, folded away by default."""
         section = CTkCollapsibleSection(
-            self, title=t("translation.lbl.provider"), expanded=False
+            self.body, title=t("translation.lbl.provider"), expanded=False
         )
         section.grid(row=1, column=0, sticky="ew", pady=(0, 10))
         self._llm_section = section
@@ -193,6 +195,7 @@ class TranslationTab(CTkBaseTab):
         # Semantic colour, so it opts out of the accent palette pass.
         self.status_indicator = ctk.CTkLabel(status_frame, text="●", width=14)
         self.status_indicator._theme_skip = True
+        self.status_indicator._font_skip = True  # glyph, not text
         self.status_indicator.grid(row=0, column=0, padx=(0, 5))
 
         self.status_label_llm = ctk.CTkLabel(
@@ -243,7 +246,7 @@ class TranslationTab(CTkBaseTab):
 
     def _setup_panes_section(self):
         """Source and translation side by side, with a draggable divider."""
-        self._split = CTkSplitter(self, ratio=0.5)
+        self._split = CTkSplitter(self.body, ratio=0.5)
         self._split.grid(row=2, column=0, sticky="nsew")
 
         # --- Source (left) ---
@@ -322,7 +325,7 @@ class TranslationTab(CTkBaseTab):
 
     def _setup_action_bar(self):
         """Primary action, progress and status."""
-        action_frame = ctk.CTkFrame(self, fg_color="transparent")
+        action_frame = ctk.CTkFrame(self.body, fg_color="transparent")
         action_frame.grid(row=3, column=0, sticky="ew", pady=(10, 0))
         action_frame.grid_columnconfigure(2, weight=1)
 
@@ -756,13 +759,13 @@ class TranslationTab(CTkBaseTab):
     # ------------------------------------------------------------------
 
     def apply_font_size(self, size: int):
-        """Apply the app-wide font size to this tab's text areas."""
-        self.source_text.configure(font=("Cascadia Mono", size + 1))
-        self.target_text.configure(font=("Cascadia Mono", size + 1))
+        """
+        Apply the app-wide font size to this tab's text panes.
 
-        section_font = ctk.CTkFont(size=max(size + 1, 11), weight="bold")
-        for attr in ("_input_section", "_llm_section",
-                     "_source_section", "_target_section"):
-            section = getattr(self, attr, None)
-            if section is not None:
-                section.set_title_font(section_font)
+        Labels, controls and section headings are scaled centrally by
+        :func:`views.ctk_theme.apply_font_scale`.
+        """
+        from views.ctk_theme import font_sizes
+        mono = font_sizes(size)["mono"]
+        self.source_text.configure(font=("Cascadia Mono", mono))
+        self.target_text.configure(font=("Cascadia Mono", mono))
