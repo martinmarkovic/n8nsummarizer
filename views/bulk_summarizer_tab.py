@@ -41,7 +41,7 @@ from tkinter import filedialog
 import customtkinter as ctk
 
 from views.base_tab import CTkBaseTab
-from views.ctk_compat import CTkSection, CTkSplitter
+from views.ctk_compat import CTkGradientFrame, CTkSection, CTkSplitter
 from utils.logger import logger
 from utils.i18n import t
 
@@ -105,8 +105,15 @@ class BulkSummarizerTab(CTkBaseTab):
             1  split: scrollable options | status log   <- expanding region
             2  action bar
         """
+        # Keep the bulk tabs' independent option/log scrolling, but put their
+        # surrounding page layout on the same visible gradient backdrop as the
+        # other tabs. Root rows below now belong to this host.
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+        self._gradient_host = CTkGradientFrame(self, flat_palette_key="bg")
+        self._gradient_host.grid(row=0, column=0, sticky="nsew")
+        self._gradient_host.grid_columnconfigure(0, weight=1)
+        self._gradient_host.grid_rowconfigure(1, weight=1)
 
         self._setup_folder_selection()
         self._setup_main_split()
@@ -115,7 +122,7 @@ class BulkSummarizerTab(CTkBaseTab):
     def _setup_folder_selection(self):
         """Source folder card - full width at top."""
         section = CTkSection(
-            self, title=t("bulk_summarizer.frame.select_source_folder")
+            self._gradient_host, title=t("bulk_summarizer.frame.select_source_folder")
         )
         section.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         self._folder_section = section
@@ -142,7 +149,7 @@ class BulkSummarizerTab(CTkBaseTab):
 
     def _setup_main_split(self):
         """Scrollable options on the left, status log on the right."""
-        self._split = CTkSplitter(self, ratio=0.42)
+        self._split = CTkSplitter(self._gradient_host, ratio=0.42)
         self._split.grid(row=1, column=0, sticky="nsew")
 
         # --- Left: scrollable options ---
@@ -412,7 +419,7 @@ class BulkSummarizerTab(CTkBaseTab):
 
     def _setup_action_bar(self):
         """Start / Cancel and the live status line."""
-        action_frame = ctk.CTkFrame(self, fg_color="transparent")
+        action_frame = ctk.CTkFrame(self._gradient_host, fg_color="transparent")
         action_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         action_frame.grid_columnconfigure(2, weight=1)
 
