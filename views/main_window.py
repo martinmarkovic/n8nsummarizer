@@ -63,7 +63,7 @@ from views.bulk_transcriber_tab import BulkTranscriberTab
 from views.translation_tab import TranslationTab
 from views.downloader_tab import DownloaderTab
 from views.video_subtitler_tab import VideoSubtitlerTab
-from views.ctk_compat import CTkNotebook, owned_by_ctk
+from views.ctk_compat import CTkNotebook, owned_by_ctk, normalize_gradient_spec
 from views.ctk_theme import build_palette, apply_palette, apply_font_scale, font_sizes
 
 # Load environment variables
@@ -803,19 +803,13 @@ class MainWindow:
         logger.info(f"Applied {self.current_theme} theme")
 
     def _active_gradient(self):
-        """
-        The (start, end) background gradient, or None when it is off.
-
-        Both colours must be set; a half-configured gradient falls back to the
-        flat background rather than rendering something arbitrary.
-        """
+        """Return the validated selected gradient spec, or None when disabled."""
         if not self.settings.get_gradient_enabled():
             return None
         start, end = self.settings.get_gradient_colors()
-        start, end = (start or "").strip(), (end or "").strip()
-        if not start or not end:
-            return None
-        return (start, end)
+        return normalize_gradient_spec(
+            start, end, self.settings.get_gradient_direction()
+        )
 
     def _recolor_text_widgets(self, parent, bg, fg):
         """
@@ -1102,6 +1096,53 @@ class MainWindow:
             ),
         ).pack(side=tk.LEFT)
 
+        # Direction matrix: each arrow indicates where the end colour lands.
+        # Center is a radial "ball" gradient: start in the middle, end at the
+        # perimeter. Bottom-center preserves the previous top-to-bottom mode.
+        gradient_direction_var = tk.StringVar(
+            value=self.settings.get_gradient_direction()
+        )
+        ttk.Label(
+            appear_frame, text=t("settings.gradient_direction")
+        ).pack(anchor=tk.W, pady=(8, 2))
+        direction_grid = ttk.Frame(appear_frame)
+        direction_grid.pack(anchor=tk.W)
+        direction_choices = (
+            ("top_left", "↖"), ("top", "↑"), ("top_right", "↗"),
+            ("left", "←"), ("center", "●"), ("right", "→"),
+            ("bottom_left", "↙"), ("bottom", "↓"), ("bottom_right", "↘"),
+        )
+        for index, (mode, symbol) in enumerate(direction_choices):
+            ttk.Radiobutton(
+                direction_grid, text=symbol, value=mode,
+                variable=gradient_direction_var,
+            ).grid(row=index // 3, column=index % 3, padx=3, pady=1, sticky="w")
+
+        direction_caption_var = tk.StringVar()
+        direction_captions = {
+            "top_left": t("settings.gradient_flow.top_left"),
+            "top": t("settings.gradient_flow.top"),
+            "top_right": t("settings.gradient_flow.top_right"),
+            "left": t("settings.gradient_flow.left"),
+            "center": t("settings.gradient_flow.center"),
+            "right": t("settings.gradient_flow.right"),
+            "bottom_left": t("settings.gradient_flow.bottom_left"),
+            "bottom": t("settings.gradient_flow.bottom"),
+            "bottom_right": t("settings.gradient_flow.bottom_right"),
+        }
+        def _update_gradient_direction_caption(*_args):
+            direction_caption_var.set(
+                direction_captions.get(
+                    gradient_direction_var.get(), direction_captions["bottom"]
+                )
+            )
+        gradient_direction_var.trace_add("write", _update_gradient_direction_caption)
+        _update_gradient_direction_caption()
+        ttk.Label(
+            appear_frame, textvariable=direction_caption_var,
+            foreground=colors.get("text_secondary", "gray"),
+        ).pack(anchor=tk.W)
+
         ttk.Label(
             appear_frame,
             text=t("settings.gradient_hint"),
@@ -1219,6 +1260,7 @@ class MainWindow:
                 gradient_enabled=gradient_enabled_var.get(),
                 gradient_start=grad_start_var.get().strip(),
                 gradient_end=grad_end_var.get().strip(),
+                gradient_direction=gradient_direction_var.get(),
             )
 
         def _apply_and_close():
@@ -1277,6 +1319,7 @@ class MainWindow:
         gradient_enabled: bool = None,
         gradient_start: str = None,
         gradient_end: str = None,
+        gradient_direction: str = None,
     ) -> bool:
         """Persist settings from the dialog and apply theme / path changes live.
 
@@ -1315,13 +1358,24 @@ class MainWindow:
         logger.info(f"Saved colors — BG={bg_color!r}, TEXT={text_color!r}, ACCENT={accent_color!r}")
 
         # --- Background gradient ---
-        if gradient_enabled is not None:
-            self.settings.set_gradient_enabled(bool(gradient_enabled))
-        if gradient_start is not None or gradient_end is not None:
-            self.settings.set_gradient_colors(gradient_start or "", gradient_end or "")
+        if (
+            gradient_enabled is not None
+            or gradient_start is not None
+            or gradient_end is not None
+            or gradient_direction is not None
+        ):
+            current_start, current_end = self.settings.get_gradient_colors()
+            self.settings.set_gradient(
+                self.settings.get_gradient_enabled()
+                if gradient_enabled is None else bool(gradient_enabled),
+                current_start if gradient_start is None else gradient_start,
+                current_end if gradient_end is None else gradient_end,
+                self.settings.get_gradient_direction()
+                if gradient_direction is None else gradient_direction,
+            )
         logger.info(
-            f"Saved gradient — enabled={gradient_enabled}, "
-            f"from={gradient_start!r}, to={gradient_end!r}"
+            f"Saved gradient — enabled={gradient_enabled}, from={gradient_start!r}, "
+            f"to={gradient_end!r}, direction={gradient_direction!r}"
         )
 
         # Rebuild the active theme dict with custom colors if provided, then re-apply

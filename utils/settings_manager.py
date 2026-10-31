@@ -12,7 +12,6 @@ Created: 2026-02-15
 Version: 6.3.0
 """
 
-import os
 from pathlib import Path
 from typing import Optional
 import logging
@@ -45,11 +44,11 @@ class SettingsManager:
             if example_file.exists():
                 import shutil
                 shutil.copy(example_file, self.env_file)
-                logger.info(f"Created .env from .env.example")
+                logger.info("Created .env from .env.example")
             else:
                 # Create empty .env
                 self.env_file.touch()
-                logger.info(f"Created empty .env file")
+                logger.info("Created empty .env file")
         
         self.load_settings()
     
@@ -236,6 +235,12 @@ class SettingsManager:
         """Set the UI language code (persisted to .env as APP_LANGUAGE)."""
         self.set("APP_LANGUAGE", language)
 
+    _GRADIENT_DIRECTIONS = {
+        "top_left", "top", "top_right",
+        "left", "center", "right",
+        "bottom_left", "bottom", "bottom_right",
+    }
+
     def get_gradient_enabled(self) -> bool:
         """Whether the two-colour background gradient is enabled."""
         return self.get("APP_GRADIENT_ENABLED", "false").lower() == "true"
@@ -245,12 +250,7 @@ class SettingsManager:
         self.set("APP_GRADIENT_ENABLED", "true" if enabled else "false")
 
     def get_gradient_colors(self) -> tuple:
-        """
-        Get the (start, end) gradient colours.
-
-        Returns ("", "") when unset so the caller can fall back to the flat
-        theme background.
-        """
+        """Get the (start, end) gradient colours, or empty strings when unset."""
         return (
             self.get("APP_GRADIENT_START", ""),
             self.get("APP_GRADIENT_END", ""),
@@ -260,6 +260,24 @@ class SettingsManager:
         """Persist the gradient start/end colours."""
         self.set("APP_GRADIENT_START", start)
         self.set("APP_GRADIENT_END", end)
+
+    def get_gradient_direction(self) -> str:
+        """Get the selected flow destination; old settings default top-to-bottom."""
+        direction = self.get("APP_GRADIENT_DIRECTION", "bottom").strip().lower()
+        return direction if direction in self._GRADIENT_DIRECTIONS else "bottom"
+
+    def set_gradient(self, enabled: bool, start: str, end: str, direction: str) -> None:
+        """Persist a complete gradient choice in a single .env write."""
+        direction = (direction or "bottom").strip().lower()
+        if direction not in self._GRADIENT_DIRECTIONS:
+            direction = "bottom"
+        self.settings.update({
+            "APP_GRADIENT_ENABLED": "true" if enabled else "false",
+            "APP_GRADIENT_START": str(start or ""),
+            "APP_GRADIENT_END": str(end or ""),
+            "APP_GRADIENT_DIRECTION": direction,
+        })
+        self.save_settings()
 
     def get_window_geometry(self) -> str:
         """

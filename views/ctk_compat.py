@@ -23,6 +23,7 @@ Created during the v10 UI migration.
 """
 
 import tkinter as tk
+from math import hypot
 
 import customtkinter as ctk
 
@@ -75,50 +76,110 @@ def is_ctk_widget(widget) -> bool:
 # Gradient rendering
 # ---------------------------------------------------------------------------
 
-def render_vertical_gradient(width: int, height: int, start: str, end: str):
-    """
-    Build a vertical two-stop gradient as a Tk-ready image.
+_GRADIENT_MODES = {
+    "top_left", "top", "top_right",
+    "left", "center", "right",
+    "bottom_left", "bottom", "bottom_right",
+}
 
-    Returns a ``PhotoImage`` the caller must keep a reference to (Tk discards
-    images that only the canvas holds), or ``None`` if Pillow is unavailable or
-    either colour cannot be parsed - callers fall back to a flat background.
 
-    Pillow ships with CustomTkinter, so this is normally available. It is
-    rendered as one image rather than a stack of thin rectangles so resizing
-    stays cheap.
+def _parse_gradient_color(color: str):
+    """Return a canonical #rrggbb colour, or None for invalid input."""
+    value = (color or "").strip().lstrip("#")
+    if len(value) == 3:
+        value = "".join(channel * 2 for channel in value)
+    if len(value) != 6:
+        return None
+    try:
+        int(value, 16)
+    except ValueError:
+        return None
+    return f"#{value.lower()}"
+
+
+def normalize_gradient_spec(start: str, end: str, mode: str = "bottom"):
+    """Validate a user-selected two-colour directional gradient."""
+    start, end = _parse_gradient_color(start), _parse_gradient_color(end)
+    mode = (mode or "bottom").strip().lower()
+    if not start or not end or mode not in _GRADIENT_MODES:
+        return None
+    return {"start": start, "end": end, "mode": mode}
+
+
+def render_gradient_image(width: int, height: int, spec: dict):
+    """Build a Pillow RGB image for a directional or centered radial gradient.
+
+    ``spec['mode']`` identifies the point at which the end colour lands. The
+    start colour begins at the opposite edge/corner. Thus ``top_left`` flows
+    from bottom-right to top-left and ``bottom`` flows top-to-bottom. ``center``
+    is radial: start at the center, end at the outer edge/corners.
     """
     try:
-        from PIL import Image, ImageTk
+        from PIL import Image
     except ImportError:
         logger.debug("Pillow unavailable; gradient background disabled")
         return None
 
-    def parse(color):
-        value = (color or "").strip().lstrip("#")
-        if len(value) == 3:
-            value = "".join(c * 2 for c in value)
-        if len(value) != 6:
-            return None
-        try:
-            return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
-        except ValueError:
-            return None
-
-    top, bottom = parse(start), parse(end)
-    if not top or not bottom:
+    valid = normalize_gradient_spec(
+        spec.get("start", ""), spec.get("end", ""), spec.get("mode", "bottom")
+    ) if isinstance(spec, dict) else None
+    if not valid:
         return None
 
-    # One pixel per row, stretched horizontally: the gradient only varies
-    # vertically, so there is no reason to compute width * height pixels.
-    strip = Image.new("RGB", (1, max(height, 1)))
-    rows = max(height - 1, 1)
-    for y in range(height):
-        ratio = y / rows
-        strip.putpixel((0, y), tuple(
-            int(round(top[i] + (bottom[i] - top[i]) * ratio)) for i in range(3)
-        ))
+    def rgb(value):
+        return tuple(int(value[index:index + 2], 16) for index in (1, 3, 5))
 
-    return ImageTk.PhotoImage(strip.resize((max(width, 1), max(height, 1))))
+    start, end, mode = rgb(valid["start"]), rgb(valid["end"]), valid["mode"]
+    # Calculate at a compact resolution then let Pillow scale it. This keeps
+    # live window resizing smooth without producing visible banding.
+    out_width, out_height = max(int(width), 1), max(int(height), 1)
+    sample_width, sample_height = min(out_width, 256), min(out_height, 256)
+    image = Image.new("RGB", (sample_width, sample_height))
+    pixels = []
+
+    if mode == "center":
+        center_x, center_y = 0.5, 0.5
+        max_distance = hypot(0.5, 0.5)
+        for y in range(sample_height):
+            py = y / max(sample_height - 1, 1)
+            for x in range(sample_width):
+                px = x / max(sample_width - 1, 1)
+                ratio = min(1.0, hypot(px - center_x, py - center_y) / max_distance)
+                pixels.append(tuple(
+                    round(start[i] + (end[i] - start[i]) * ratio) for i in range(3)
+                ))
+    else:
+        end_points = {
+            "top_left": (0.0, 0.0), "top": (0.5, 0.0), "top_right": (1.0, 0.0),
+            "left": (0.0, 0.5),                         "right": (1.0, 0.5),
+            "bottom_left": (0.0, 1.0), "bottom": (0.5, 1.0), "bottom_right": (1.0, 1.0),
+        }
+        end_x, end_y = end_points[mode]
+        start_x, start_y = 1.0 - end_x, 1.0 - end_y
+        vector_x, vector_y = end_x - start_x, end_y - start_y
+        length_squared = vector_x * vector_x + vector_y * vector_y
+        for y in range(sample_height):
+            py = y / max(sample_height - 1, 1)
+            for x in range(sample_width):
+                px = x / max(sample_width - 1, 1)
+                ratio = ((px - start_x) * vector_x + (py - start_y) * vector_y) / length_squared
+                ratio = max(0.0, min(1.0, ratio))
+                pixels.append(tuple(
+                    round(start[i] + (end[i] - start[i]) * ratio) for i in range(3)
+                ))
+
+    image.putdata(pixels)
+    resampling = getattr(Image, "Resampling", Image)
+    return image.resize((out_width, out_height), resampling.BILINEAR)
+
+
+def render_gradient_photoimage(width: int, height: int, spec: dict):
+    """Build a Tk-ready gradient image; the caller must retain the reference."""
+    image = render_gradient_image(width, height, spec)
+    if image is None:
+        return None
+    from PIL import ImageTk
+    return ImageTk.PhotoImage(image)
 
 
 def owned_by_ctk(widget) -> bool:
@@ -407,8 +468,8 @@ class CTkNotebook(ctk.CTkFrame):
             columnspan=1 if compact else 3,
         )
         if compact:
-            self._previous_tab_button.grid(row=0, column=0, padx=(self._TAB_GAP, 2), pady=self._TAB_GAP)
-            self._next_tab_button.grid(row=0, column=2, padx=(2, self._TAB_GAP), pady=self._TAB_GAP)
+            self._previous_tab_button.grid(row=0, column=0, padx=(self._TAB_GAP, 2), pady=0)
+            self._next_tab_button.grid(row=0, column=2, padx=(2, self._TAB_GAP), pady=0)
             last_start = max(0, len(self._tabs) - self._MAX_VISIBLE_TABS)
             self._previous_tab_button.configure(
                 state="normal" if self._visible_tab_start > 0 else "disabled"
@@ -427,7 +488,7 @@ class CTkNotebook(ctk.CTkFrame):
                     row=0,
                     column=(i - self._visible_tab_start) if compact else i,
                     padx=(self._TAB_GAP, 0),
-                    pady=self._TAB_GAP,
+                    pady=0,
                     sticky="ew" if compact else "w",
                 )
             else:
@@ -987,6 +1048,12 @@ class CTkAutoScrollFrame(ctk.CTkFrame):
         self._scrollbar_visible = False
 
         self.inner = ctk.CTkFrame(self._view, fg_color="transparent")
+        # apply_palette() assigns this canvas-hosted frame its explicit
+        # backdrop colour. Exclude only the frame itself from generic CTkFrame
+        # styling, otherwise that later pass replaces the backdrop with the
+        # raised card fill and cards visually merge into their surrounding gap.
+        # Its children still recurse and receive normal palette/font styling.
+        self.inner._theme_skip = True
         self._window = self._view.create_window(
             (0, 0), window=self.inner, anchor="nw"
         )
@@ -997,12 +1064,14 @@ class CTkAutoScrollFrame(ctk.CTkFrame):
 
         self._sync_pending = False
 
-        # Background state: either a flat colour or a two-stop gradient.
+        # Background state: a flat colour or a two-colour gradient spec.
         self._bg_color = None
-        self._gradient = None          # (start, end) or None
-        self._gradient_image = None    # kept alive; Tk drops unreferenced images
+        self._gradient = None          # {start, end, mode} or None
+        self._gradient_rgb = None      # full content-sized Pillow image
+        self._gradient_image = None    # canvas PhotoImage; kept alive for Tk
         self._gradient_item = None
-        self._gradient_size = (0, 0)
+        self._gradient_size = None
+        self._gradient_overlay_frames = []
 
         _install_wheel_dispatcher(self)
 
@@ -1116,17 +1185,73 @@ class CTkAutoScrollFrame(ctk.CTkFrame):
                 self._view.delete(self._gradient_item)
             except tk.TclError:
                 pass
+        for frame in self._gradient_overlay_frames:
+            try:
+                frame._canvas.delete("gradient_backdrop")
+                frame._gradient_overlay_image = None
+            except (AttributeError, tk.TclError):
+                pass
+        self._gradient_overlay_frames = []
         self._gradient_item = None
         self._gradient_image = None
-        self._gradient_size = (0, 0)
+        self._gradient_rgb = None
+        self._gradient_size = None
+
+    def _gradient_overlay_candidates(self, parent=None):
+        """Yield the page surface and transparent CTk layout frames below it."""
+        parent = self.inner if parent is None else parent
+        if parent is self.inner or (
+            isinstance(parent, ctk.CTkFrame)
+            and str(parent.cget("fg_color")) == "transparent"
+        ):
+            yield parent
+        try:
+            children = parent.winfo_children()
+        except tk.TclError:
+            return
+        for child in children:
+            yield from self._gradient_overlay_candidates(child)
+
+    def _paint_gradient_overlay(self, frame):
+        """Draw this frame's aligned crop over its CTk background drawing."""
+        if self._gradient_rgb is None:
+            return
+        canvas = getattr(frame, "_canvas", None)
+        if canvas is None:
+            return
+        try:
+            width, height = canvas.winfo_width(), canvas.winfo_height()
+            if width <= 1 or height <= 1:
+                return
+            origin_x = round(frame.winfo_rootx() - self.inner.winfo_rootx())
+            origin_y = round(frame.winfo_rooty() - self.inner.winfo_rooty())
+            crop = self._gradient_rgb.crop(
+                (origin_x, origin_y, origin_x + width, origin_y + height)
+            )
+            from PIL import ImageTk
+            image = ImageTk.PhotoImage(crop)
+            canvas.delete("gradient_backdrop")
+            canvas.create_image(
+                0, 0, anchor="nw", image=image, tags="gradient_backdrop"
+            )
+            # The standard CTk fill is below this image; child controls are
+            # independent native windows and remain above it.
+            canvas.tag_raise("gradient_backdrop")
+            frame._gradient_overlay_image = image
+        except (ImportError, tk.TclError):
+            pass
+
+    def _refresh_gradient_overlays(self):
+        """Overlay the gradient on every visible transparent page surface."""
+        if self._gradient_rgb is None:
+            return
+        frames = list(self._gradient_overlay_candidates())
+        self._gradient_overlay_frames = frames
+        for frame in frames:
+            self._paint_gradient_overlay(frame)
 
     def _render_gradient(self, force: bool = False):
-        """
-        Paint a vertical two-stop gradient behind the content.
-
-        Rendered with Pillow into a single image rather than as a stack of
-        thin rectangles, which keeps redraws cheap during a window resize.
-        """
+        """Render the selected gradient for the scrollable content area."""
         if not self._gradient:
             return
         try:
@@ -1139,25 +1264,29 @@ class CTkAutoScrollFrame(ctk.CTkFrame):
 
         if width <= 1 or height <= 1:
             return
-        if not force and (width, height) == self._gradient_size:
+        gradient_key = (
+            width, height, self._gradient["start"], self._gradient["end"],
+            self._gradient["mode"],
+        )
+        if not force and gradient_key == self._gradient_size:
+            self._refresh_gradient_overlays()
             return
 
-        image = render_vertical_gradient(width, height, *self._gradient)
+        image = render_gradient_image(width, height, self._gradient)
         if image is None:
-            # Pillow unavailable: fall back to the flat background.
+            # Pillow unavailable or invalid saved settings: flat fallback.
             self._clear_gradient()
             return
 
-        self._gradient_image = image
-        self._gradient_size = (width, height)
-
+        self._gradient_rgb = image
+        self._gradient_size = gradient_key
+        from PIL import ImageTk
+        self._gradient_image = ImageTk.PhotoImage(image)
         if self._gradient_item is None:
             self._gradient_item = self._view.create_image(
                 0, 0, anchor="nw", image=self._gradient_image
             )
         else:
-            self._view.itemconfigure(
-                self._gradient_item, image=self._gradient_image
-            )
-        # Keep the backdrop behind the content window.
+            self._view.itemconfigure(self._gradient_item, image=self._gradient_image)
         self._view.tag_lower(self._gradient_item)
+        self._refresh_gradient_overlays()

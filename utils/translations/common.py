@@ -75,6 +75,16 @@ STRINGS = {
     "settings.gradient_to":        {"en": "Gradient to:",   "hr": "Gradijent do:"},
     "settings.gradient_pick_from": {"en": "Gradient start colour", "hr": "Početna boja gradijenta"},
     "settings.gradient_pick_to":   {"en": "Gradient end colour",   "hr": "Završna boja gradijenta"},
+    "settings.gradient_direction": {"en": "Gradient direction (ends at):", "hr": "Smjer gradijenta (završava na):"},
+    "settings.gradient_flow.top_left": {"en": "Flow: bottom-right → top-left", "hr": "Smjer: dolje desno → gore lijevo"},
+    "settings.gradient_flow.top": {"en": "Flow: bottom → top", "hr": "Smjer: dolje → gore"},
+    "settings.gradient_flow.top_right": {"en": "Flow: bottom-left → top-right", "hr": "Smjer: dolje lijevo → gore desno"},
+    "settings.gradient_flow.left": {"en": "Flow: right → left", "hr": "Smjer: desno → lijevo"},
+    "settings.gradient_flow.center": {"en": "Radial: center → edges", "hr": "Radijalno: sredina → rubovi"},
+    "settings.gradient_flow.right": {"en": "Flow: left → right", "hr": "Smjer: lijevo → desno"},
+    "settings.gradient_flow.bottom_left": {"en": "Flow: top-right → bottom-left", "hr": "Smjer: gore desno → dolje lijevo"},
+    "settings.gradient_flow.bottom": {"en": "Flow: top → bottom", "hr": "Smjer: gore → dolje"},
+    "settings.gradient_flow.bottom_right": {"en": "Flow: top-left → bottom-right", "hr": "Smjer: gore lijevo → dolje desno"},
     "settings.gradient_hint": {
         "en": "  Both colours are required. The gradient fills the tab area; "
               "cards and panels stay solid so text stays readable.",
