@@ -11,7 +11,11 @@ immediately by calling engine.stop() from another thread.
 
 import threading
 import logging
-import pyttsx3
+
+try:
+    import pyttsx3
+except Exception:  # pragma: no cover - optional fallback provider
+    pyttsx3 = None
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -30,6 +34,8 @@ def is_available() -> bool:
     Returns:
         bool: True if pyttsx3 can be used, False otherwise
     """
+    if pyttsx3 is None:
+        return False
     try:
         test_engine = pyttsx3.init()
         del test_engine  # Clean up
@@ -80,6 +86,8 @@ def speak(text: str) -> None:
             pythoncom.CoInitialize()
 
             try:
+                if pyttsx3 is None:
+                    raise RuntimeError("pyttsx3 is not installed")
                 # Per-utterance engine model: create a fresh engine
                 engine = pyttsx3.init(driverName='sapi5')
                 engine.setProperty('rate', 180)
@@ -155,6 +163,8 @@ def get_available_voices() -> list:
     Returns:
         list: Available voice names, or empty list if not available
     """
+    if pyttsx3 is None:
+        return []
     try:
         engine = pyttsx3.init()
         voices = engine.getProperty('voices')

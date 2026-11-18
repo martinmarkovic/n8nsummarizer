@@ -325,3 +325,42 @@ class SettingsManager:
     def set_transcriber_custom_path(self, path: str) -> None:
         """Set transcriber custom output path."""
         self.set("TRANSCRIBER_CUSTOM_PATH", path)
+
+    # --- TTS (text-to-speech) ---
+
+    def get_tts_provider(self) -> str:
+        """Get the TTS provider ('tinyvoca' or 'system'). Defaults to 'tinyvoca'."""
+        provider = self.get("TTS_PROVIDER", "tinyvoca").strip().lower()
+        return provider if provider in ("tinyvoca", "system") else "tinyvoca"
+
+    def set_tts_provider(self, provider: str) -> None:
+        """Set the TTS provider ('tinyvoca' or 'system')."""
+        self.set("TTS_PROVIDER", provider)
+
+    def get_tts_voice(self) -> str:
+        """Get the tiny-voca voice id ('F2' or 'M2'). Defaults to 'F2'."""
+        voice = self.get("TTS_VOICE", "F2").strip().upper()
+        return voice if voice in ("F2", "M2") else "F2"
+
+    def set_tts_voice(self, voice: str) -> None:
+        """Set the tiny-voca voice id ('F2' or 'M2')."""
+        self.set("TTS_VOICE", voice)
+
+    def get_tts_speed(self) -> float:
+        """Get the tiny-voca speaking rate. Defaults to 1.0."""
+        try:
+            return float(self.get("TTS_SPEED", "1.0"))
+        except ValueError:
+            return 1.0
+
+    def set_tts_speed(self, speed) -> None:
+        """Set the tiny-voca speaking rate."""
+        self.set("TTS_SPEED", str(speed))
+
+    def get_tts_model_dir(self) -> str:
+        """Get the tiny-voca model directory override (empty = default)."""
+        return self.get("TTS_MODEL_DIR", "")
+
+    def set_tts_model_dir(self, path: str) -> None:
+        """Set the tiny-voca model directory override."""
+        self.set("TTS_MODEL_DIR", path)

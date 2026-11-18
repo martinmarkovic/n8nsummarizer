@@ -24,6 +24,7 @@ from utils.translations import (
     picture_to_text,
     context_menu,
     fullscreen,
+    tts,
 )
 
 # Order matters only for duplicate-key warnings (last one wins); keys are
@@ -40,6 +41,7 @@ _MODULES = (
     picture_to_text,
     context_menu,
     fullscreen,
+    tts,
 )
 
 CATALOG = {}

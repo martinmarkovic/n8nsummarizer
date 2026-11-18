@@ -1234,6 +1234,87 @@ class MainWindow:
             wraplength=480,
         ).pack(anchor=tk.W, pady=(6, 0))
 
+        # ── Speech ────────────────────────────────────────────────────
+        speech_frame = ttk.LabelFrame(outer, text=t("settings.speech"), padding=10)
+        speech_frame.pack(fill=tk.X, pady=(0, 10))
+
+        saved_provider = self.settings.get_tts_provider()
+        saved_voice = self.settings.get_tts_voice()
+        saved_speed = self.settings.get_tts_speed()
+
+        provider_display = {
+            "tinyvoca": t("settings.speech.provider_tinyvoca"),
+            "system": t("settings.speech.provider_system"),
+        }
+        provider_display_rev = {v: k for k, v in provider_display.items()}
+        tts_provider_var = tk.StringVar(
+            value=provider_display.get(saved_provider, provider_display["tinyvoca"])
+        )
+
+        provider_row = ttk.Frame(speech_frame)
+        provider_row.pack(fill=tk.X, pady=2)
+        ttk.Label(provider_row, text=t("settings.speech.provider"),
+                  width=20, anchor=tk.W).pack(side=tk.LEFT)
+        provider_cb = ttk.Combobox(
+            provider_row, textvariable=tts_provider_var, state="readonly", width=24,
+            values=list(provider_display.values()),
+        )
+        provider_cb.pack(side=tk.LEFT)
+
+        voice_row = ttk.Frame(speech_frame)
+        voice_row.pack(fill=tk.X, pady=2)
+        ttk.Label(voice_row, text=t("settings.speech.voice"),
+                  width=20, anchor=tk.W).pack(side=tk.LEFT)
+        tts_voice_var = tk.StringVar(value=saved_voice)
+        voice_cb = ttk.Combobox(
+            voice_row, textvariable=tts_voice_var, state="readonly", width=8,
+            values=["F2", "M2"],
+        )
+        voice_cb.pack(side=tk.LEFT)
+
+        speed_row = ttk.Frame(speech_frame)
+        speed_row.pack(fill=tk.X, pady=2)
+        ttk.Label(speed_row, text=t("settings.speech.speed"),
+                  width=20, anchor=tk.W).pack(side=tk.LEFT)
+        tts_speed_var = tk.StringVar(value=str(saved_speed))
+        speed_entry = ttk.Entry(speed_row, textvariable=tts_speed_var, width=8)
+        speed_entry.pack(side=tk.LEFT)
+
+        def _update_tts_controls(*_args):
+            is_tinyvoca = tts_provider_var.get() == provider_display["tinyvoca"]
+            state = "readonly" if is_tinyvoca else tk.DISABLED
+            voice_cb.configure(state=state)
+            speed_entry.configure(state=tk.NORMAL if is_tinyvoca else tk.DISABLED)
+
+        tts_provider_var.trace_add("write", _update_tts_controls)
+        _update_tts_controls()
+
+        tts_status_var = tk.StringVar(value="")
+
+        def _download_model():
+            tts_status_var.set("…")
+            from utils import tts_engine_tinyvoca
+
+            def _cb(status):
+                win.after(0, lambda s=status: tts_status_var.set(s))
+
+            tts_engine_tinyvoca.prepare_async(progress_cb=_cb)
+
+        dl_btn = ttk.Button(
+            speech_frame, text=t("settings.speech.download"), command=_download_model
+        )
+        dl_btn.pack(anchor=tk.W, pady=(4, 0))
+        ttk.Label(
+            speech_frame, textvariable=tts_status_var,
+            foreground=colors.get("text_secondary", "gray"),
+        ).pack(anchor=tk.W)
+        ttk.Label(
+            speech_frame,
+            text=t("settings.speech.hint"),
+            foreground=colors.get("text_secondary", "gray"),
+            wraplength=480,
+        ).pack(anchor=tk.W, pady=(2, 0))
+
         # ── Tools ─────────────────────────────────────────────────────
         tools_frame = ttk.LabelFrame(outer, text=t("settings.tools"), padding=10)
         tools_frame.pack(fill=tk.X, pady=(0, 12))
@@ -1266,6 +1347,9 @@ class MainWindow:
                 gradient_start=grad_start_var.get().strip(),
                 gradient_end=grad_end_var.get().strip(),
                 gradient_direction=gradient_direction_var.get(),
+                tts_provider=provider_display_rev.get(tts_provider_var.get(), "tinyvoca"),
+                tts_voice=tts_voice_var.get().strip(),
+                tts_speed=tts_speed_var.get().strip(),
             )
 
         def _apply_and_close():
@@ -1325,6 +1409,9 @@ class MainWindow:
         gradient_start: str = None,
         gradient_end: str = None,
         gradient_direction: str = None,
+        tts_provider: str = None,
+        tts_voice: str = None,
+        tts_speed: str = None,
     ) -> bool:
         """Persist settings from the dialog and apply theme / path changes live.
 
@@ -1381,6 +1468,20 @@ class MainWindow:
         logger.info(
             f"Saved gradient — enabled={gradient_enabled}, from={gradient_start!r}, "
             f"to={gradient_end!r}, direction={gradient_direction!r}"
+        )
+
+        # --- TTS (text-to-speech) ---
+        if tts_provider:
+            self.settings.set_tts_provider(tts_provider)
+            os.environ["TTS_PROVIDER"] = tts_provider
+        if tts_voice:
+            self.settings.set_tts_voice(tts_voice)
+            os.environ["TTS_VOICE"] = tts_voice
+        if tts_speed:
+            self.settings.set_tts_speed(tts_speed)
+            os.environ["TTS_SPEED"] = tts_speed
+        logger.info(
+            f"Saved TTS — provider={tts_provider!r}, voice={tts_voice!r}, speed={tts_speed!r}"
         )
 
         # Rebuild the active theme dict with custom colors if provided, then re-apply
@@ -1464,6 +1565,10 @@ class MainWindow:
             ("srt",                 "srt"),
             ("pyttsx3 (text-to-speech)", "pyttsx3"),
             ("pywin32 (Windows TTS)", "pywin32"),
+            ("onnxruntime (tiny-voca)", "onnxruntime"),
+            ("soundfile (tiny-voca)", "soundfile"),
+            ("numpy",               "numpy"),
+            ("huggingface-hub (tiny-voca)", "huggingface-hub"),
             ("requests",            "requests"),
             ("python-docx",         "python-docx"),
             ("python-dotenv",       "python-dotenv"),

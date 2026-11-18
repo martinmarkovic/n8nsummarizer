@@ -6,7 +6,7 @@ by any tab in the application without duplicating boilerplate code.
 """
 
 import tkinter as tk
-from utils import tts_engine_pyttsx3
+from utils import tts_engine
 from utils.i18n import t
 
 
@@ -136,7 +136,7 @@ class AppContextMenu:
         """
         def read_command():
             text = text_getter()
-            tts_engine_pyttsx3.speak(text)
+            tts_engine.speak(text)
         
         self._items.append({
             "type": "command",
@@ -151,7 +151,7 @@ class AppContextMenu:
         self._items.append({
             "type": "command",
             "label": t("context_menu.stop_reading"),
-            "command": tts_engine_pyttsx3.stop
+            "command": tts_engine.stop
         })
 
     def add_fullscreen_command(self, title=None, editable=False, label=None):

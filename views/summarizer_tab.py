@@ -975,13 +975,13 @@ class SummarizerTab(CTkBaseTab):
 
     def _speak_text(self, text):
         """
-        Speak text using pyttsx3 TTS.
+        Speak text using the active TTS provider.
 
         Args:
             text: Text to speak
         """
-        from utils import tts_engine_pyttsx3
-        tts_engine_pyttsx3.speak(text)
+        from utils import tts_engine
+        tts_engine.speak(text)
 
     def _on_prompt_text_rightclick(self, event):
         """Handle right-click on prompt textbox (Copy/Paste + Save as prompt)."""

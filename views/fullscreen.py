@@ -11,7 +11,7 @@ menu, reading a selection when present, otherwise the whole text.
 import tkinter as tk
 from tkinter import ttk, scrolledtext
 
-from utils import tts_engine_pyttsx3
+from utils import tts_engine
 from utils.i18n import t
 
 
@@ -117,7 +117,7 @@ def open_fullscreen(source_widget, title=None, editable=False, font=None):
     def _close():
         # Stop any narration started from the fullscreen view
         try:
-            tts_engine_pyttsx3.stop()
+            tts_engine.stop()
         except Exception:
             pass
         if editable:
